@@ -17,11 +17,13 @@ pub struct UserConfig {
 pub struct Avatar {
     pub deambular: bool,
     pub poseer_ventanas: bool,
+    /// "original" (the show's art) or "pixel" (the PixelLab pet).
+    pub estilo: String,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into() }
     }
 }
 
@@ -32,6 +34,7 @@ pub struct Shortcuts {
     pub teletransporte: String,
     pub mirar: String,
     pub no_molestar: String,
+    pub estilo: String,
 }
 
 impl Default for Shortcuts {
@@ -41,6 +44,7 @@ impl Default for Shortcuts {
             teletransporte: "Ctrl+Alt+T".into(),
             mirar: "Ctrl+Alt+Shift+M".into(),
             no_molestar: "Ctrl+Alt+Shift+D".into(),
+            estilo: "Ctrl+Alt+Shift+P".into(),
         }
     }
 }
@@ -66,6 +70,29 @@ pub fn avatar_settings() -> Avatar {
     load().avatar
 }
 
+/// Saves the style picked with the shortcut, keeping the rest of the file (comments too) as it is.
+fn save_style_in(text: &str, estilo: &str) -> Result<String, String> {
+    let mut doc = text.parse::<toml_edit::DocumentMut>().map_err(|e| e.to_string())?;
+    if !doc.contains_table("avatar") {
+        doc["avatar"] = toml_edit::table();
+    }
+    doc["avatar"]["estilo"] = toml_edit::value(estilo);
+    Ok(doc.to_string())
+}
+
+#[tauri::command]
+pub fn save_style(estilo: String) -> Result<(), String> {
+    if estilo != "original" && estilo != "pixel" {
+        return Err(format!("unknown style {estilo:?}"));
+    }
+    let p = path();
+    let text = std::fs::read_to_string(&p).unwrap_or_default();
+    if let Some(dir) = p.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&p, save_style_in(&text, &estilo)?).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,11 +101,30 @@ mod tests {
     #[test]
     fn default_shortcuts_parse_and_missing_keys_default() {
         let keys = Shortcuts::default();
-        for s in [keys.escribir, keys.teletransporte, keys.mirar, keys.no_molestar] {
+        for s in [keys.escribir, keys.teletransporte, keys.mirar, keys.no_molestar, keys.estilo] {
             s.parse::<Shortcut>().unwrap_or_else(|e| panic!("{s}: {e}"));
         }
         let partial: UserConfig = toml::from_str("[avatar]\nposeer_ventanas = false\n").unwrap();
         assert!(partial.avatar.deambular && !partial.avatar.poseer_ventanas);
         assert_eq!(partial.atajos.escribir, "Ctrl+Alt+Space");
+        assert_eq!(partial.avatar.estilo, "original");
+    }
+
+    #[test]
+    fn saving_the_style_keeps_comments_and_other_keys() {
+        let text = "# mine
+[avatar]
+deambular = false  # quiet
+
+[atajos]
+mirar = \"Ctrl+M\"
+";
+        let out = save_style_in(text, "pixel").unwrap();
+        assert!(out.contains("# mine") && out.contains("deambular = false  # quiet") && out.contains("mirar = \"Ctrl+M\""));
+        let read: UserConfig = toml::from_str(&out).unwrap();
+        assert_eq!(read.avatar.estilo, "pixel");
+        assert!(!read.avatar.deambular);
+        let fresh: UserConfig = toml::from_str(&save_style_in("", "original").unwrap()).unwrap();
+        assert_eq!(fresh.avatar.estilo, "original");
     }
 }

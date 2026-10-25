@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ClipPlayer, CLIPS, clipDuration, EXIT_SPEED, gestureFrame, SPRITE_FOR } from "./clips.ts";
+import { ClipPlayer, CLIPS, clipDuration, EXIT_SPEED, gestureFrame, mouthCell, ORIGINAL_CLIPS, PERCHED, SPRITE_FOR } from "./clips.ts";
 
 const sit = clipDuration(CLIPS.sentarse);
 const standUp = sit / EXIT_SPEED;
@@ -89,3 +89,73 @@ test("behaviors without clips never show one", () =>
     p.update("escribir", 0);
     assert.equal(p.frame(0), null);
   }));
+
+const O = ORIGINAL_CLIPS;
+const at = (clip: string, k: number) => (k * 1000) / O[clip].fps + 1; // ms into frame k of a clip
+
+test("original: every behavior has the show's clips", () => {
+  const p = new ClipPlayer("original");
+  for (const b of ["sentada", "escribir", "hablar", "triste", "dormir", "pinchada", "acariciada"] as const) {
+    p.update(b, 0);
+    assert.notEqual(p.frame(100_000), null, b);
+  }
+});
+
+test("original: falling asleep glitches into the sleep loop; waking plays the boot glitch forward", () => {
+  const p = new ClipPlayer("original");
+  p.update("sentada", 0);
+  p.update("dormir", 1000);
+  assert.equal(p.frame(1000)!.clip, "glitch");
+  assert.equal(p.frame(1000 + clipDuration(O.glitch) + 1)!.clip, "sleep");
+  p.update("hablar", 60_000);
+  assert.deepEqual(p.frame(60_000), { clip: "wake", index: 0 });
+  assert.equal(p.frame(60_000 + clipDuration(O.wake) - 1)!.index, O.wake.frames - 1);
+  assert.equal(p.frame(60_000 + clipDuration(O.wake) + 1)!.clip, "idle");
+});
+
+test("original: the greeting after sleep wakes her once", () => {
+  const p = new ClipPlayer("original");
+  p.update("dormir", 0);
+  p.update("saludar", 60_000);
+  assert.equal(p.frame(60_000)!.clip, "wake");
+  assert.equal(p.frame(60_000 + clipDuration(O.wake) + 1)!.clip, "idle");
+});
+
+test("original: a cheeky reply grins first; the next emotion with a grin doesn't repeat it", () => {
+  const p = new ClipPlayer("original");
+  p.update("sentada", 0);
+  p.update("traviesa", 1000);
+  assert.deepEqual(p.frame(1000), { clip: "sonrisa", index: 0 });
+  assert.equal(p.frame(1000 + clipDuration(O.sonrisa) + 1)!.clip, "idle");
+  p.update("feliz", 10_000);
+  assert.equal(p.frame(10_000)!.clip, "idle");
+  p.update("sentada", 20_000); // calming down: straight back, no grin backwards
+  assert.equal(p.frame(20_000)!.clip, "idle");
+});
+
+test("original: idle blinks on some cycles, a few of them glitched, and never mid-cell", () => {
+  const p = new ClipPlayer("original");
+  p.update("sentada", 0);
+  const cycle = clipDuration(O.idle);
+  const seen = new Set<string>();
+  for (let c = 0; c < 40; c++) {
+    for (let k = 0; k < O.idle.frames; k++) {
+      const f = p.frame(c * cycle + at("idle", k))!;
+      if (k < 9 || k >= 13) assert.deepEqual(f, { clip: "idle", index: k });
+      else {
+        seen.add(f.clip);
+        assert.equal(f.index, f.clip === "idle" ? k : k - 9);
+      }
+    }
+  }
+  assert.deepEqual([...seen].sort(), ["blink", "blink_glitch", "idle"]);
+});
+
+test("original: perched twins have the same length, and only idle takes the talking jaw", () => {
+  for (const [stand, sit] of Object.entries(PERCHED)) assert.equal(O[stand].frames, O[sit].frames, stand);
+  assert.equal(mouthCell("A", { clip: "idle", index: 3 }), 3);
+  assert.equal(mouthCell("closed", { clip: "idle", index: 3 }), 0);
+  assert.equal(mouthCell(null, { clip: "idle", index: 3 }), null);
+  assert.equal(mouthCell("A", { clip: "blink", index: 0 }), null);
+  assert.equal(gestureFrame("saltar", 0.5, { clip: "idle", index: 0 }, "feliz", "original"), null);
+});

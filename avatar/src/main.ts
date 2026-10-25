@@ -5,8 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 
 import type { ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
-import { Director, LINGER_MS } from "./pet/behaviors.ts";
-import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
+import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
+import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
 import { createPet, SCALE } from "./render/pet.ts";
@@ -57,10 +57,12 @@ const pet = await createPet(stage);
 const fxCanvas = $<HTMLCanvasElement>("fx");
 const fx = new Fx(fxCanvas);
 const director = new Director();
-const clips = new ClipPlayer();
+let style: Style = (await invoke<{ estilo: string }>("avatar_settings")).estilo === "pixel" ? "pixel" : "original";
+await pet.setStyle(style);
+let clips = new ClipPlayer(style);
 const glitch = new GlitchFx(performance.now());
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch, teleport, possess, fall, wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -382,6 +384,15 @@ void listen<boolean>("fullscreen", (e) => {
   }
   link.send({ type: "presence", fullscreen });
 });
+// Ctrl+Alt+Shift+P: the show's art <-> the pixel pet, saved in config.toml for next time.
+void listen("style", async () => {
+  const next: Style = style === "pixel" ? "original" : "pixel";
+  await pet.setStyle(next);
+  style = next;
+  clips = new ClipPlayer(style);
+  glitch.kick("change", performance.now());
+  void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
+});
 void listen("teleport", () => void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
@@ -418,9 +429,20 @@ setInputOpen(false);
 
 /** Her head center in page (CSS) px. */
 function headOnPage(): [number, number] {
-  const [hx, hy] = solve(director.last).headCenter;
   const r = stage.getBoundingClientRect();
+  const b = style === "original" && pet.bounds();
+  if (b) return [r.left + b.x + b.w / 2, r.top + b.y + b.h * 0.3]; // her mask, under the mane
+  const [hx, hy] = solve(director.last).headCenter;
   return [r.left + hx * SCALE, r.top + hy * SCALE];
+}
+
+/** The show's art: hanging while dragged or falling, sitting on windows, the jaw while she talks. */
+function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [ClipFrame | null, number | null] {
+  if (dragging || falling) return [{ clip: "dangle", index: Math.floor(now / 100) % 24 }, null];
+  if (possessing) return [{ clip: perch ? "perch_glitch" : "glitch", index: Math.min(9, Math.floor((now - possessing.since) / 90)) }, null];
+  const mouth = talking ? mouthCell(avatar.mouth ?? "closed", base) : null;
+  if (perch && base && PERCHED[base.clip]) return [{ clip: PERCHED[base.clip], index: base.index }, null];
+  return [base, mouth];
 }
 
 // Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
@@ -542,12 +564,17 @@ pet.app.ticker.add((ticker) => {
     { look, petSide },
     { gesto: s.gesto, gestureT: s.gestureT, mouth: s.mouth, blinking: s.blinking },
   );
-  // Behaviors with PixelLab sprite clips show those; the rest use the code-drawn pet.
+  // Behaviors with sprite clips show those; in the pixel style the rest use the code-drawn pet.
   clips.update(name, t);
   const base = clips.frame(t);
-  const eyes = possessing && { clip: "peligro", index: Math.min(8, Math.floor((now - possessing.since) / 100)) };
-  const clipFrame = eyes || (gestureFrame(s.gesto, s.gestureT, base, name) ?? base);
-  pet.showClip(clipFrame);
+  let clipFrame: ClipFrame | null;
+  let jaw: number | null = null;
+  if (style === "original") [clipFrame, jaw] = originalFrame(base, now, BEHAVIORS[name].talks && !!s.mouth);
+  else {
+    const eyes = possessing && { clip: "peligro", index: Math.min(8, Math.floor((now - possessing.since) / 100)) };
+    clipFrame = eyes || (gestureFrame(s.gesto, s.gestureT, base, name) ?? base);
+  }
+  pet.showClip(clipFrame, jaw);
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);

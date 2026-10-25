@@ -189,7 +189,14 @@ class Spotify:
         device = self.device()
         r = self.call("PUT", "/me/player/play", params={"device_id": device} if device else None, json=body)
         if r.status_code in (200, 202, 204):
-            return f"Sonando en Spotify: {name}."
+            # Spotify may accept the command and still not play (seen on free accounts): check it really does.
+            for _ in range(3):
+                self.sleep(1)
+                st = self.call("GET", "/me/player")
+                if st.status_code == 200 and st.json().get("is_playing"):
+                    return f"Sonando en Spotify: {name}."
+            self.open_url(item["uri"])
+            return f"Spotify no la empezó a sonar (sin Premium no deja); abrí {name} en la app para que le des play."
         if r.status_code == 403:  # playback through the API is Premium only: open it in the app instead
             self.open_url(item["uri"])
             return f"Abrí {name} en Spotify (para que suene solo hace falta Premium; dale a play)."

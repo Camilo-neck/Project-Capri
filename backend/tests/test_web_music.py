@@ -97,9 +97,10 @@ def test_connecting_opens_consent_and_saves_tokens_from_the_redirect(monkeypatch
 class FakeSpotify:
     """Spotify's API as a MockTransport: records requests, answers from a few knobs."""
 
-    def __init__(self, devices=None, play_status=204):
+    def __init__(self, devices=None, play_status=204, plays=True):
         self.devices = devices if devices is not None else [{"id": "pc", "type": "Computer", "is_active": False}]
         self.play_status = play_status
+        self.plays = plays
         self.requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -115,6 +116,8 @@ class FakeSpotify:
             return httpx.Response(200, json={"devices": self.devices})
         if path.endswith("/play"):
             return httpx.Response(self.play_status)
+        if path.endswith("/me/player"):
+            return httpx.Response(200, json={"is_playing": self.plays})
         return httpx.Response(404)
 
 
@@ -132,7 +135,7 @@ def test_plays_a_song_on_this_pc():
     connect()
     fake, opened = FakeSpotify(), []
     assert client(fake, opened).play("bohemian rhapsody") == "Sonando en Spotify: Bohemian Rhapsody de Queen."
-    play = fake.requests[-1]
+    play = next(r for r in fake.requests if r.method == "PUT")
     assert play.method == "PUT" and play.url.params["device_id"] == "pc"
     assert json.loads(play.content) == {"uris": ["spotify:track:1"]} and play.headers["Authorization"] == "Bearer OLD"
 
@@ -142,8 +145,9 @@ def test_playlists_play_as_a_context_and_tokens_refresh_when_stale():
     fake, opened = FakeSpotify(), []
     client(fake, opened).play("lofi para estudiar", "playlist")
     assert fake.requests[0].url.path.endswith("/api/token")  # refreshed first
-    assert json.loads(fake.requests[-1].content) == {"context_uri": "spotify:playlist:1"}
-    assert fake.requests[-1].headers["Authorization"] == "Bearer NEW"
+    play = next(r for r in fake.requests if r.method == "PUT")
+    assert json.loads(play.content) == {"context_uri": "spotify:playlist:1"}
+    assert play.headers["Authorization"] == "Bearer NEW"
     assert spotify.load_token()["refresh_token"] == "R"  # kept: the refresh didn't send a new one
 
 
@@ -155,6 +159,13 @@ def test_without_premium_or_device_it_opens_the_song_in_the_app():
     opened.clear()
     msg = client(FakeSpotify(devices=[], play_status=404), opened).play("x")
     assert opened[0] == "spotify:" and opened[-1] == "spotify:track:1" and "abrí" in msg.lower()
+
+
+def test_accepted_but_silent_opens_the_song_in_the_app():
+    connect()
+    opened: list[str] = []
+    msg = client(FakeSpotify(plays=False), opened).play("x")
+    assert opened == ["spotify:track:1"] and "le des play" in msg
 
 
 def test_not_connected_tells_capri_to_connect():

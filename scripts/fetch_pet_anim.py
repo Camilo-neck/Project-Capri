@@ -22,7 +22,9 @@ def main() -> None:
     frames = []
     for i, url in enumerate(urls, 1):
         path = out / f"{name}_{i:02d}.png"
-        with urllib.request.urlopen(url) as r:
+        # PixelLab's file host rejects Python's default user agent (403).
+        req = urllib.request.Request(url, headers={"User-Agent": "curl/8"})
+        with urllib.request.urlopen(req) as r:
             path.write_bytes(r.read())
         frames.append(Image.open(path).convert("RGBA"))
     w, h = frames[0].size

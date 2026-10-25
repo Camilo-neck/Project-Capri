@@ -250,3 +250,24 @@ Adjunta la tabla "Dirección de arte", las secciones 2, 4 y 5 de este documento,
 - **Efectos (zZz, corazones, ?, !, destellos, lágrimas):** por código encima del sprite, a la misma escala.
 - **Lo que se pierde frente a la versión por código:** los ojos ya no siguen al ratón, porque van dibujados en el sprite. Se puede recuperar con un sello de iris encima si se pide en un paso aparte.
 - **Mientras llega el arte:** sigue funcionando la mascota generada por código, y cada animación que llegue sustituye a la suya.
+
+---
+
+## 11. Estado de la generación (25/10/2026)
+
+Cuenta de prueba (40 generaciones): gastadas 32, quedan 8.
+
+**Hecho:**
+- Personaje base de la fusión: `avatar/assets/pet/base/base_de_pie.png` (Pro Flash con la versión chibi anterior como imagen de estilo). Tiene brazos y piernas legibles; la primera versión chibi tenía extremidades demasiado pequeñas para posar.
+- Personaje con esqueleto en PixelLab: **`79cce1f3-d6bf-4247-917c-f34c06639c78`** ("Capri"; 4 direcciones; vista *side*; 96×96). Las animaciones se generan con `animate_character` sobre este id.
+- `de_pie_idle` (9 fotogramas, de la versión chibi anterior): buen ejemplo de movimiento en el sitio. Hay que reproducirlo en ida y vuelta, porque cierra los ojos y no los vuelve a abrir.
+
+**Aprendido:**
+- **Funciona:** movimientos en el sitio de frente (respirar, mecer el pelo, parpadear) con `animate_image` o `animate_character` (v3, solo *south*). Cuestan 2–3 generaciones por animación de 8 fotogramas a 96 px; el lienzo crece a 132 px.
+- **No funciona:** cambiar de pose de frente, en especial **sentarse con las piernas colgando hacia la cámara**. Se probó con edición por referencia, `animate_image` y `animate_character`: o no cambia nada, o se encoge, o se agacha y vuelve.
+- **Descargas:** el servidor de archivos de PixelLab rechaza el agente de usuario de Python. `scripts/fetch_pet_anim.py` ya lo tiene en cuenta.
+
+**Próximo paso (decidir):**
+1. Con plan de pago, intentar la pose sentada con `create_character_state` (10–25 generaciones).
+2. Sentarla en 3/4 (*south-east*) en vez de de frente.
+3. Rediseñar el reposo sin sentarse (de pie, flotando o apoyada) y generar solo animaciones en el sitio.

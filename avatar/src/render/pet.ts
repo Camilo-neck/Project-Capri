@@ -5,6 +5,8 @@ import { Application, Sprite, Texture } from "pixi.js";
 import type { ClipFrame } from "../pet/clips.ts";
 import { Painter } from "../pet/draw.ts";
 import { GROUND, H, W, type Pose } from "../pet/rig.ts";
+import { glitchFilter, setUniform } from "../shaders/filters.ts";
+import type { Glitch } from "../state/glitch.ts";
 
 export const SCALE = 3; // code-drawn pet
 export const CLIP_SCALE = 2; // sprite clips are drawn at a higher native resolution
@@ -19,7 +21,9 @@ interface ClipFrames {
 
 export interface PetRenderer {
   app: Application;
-  paint(pose: Pose, time: number, glitch: number): void;
+  paint(pose: Pose, time: number): void;
+  /** Glitch on top of whatever is shown; seed picks the bands, change it per frame. */
+  glitch(g: Glitch, seed: number): void;
   /** Shows a sprite clip frame instead of the code-drawn pet; null switches back. */
   showClip(frame: ClipFrame | null): void;
   /** Opaque area of the current frame in CSS px, relative to the canvas. */
@@ -95,15 +99,28 @@ export async function createPet(parent: HTMLElement): Promise<PetRenderer> {
   clip.scale.set(CLIP_SCALE);
   clip.visible = false;
   app.stage.addChild(drawn, clip);
+  const filter = glitchFilter();
+  filter.padding = 36; // room for shifted bands
+  filter.enabled = false;
+  app.stage.filters = [filter];
 
   let shown: { frames: ClipFrames; index: number } | null = null;
   const feet: [number, number] = [(W * SCALE) / 2, GROUND * SCALE];
 
   return {
     app,
-    paint(pose, time, glitch) {
-      painter.paint(pose, time, glitch);
+    paint(pose, time) {
+      painter.paint(pose, time);
       texture.source.update();
+    },
+    glitch(g, seed) {
+      filter.enabled = g.glitch > 0 || g.split > 0 || g.sil[3] > 0;
+      if (!filter.enabled) return;
+      setUniform(filter, "uGlitch", g.glitch);
+      setUniform(filter, "uSplit", g.split);
+      setUniform(filter, "uSeed", seed);
+      setUniform(filter, "uSil", g.sil);
+      setUniform(filter, "uGrid", shown ? [clip.x, clip.y, CLIP_SCALE] : [drawn.x, drawn.y, SCALE]);
     },
     showClip(frame) {
       const frames = frame && clips[frame.clip];

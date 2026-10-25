@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { AvatarState, GESTURE_MS, GLITCH_MS, POSE_MS } from "./avatar.ts";
+import { AvatarState, GESTURE_MS, POSE_MS } from "./avatar.ts";
+import { GLITCH_MS, GlitchFx } from "./glitch.ts";
 import { mouthFor, Typewriter } from "./text.ts";
 
 test("mouth follows vowels and closes on punctuation", () => {
@@ -29,13 +30,35 @@ test("typewriter reveals at its rate without splitting emoji", () => {
   assert.equal(tw.tick(20), "x"); // idle time does not bank budget
 });
 
-test("emotion change flashes glitch then settles", () => {
+test("setEmotion reports changes only", () => {
   const s = new AvatarState(0, () => 1);
-  s.setEmotion("feliz", 1000);
-  assert.ok(s.pose(1000).glitch > 0.9);
-  assert.equal(s.pose(1000 + GLITCH_MS).glitch, 0);
-  s.setEmotion("feliz", 2000); // same emotion: no flash
-  assert.equal(s.pose(2000).glitch, 0);
+  assert.equal(s.setEmotion("feliz"), true);
+  assert.equal(s.setEmotion("feliz"), false);
+});
+
+test("glitch effects play once; poke and hurt open with a silhouette frame", () => {
+  const fx = new GlitchFx(0, () => 1); // twitch gap = 13 s
+  fx.kick("change", 1000);
+  assert.ok(fx.at(1000, false).glitch > 0.5);
+  assert.equal(fx.at(1000 + GLITCH_MS.change, false).glitch, 0);
+  fx.kick("hurt", 2000);
+  assert.deepEqual(fx.at(2000, false).sil, [1, 0.13, 0.32, 1]);
+  const after = fx.at(2000 + POSE_MS, false);
+  assert.equal(after.sil[3], 0);
+  assert.ok(after.glitch > 0 && after.split > 0);
+  fx.kick("poke", 3000);
+  assert.equal(fx.at(3000, false).sil[3], 1);
+});
+
+test("idle twitches every 5-13 s, never while busy or over another effect", () => {
+  const fx = new GlitchFx(0, () => 0); // twitch gap = 5 s
+  assert.equal(fx.at(4999, true).glitch, 0);
+  assert.ok(fx.at(5000, true).glitch > 0);
+  assert.equal(fx.at(5000 + GLITCH_MS.twitch, true).glitch, 0);
+  assert.equal(fx.at(10_000, false).glitch, 0); // busy: skipped
+  fx.kick("change", 14_990);
+  assert.ok(fx.at(15_000, true).glitch > 0.5); // the change plays, not a twitch on top
+  assert.equal(fx.at(15_000 + GLITCH_MS.change, true).glitch, 0);
 });
 
 test("gestures play once and return to idle", () => {

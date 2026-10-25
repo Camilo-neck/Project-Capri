@@ -10,6 +10,7 @@ import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
 import { solve } from "./pet/rig.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
+import { GlitchFx, OFF } from "./state/glitch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
@@ -39,7 +40,9 @@ const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
 const director = new Director();
 const clips = new ClipPlayer();
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips } }); // inspection from devtools
+const glitch = new GlitchFx(performance.now());
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch } }); // inspection from devtools
 
 let turn = 0;
 let sentAt = 0;
@@ -89,7 +92,7 @@ const link = connect(
         break;
       case "utterance_start":
         // Also covers a retry: the new utterance replaces the text shown so far.
-        avatar.setEmotion(msg.emocion, now);
+        if (avatar.setEmotion(msg.emocion)) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
         avatar.playGesture(msg.gesto, now);
         variant = Math.floor(Math.random() * 1000);
         typewriter.clear();
@@ -158,7 +161,9 @@ function headOnPage(): [number, number] {
 
 // Poke: click on her. Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
-  if (e.button === 0) pokeAt = performance.now();
+  if (e.button !== 0) return;
+  pokeAt = performance.now();
+  glitch.kick("poke", pokeAt);
 });
 stage.addEventListener("pointermove", (e) => {
   const [hx, hy] = headOnPage();
@@ -219,7 +224,9 @@ pet.app.ticker.add((ticker) => {
   const base = clips.frame(t);
   const clipFrame = gestureFrame(s.gesto, s.gestureT, base, name) ?? base;
   pet.showClip(clipFrame);
-  if (!clipFrame) pet.paint(pose, t, s.glitch * 0.6);
+  if (!clipFrame) pet.paint(pose, t);
+  const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
+  pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
 
   const b = pet.bounds();
   if (b) {

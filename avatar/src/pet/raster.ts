@@ -67,26 +67,3 @@ export function over(dst: Uint8ClampedArray, src: Uint8ClampedArray): void {
     dst[i + 3] = oa * 255;
   }
 }
-
-/** Short glitch: shifts some rows sideways and splits red/blue, like the show's static. */
-export function glitch(data: Uint8ClampedArray, w: number, h: number, amount: number, seed: number): void {
-  if (amount <= 0) return;
-  const copy = data.slice();
-  const shift = Math.round(2 * amount);
-  for (let y = 0; y < h; y++) {
-    const band = Math.floor(y / 3);
-    const r = Math.abs(Math.sin((band + seed) * 12.9898) * 43758.5453) % 1;
-    const dx = r > 0.7 ? Math.round((r - 0.85) * 20 * amount) : 0;
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const sx = Math.min(w - 1, Math.max(0, x - dx));
-      const j = (y * w + sx) * 4;
-      const jr = (y * w + Math.min(w - 1, Math.max(0, sx + shift))) * 4;
-      const jb = (y * w + Math.min(w - 1, Math.max(0, sx - shift))) * 4;
-      data[i] = copy[jr];
-      data[i + 1] = copy[j + 1];
-      data[i + 2] = copy[jb + 2];
-      data[i + 3] = Math.max(copy[j + 3], copy[jr + 3], copy[jb + 3]);
-    }
-  }
-}

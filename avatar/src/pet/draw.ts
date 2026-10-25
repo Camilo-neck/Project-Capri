@@ -1,6 +1,6 @@
 // Paints a Pose as pixel art: each body part is drawn with canvas shapes at native
 // resolution, made crisp, outlined in black, and stacked; the face is stamped on top.
-import { crisp, glitch, hexToRgb, outline, over, type RGB } from "./raster.ts";
+import { crisp, hexToRgb, outline, over, type RGB } from "./raster.ts";
 import { GROUND, H, solve, W, type Fx, type Joints, type Pose, type Pt } from "./rig.ts";
 import { eyeStamp, FX_STAMPS, MOUTHS, PALETTE, type Stamp } from "./stamps.ts";
 
@@ -147,7 +147,7 @@ export class Painter {
     }
   }
 
-  paint(p: Pose, time: number, glitchAmount = 0): void {
+  paint(p: Pose, time: number): void {
     this.frame.fill(0);
     const j = solve(p);
     // Squash and stretch around her feet, widening as she flattens.
@@ -168,7 +168,6 @@ export class Painter {
     this.part((c) => this.fringe(c, j), { colors: "H", outline: false });
     this.face(p, j);
     for (const f of p.fx) this.effect(f, j, p);
-    glitch(this.frame, W, H, glitchAmount, Math.floor(time / 60));
     this.ctx.putImageData(new ImageData(this.frame, W, H), 0, 0);
   }
 

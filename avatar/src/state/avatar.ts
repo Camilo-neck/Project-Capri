@@ -2,7 +2,6 @@ import type { Emocion, Gesto } from "../net/protocol.ts";
 import type { Mouth } from "./text.ts";
 
 export const POSE_MS = 1000 / 20; // the pet animates at 20 fps (pixel-art pacing), the page renders at 60
-export const GLITCH_MS = 150;
 export const BLINK_MS = 120;
 
 export const GESTURE_MS: Record<Gesto, number> = {
@@ -22,7 +21,6 @@ export interface Pose {
   gestureT: number; // 0..1 progress of the gesture, 0 when idle
   mouth: Mouth | null; // null = resting mouth of the current emotion
   blinking: boolean;
-  glitch: number; // 0..1, flash after an emotion change
   breath: number; // -1..1
 }
 
@@ -31,7 +29,6 @@ export class AvatarState {
   mouth: Mouth | null = null;
   private gesto: Gesto = "ninguno";
   private gestureStart = 0;
-  private emotionChangedAt = -Infinity;
   private nextBlink: number;
   private blinkUntil = -Infinity;
   private rand: () => number;
@@ -45,9 +42,11 @@ export class AvatarState {
     return 2000 + this.rand() * 4000;
   }
 
-  setEmotion(e: Emocion, now: number): void {
-    if (e !== this.emocion) this.emotionChangedAt = now;
+  /** Returns whether the emotion changed. */
+  setEmotion(e: Emocion): boolean {
+    const changed = e !== this.emocion;
     this.emocion = e;
+    return changed;
   }
 
   playGesture(g: Gesto, now: number): void {
@@ -65,7 +64,6 @@ export class AvatarState {
     const dur = GESTURE_MS[this.gesto];
     const elapsed = t - this.gestureStart;
     if (this.gesto !== "ninguno" && elapsed >= dur) this.gesto = "ninguno";
-    const sinceChange = now - this.emotionChangedAt;
     return {
       frame,
       emocion: this.emocion,
@@ -73,7 +71,6 @@ export class AvatarState {
       gestureT: this.gesto === "ninguno" ? 0 : Math.max(0, elapsed / dur),
       mouth: this.mouth,
       blinking: now < this.blinkUntil,
-      glitch: sinceChange < GLITCH_MS ? 1 - sinceChange / GLITCH_MS : 0,
       breath: Math.sin((t / 3500) * Math.PI * 2),
     };
   }

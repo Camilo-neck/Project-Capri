@@ -52,7 +52,7 @@ La silueta, el tamaño y la ternura de mascota vienen de tu hoja; el diseño, la
 | Elemento | De la hoja (mascota) | De la serie (Capri original) | Resultado |
 |---|---|---|---|
 | Proporciones | Chibi: cabeza grande, cuerpo fino, unos 70 px | Figura larga y estilizada | Chibi, pero con piernas largas y finas acabadas en punta |
-| Pelo | Masa voluminosa con rizos y dos mechones en cuerno | Masa enorme de **esquirlas** rojo neón con **brillo blanco** fino, puntas en **rayo**, algún fragmento suelto | Masa voluminosa de mascota con bordes de esquirla dentada, rojo neón, puntitos blancos de brillo y 2–3 mechones en rayo que caen a los lados |
+| Pelo | Masa voluminosa con rizos (sus dos mechones en cuerno **no** se usan) | Masa enorme de **esquirlas** rojo neón con **brillo blanco** fino, puntas en **rayo**, algún fragmento suelto | Masa voluminosa de mascota con bordes de esquirla dentada, rojo neón, puntitos blancos de brillo y 2–3 mechones en rayo que caen a los lados. **Sin cuernos**: la parte de arriba es redondeada y dentada |
 | Cabeza y cara | Cara verde con flequillo negro en forma de antifaz | Cabeza negra con **máscara verde de dos paneles** con muesca en V; **ojos concéntricos** (anillo verde, iris azul, brillo blanco) con **pliegues negros en estrella** | Cabeza negra pequeña con la máscara verde de dos paneles ocupando la parte alta de la cara; ojos concéntricos grandes y expresivos |
 | Boca | Sonrisa blanca con dientes | **Zigzag** fino cuando está tranquila; **sonrisa triangular** blanca y dentada cuando se emociona | Igual que la serie |
 | Cuerpo | Maillot rojo y negro con paneles verdes | Cuerpo de **esquirlas** angulosas negras, rojas y verdes | Maillot hecho de esquirlas angulosas: negro de base con trozos rojo neón y verde ácido; guantes y botas negros |
@@ -89,8 +89,8 @@ La silueta, el tamaño y la ternura de mascota vienen de tu hoja; el diseño, la
 ```
 Chibi pixel art desktop pet, a glitchy cyberpunk AI girl, front view facing the camera, standing,
 full body, cute but slightly eerie. Huge voluminous hair mass in neon red made of jagged angular
-shards, sprinkled with tiny white glitter dots, with two horn-like tufts on top and two or three
-lightning-bolt strands falling at the sides. Small black head with an acid-green angular mask of two
+shards, sprinkled with tiny white glitter dots, rounded jagged top with NO horns and no horn-like
+tufts, and two or three lightning-bolt strands falling at the sides. Small black head with an acid-green angular mask of two
 panes meeting in a V notch, covering the upper face. Big concentric eyes on the mask: green ring,
 blue iris, white highlight, with thin black star-shaped creases around them. Thin white zigzag
 mouth. Slim body made of angular shards: black base with neon red and acid green fragments, black
@@ -102,6 +102,7 @@ transparent background. Playful, mischievous personality.
 **Criterio para aceptarlo:**
 - **Proporciones y ternura** de `ref_de_pie.png` (cabeza grande, cuerpo fino, unos 70 px).
 - **Rasgos de la serie** reconocibles: máscara verde de dos paneles, ojos concéntricos, pelo de esquirlas rojo neón con brillo y borde violeta.
+- **Sin cuernos** ni mechones en forma de cuerno sobre la cabeza. PixelLab tiende a añadirlos: si salen, descarta la imagen.
 - **Fusión, no copia:** no debe parecer ni la mascota de la hoja con otros colores ni la Capri de la serie encogida.
 
 Genera varias semillas y quédate con la mejor; **todo lo demás parte de esta imagen**, así que vale la pena invertir aquí.
@@ -229,6 +230,7 @@ avatar/assets/pet/
 - [ ] Sin píxeles sueltos, sin halos, fondo totalmente transparente.
 - [ ] Contorno negro de 1 px, borde violeta en el lado inferior izquierdo y solo colores de la paleta.
 - [ ] Rasgos de la serie presentes: máscara verde de dos paneles, ojos concéntricos, pelo de esquirlas con brillo.
+- [ ] Sin cuernos.
 - [ ] Los bucles cierran: el último fotograma enlaza con el primero sin saltos.
 
 ## 8. Coste estimado
@@ -277,5 +279,10 @@ Cuenta de prueba agotada: 39 de 40 generaciones.
 - **En 3/4 (*south-east*):** las familias sentada, piernas cruzadas, portátil y abrazando rodillas (`sentada_idle`, `meditar`, `dormir`, `escribir`, `triste`, `acariciada`, `pinchada`), generadas encadenando desde `sentarse` o su bucle.
 - **De frente (*south*):** las de pie (habla, emociones, gestos, `saludar`, `peligro`).
 - **La transición `levantarse`** es `sentarse` al revés, y al ponerse de pie gira de 3/4 a frente con un fotograma de rotación.
+
+**⚠ Hay que rehacer la base:** la base actual y los clips `sentarse` y `sentada_idle` tienen **cuernos**, y Capri no debe llevarlos (decidido el 25/10/2026). Antes de generar más animaciones:
+1. Regenerar la base desde `base_de_pie.png` editándola para quitar los cuernos (Pro Flash *edit*, unas 5 generaciones) o con el prompt nuevo.
+2. Crear de nuevo el personaje de 8 direcciones a partir de ella.
+3. Rehacer `sentarse` y `sentada_idle`.
 
 **Para continuar** hace falta el plan de pago: quedan unas 30 animaciones, unas 90 generaciones más las repeticiones.

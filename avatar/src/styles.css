@@ -70,6 +70,14 @@ body {
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 100%, 0 100%);
 }
 
+/* Shown when she saved something to her memory this turn. */
+.tx-mem {
+  color: var(--accent-2);
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
 .tx-meta {
   color: var(--dim);
   font: 11px var(--font-body);

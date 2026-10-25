@@ -29,6 +29,13 @@ class UtteranceEnd(BaseModel):
     ctx: int | None = None  # context tokens used, as reported by Ollama
 
 
+class Remembered(BaseModel):
+    """Capri saved something to her long-term memory (shown as a mark in the transmission)."""
+
+    type: Literal["remembered"] = "remembered"
+    texto: str
+
+
 class ConfirmRequest(BaseModel):
     type: Literal["confirm_request"] = "confirm_request"
     id: str
@@ -60,6 +67,6 @@ class Hotkey(BaseModel):
     name: str
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | ConfirmRequest
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | ConfirmRequest
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

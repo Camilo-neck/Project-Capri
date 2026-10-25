@@ -13,6 +13,7 @@ import threading
 import uvicorn
 
 from app.demo import demo_generate_factory
+from app.memory import Memory
 from app.orchestrator import Orchestrator
 from app.ws import create_app
 
@@ -30,7 +31,13 @@ def main() -> None:
         threading.Thread(target=lambda: (sys.stdin.read(), os._exit(0)), daemon=True).start()
 
     token = os.environ.get("CAPRI_TOKEN") or secrets.token_urlsafe(32)
-    orchestrator = Orchestrator(demo_generate_factory()) if args.demo else Orchestrator()
+    if args.demo:  # no LLM and no traces: scripted replies, a throwaway memory, canned summaries
+        async def demo_summary(text: str) -> str:
+            return "Conversación de demostración."
+
+        orchestrator = Orchestrator(demo_generate_factory(), memory=Memory(":memory:"), summarize=demo_summary)
+    else:
+        orchestrator = Orchestrator()
     print(f"ws://{HOST}:{PORT}/ws?token={token}", flush=True)
     uvicorn.run(create_app(token, orchestrator), host=HOST, port=PORT, log_level="warning")
 

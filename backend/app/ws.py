@@ -45,6 +45,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
             tasks.add(task)
             task.add_done_callback(tasks.discard)
 
+        spawn(orchestrator.catch_up())  # summaries of sessions that ended with the app closed
         if reminders:
             tasks.add(asyncio.create_task(orchestrator.reminders(send)))
         try:

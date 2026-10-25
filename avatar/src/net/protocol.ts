@@ -28,6 +28,12 @@ export interface UtteranceEnd {
   ctx: number | null;
 }
 
+/** Capri saved something to her long-term memory (shown as a mark in the transmission). */
+export interface Remembered {
+  type: "remembered";
+  texto: string;
+}
+
 export interface ConfirmRequest {
   type: "confirm_request";
   id: string;
@@ -58,5 +64,5 @@ export interface Hotkey {
   name: string;
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | ConfirmRequest;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | ConfirmRequest;
 export type ClientMessage = TextInput | Look | ConfirmResponse | Hotkey;

@@ -36,6 +36,7 @@ const txMeta = $("tx-meta");
 const txUser = $("tx-user");
 const txText = $("tx-text");
 const choices = $<HTMLOListElement>("choices");
+const txMem = $("tx-mem");
 const status = $("status");
 const statusLabel = $("status-label");
 const inputRow = $<HTMLFormElement>("input-row");
@@ -259,6 +260,10 @@ const link = connect(
       case "confirm_request":
         showChoices(msg.id, msg.texto);
         break;
+      case "remembered":
+        txMem.hidden = false;
+        txMem.title = msg.texto; // hover shows what she saved
+        break;
     }
   },
   (up) => {
@@ -332,6 +337,7 @@ function startTurn(shown: string): void {
   txN.textContent = String(turn).padStart(4, "0");
   txUser.textContent = awaiting ? `› ${shown}` : "";
   typewriter.clear(); // leftovers of the previous reply would reveal at once and fake the latency
+  txMem.hidden = true;
   txText.textContent = "";
   updateMeta();
   showTx();

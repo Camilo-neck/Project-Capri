@@ -57,11 +57,20 @@ class CalendarUrlArgs(BaseModel):
     url: str
 
 
+class RememberArgs(BaseModel):
+    texto: str = Field(min_length=3, max_length=300)
+    tipo: Literal["preferencia", "hecho"] = "hecho"
+
+
+class ForgetArgs(BaseModel):
+    texto: str = Field(min_length=2)
+
+
 @dataclass(frozen=True)
 class Tool:
     args: type[BaseModel]
     effect: bool
-    run: Callable[[BaseModel, Settings], str]
+    run: Callable[[BaseModel, Settings], str] | None  # None: the orchestrator runs it (memory tools)
     describe: Callable[[BaseModel], str] = lambda a: ""  # what the confirmation asks (effects only)
 
 
@@ -145,6 +154,10 @@ TOOLS: dict[str, Tool] = {
     "ejecutar_script": Tool(ScriptArgs, True, run_script, lambda a: f"Ejecutar el script «{a.nombre}»"),
     "calendario": Tool(CalendarArgs, False, calendar),
     "configurar_calendario": Tool(CalendarUrlArgs, True, configure_calendar, lambda a: "Guardar la dirección de tu calendario"),
+    # Memory: they need the memory store and the avatar, so the orchestrator runs them. Forgetting
+    # deletes, so it confirms (with the list of what goes) like any action with effects.
+    "recordar": Tool(RememberArgs, False, None),
+    "olvidar": Tool(ForgetArgs, True, None),
 }
 
 ToolName = Literal[tuple(TOOLS)]  # type: ignore[valid-type]  # the grammar only lets the model pick these

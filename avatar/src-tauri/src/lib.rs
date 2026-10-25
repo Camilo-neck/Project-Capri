@@ -1,7 +1,9 @@
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, Manager, RunEvent};
@@ -14,9 +16,60 @@ struct Config {
 
 struct Backend(Mutex<Option<Child>>);
 
+/// Where the window should take the mouse: over Capri (hitbox, logical px in the window) or
+/// everywhere while the UI needs it (input open). Elsewhere clicks go through to the desktop.
+#[derive(Default)]
+struct Mouse {
+    hitbox: Mutex<Option<[f64; 4]>>,
+    forced: AtomicBool,
+}
+
+/// Logical px between the window bottom and her ground line: room for her legs to dangle
+/// over the taskbar while she sits on its edge. Matches (H - GROUND) * SCALE in the frontend.
+const BELOW_GROUND: f64 = 54.0;
+
 #[tauri::command]
 fn config(cfg: tauri::State<Config>) -> Config {
     cfg.inner().clone()
+}
+
+#[tauri::command]
+fn set_hitbox(x: f64, y: f64, w: f64, h: f64, mouse: tauri::State<Mouse>) {
+    *mouse.hitbox.lock().unwrap() = Some([x, y, w, h]);
+}
+
+#[tauri::command]
+fn set_interactive(on: bool, mouse: tauri::State<Mouse>) {
+    mouse.forced.store(on, Ordering::Relaxed);
+}
+
+/// ~30 Hz: forwards the cursor (for her gaze) and toggles click-through by hit-testing her.
+fn watch_mouse(app: tauri::AppHandle) {
+    let mut last_cursor = (f64::NAN, f64::NAN);
+    let mut last_ignore = None;
+    loop {
+        std::thread::sleep(Duration::from_millis(33));
+        let Some(w) = app.get_webview_window("main") else { continue };
+        let (Ok(c), Ok(pos), Ok(scale)) = (app.cursor_position(), w.outer_position(), w.scale_factor()) else {
+            continue;
+        };
+        let x = (c.x - pos.x as f64) / scale;
+        let y = (c.y - pos.y as f64) / scale;
+        if (x, y) != last_cursor {
+            last_cursor = (x, y);
+            let _ = app.emit("cursor", (x, y));
+        }
+        let mouse = app.state::<Mouse>();
+        let inside = mouse
+            .hitbox
+            .lock()
+            .unwrap()
+            .is_some_and(|[bx, by, bw, bh]| x >= bx && y >= by && x <= bx + bw && y <= by + bh);
+        let ignore = !(inside || mouse.forced.load(Ordering::Relaxed));
+        if last_ignore != Some(ignore) && w.set_ignore_cursor_events(ignore).is_ok() {
+            last_ignore = Some(ignore);
+        }
+    }
 }
 
 /// Launches the Python backend and reads the ws URL (with its per-start token) from its first stdout line.
@@ -58,11 +111,13 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
-        .invoke_handler(tauri::generate_handler![config])
+        .manage(Mouse::default())
+        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
                     if shortcut == &open_input && event.state() == ShortcutState::Pressed {
+                        app.state::<Mouse>().forced.store(true, Ordering::Relaxed);
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.set_ignore_cursor_events(false);
                             let _ = w.set_focus();
@@ -74,14 +129,21 @@ pub fn run() {
         )
         .setup(move |app| {
             app.global_shortcut().register(open_input)?;
-            // Bottom-right corner of the primary monitor, above the taskbar.
+            // Bottom-right of the primary monitor, sitting on the taskbar's top edge.
             let w = app.get_webview_window("main").unwrap();
             if let (Some(m), Ok(size)) = (w.primary_monitor()?, w.outer_size()) {
                 let scale = m.scale_factor();
+                let area = m.work_area();
+                let pos = area.position.to_logical::<f64>(scale);
+                let work = area.size.to_logical::<f64>(scale);
                 let screen = m.size().to_logical::<f64>(scale);
                 let win = size.to_logical::<f64>(scale);
-                w.set_position(LogicalPosition::new(screen.width - win.width - 16.0, screen.height - win.height - 56.0))?;
+                // Windows keeps windows on screen, so with a short taskbar she sits a few px above it.
+                let bottom = (pos.y + work.height + BELOW_GROUND).min(m.position().to_logical::<f64>(scale).y + screen.height);
+                w.set_position(LogicalPosition::new(pos.x + work.width - win.width - 16.0, bottom - win.height))?;
             }
+            let handle = app.handle().clone();
+            std::thread::spawn(move || watch_mouse(handle));
             Ok(())
         })
         .build(tauri::generate_context!())

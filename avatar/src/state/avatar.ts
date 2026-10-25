@@ -1,7 +1,7 @@
 import type { Emocion, Gesto } from "../net/protocol.ts";
 import type { Mouth } from "./text.ts";
 
-export const POSE_MS = 1000 / 12; // poses change at 12 fps, render runs at 60
+export const POSE_MS = 1000 / 20; // the pet animates at 20 fps (pixel-art pacing), the page renders at 60
 export const GLITCH_MS = 150;
 export const BLINK_MS = 120;
 

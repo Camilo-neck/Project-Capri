@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Capri · hoja de sprites</title>
+    <style>
+      body { margin: 0; background: #e9e7ec; color: #1a1420; font: 13px/1.4 "JetBrains Mono", monospace; }
+      h1 { font: 700 20px "Chakra Petch", sans-serif; margin: 16px 16px 4px; letter-spacing: 0.04em; }
+      p.lead { margin: 0 16px 12px; color: #5b5566; }
+      #root { padding: 0 16px 16px; }
+      .row { display: grid; grid-template-columns: 220px 1fr; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #d3d0d9; }
+      .row h2 { font: 700 13px "Chakra Petch", sans-serif; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+      .row .id { color: #8b38ff; }
+      .row .trig { color: #5b5566; font-size: 12px; }
+      .frames { display: flex; gap: 6px; flex-wrap: wrap; }
+      .frames figure { margin: 0; text-align: center; font-size: 10px; color: #8a8494; }
+      canvas { image-rendering: pixelated; background: #f6f5f8; border-radius: 4px; display: block; }
+      .live { display: grid; grid-template-columns: repeat(auto-fill, 260px); gap: 8px; }
+      .live figure { margin: 0; background: #f6f5f8; border-radius: 6px; padding: 4px; }
+      .live figcaption { font-size: 11px; padding: 2px 4px; }
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+      .legend figure { margin: 0; text-align: center; font-size: 10px; }
+    </style>
+    <script type="module" src="/src/pet/preview.ts"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

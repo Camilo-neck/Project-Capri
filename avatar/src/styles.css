@@ -42,6 +42,11 @@ body {
   cursor: pointer;
 }
 
+/* hiding (/escondete): small and a little see-through, so she doesn't stand out */
+.hide {
+  opacity: 0.8;
+}
+
 .hud {
   position: absolute;
   left: 0;

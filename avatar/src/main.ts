@@ -34,6 +34,8 @@ const DROP_TOLERANCE = 30; // px: let go this close to a window's top edge and s
 const MASK_SCALE = 0.55; // her mask asleep, about 55 px wide
 const WAKE_NEAR = 30; // px around the mask: the pointer this close wakes her
 const STIR_NEAR = 110; // closer than this, she stirs and her eyes follow it
+const HIDE_SCALE = 0.3; // /escondete: her mask, about half the size of the sleeping one
+const HIDE_BLINK_MS = 4700; // hiding, she blinks once this often (130 ms)
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const hud = document.querySelector<HTMLElement>(".hud")!;
@@ -81,6 +83,7 @@ const petCanvas = pet.app.canvas as HTMLCanvasElement;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const doze = new Doze();
 const mask = new MaskView($<HTMLCanvasElement>("mask"), MASK_SCALE);
+const hideMask = new MaskView($<HTMLCanvasElement>("hide"), HIDE_SCALE);
 const camView = new CameraView($<HTMLCanvasElement>("cam-feed"));
 const camPlayer = new CameraPlayer();
 let camera = false; // camera mode: her close-ups in a transmission frame instead of her body
@@ -93,7 +96,7 @@ async function setCamera(on: boolean): Promise<void> {
   pet.app.stage.visible = !on;
 }
 await setCamera(settings.camara);
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, startPeek, peek: () => peek, zapCursor, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, hide, unhide, hiding: () => hiding, startPeek, peek: () => peek, zapCursor, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -130,13 +133,14 @@ let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
 let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it rides along with her window)
 let acting: object | null = null; // a tool running: her sparks last while this is the same run
 let peek: (PeekPose & { until: number; ducks: number }) | null = null; // peeking in from a screen edge
+let hiding: Point | null = null; // /escondete: just her small mask, eyes open, this far from her feet
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek;
+const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || !!hiding;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -329,6 +333,64 @@ function zapCursor(): void {
   lastTalk = Math.max(lastTalk, now - LINGER_MS + 2500); // grins for a couple of seconds
 }
 
+/** /escondete: she comes apart and only a small mask is left where her head was, eyes open on the pointer. */
+function hide(): void {
+  if (hiding || teleporting || doze.asleep) return;
+  if (peek) {
+    peek = null;
+    placePeek(null);
+  }
+  const [hx, hy] = headOnPage();
+  hiding = { x: hx - at.x, y: hy - at.y };
+  const now = performance.now();
+  glitch.kick("doze", now);
+  cam.style.visibility = "hidden";
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size * 0.4, false);
+  }
+}
+
+/** Out of hiding (a click on her mask, /vuelve, /escondete again, or something to say). */
+function unhide(): void {
+  if (!hiding) return;
+  hiding = null;
+  hideMask.show(false);
+  cam.style.visibility = "";
+  glitch.kick("arrive", performance.now());
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size, true);
+  }
+}
+
+/** Hiding: the small mask riding along with her spot, eyes open on the pointer, a blink now and then. */
+function drawHide(now: number): void {
+  // shown once her body has come apart
+  const shown = !!hiding && glitch.at(now, false).collapse >= 1;
+  hideMask.show(shown);
+  if (!shown) return;
+  hideMask.center = { x: at.x + hiding!.x, y: at.y + hiding!.y };
+  const blink = now % HIDE_BLINK_MS < 130;
+  hideMask.draw(
+    { eyes: blink ? [0, 0] : [1, 1], look: cursor ? { x: cursor[0], y: cursor[1] } : null },
+    { bob: reducedMotion.matches ? 0 : [0, -1, -2, -1][Math.floor(now / 600) % 4], px: style === "pixel" ? SCALE : 1 },
+  );
+}
+hideMask.canvas.addEventListener("pointerdown", () => unhide());
+
+/** /cierra: she vanishes, and Capri closes, stopping Ollama too (it holds her model in VRAM). */
+async function quit(): Promise<void> {
+  setInputOpen(false);
+  if (!reducedMotion.matches) {
+    glitch.kick("vanish", performance.now());
+    const b = body();
+    fx.burst(b.x, b.y, b.size, false);
+    await sleep(VANISH_OUT_MS + 150);
+  }
+  await invoke("quit", { stopOllama: true });
+}
+
 /** A long while with nobody around: she comes apart and only her mask is left, eyes shut, where her head was. */
 function fallAsleep(now: number): void {
   const [hx, hy] = headOnPage();
@@ -368,7 +430,10 @@ setInterval(async () => {
 }, 10_000);
 
 function setStatus(s: Status): void {
-  if (s === "thinking" || s === "speaking" || s === "looking") wakeUp();
+  if (s === "thinking" || s === "speaking" || s === "looking") {
+    wakeUp();
+    unhide(); // she comes out to answer
+  }
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
   if (s === "looking") fx.scan();
   if (s === "thinking" && linkStatus === "idle" && !awaiting) startTurn(""); // she speaks up on her own
@@ -604,7 +669,7 @@ void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
 void listen<boolean>("fullscreen", (e) => {
   if (e.payload === fullscreen) return;
   fullscreen = e.payload;
-  hud.style.visibility = fxCanvas.style.visibility = mask.canvas.style.visibility = fullscreen ? "hidden" : "";
+  hud.style.visibility = fxCanvas.style.visibility = mask.canvas.style.visibility = hideMask.canvas.style.visibility = fullscreen ? "hidden" : "";
   if (fullscreen) {
     pet.app.ticker.stop();
     lastHitbox = "";
@@ -629,7 +694,7 @@ void listen("camera", async () => {
   glitch.kick("change", performance.now());
   void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
 });
-void listen("teleport", () => doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
+void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
   wins = e.payload;
@@ -665,6 +730,14 @@ input.addEventListener("keydown", (e) => {
 inputRow.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value.trim();
+  // her own commands, handled here (the backend has /olvida and /nomolestes)
+  const command = { "/escondete": () => (hiding ? unhide() : hide()), "/vuelve": unhide, "/cierra": () => void quit() }[text.toLowerCase()];
+  if (command) {
+    input.value = "";
+    if (text.toLowerCase() !== "/cierra") setInputOpen(false);
+    command();
+    return;
+  }
   const mira = text.match(/^\/mira(?:\s+|$)(.*)$/s);
   if (mira) {
     input.value = "";
@@ -892,14 +965,16 @@ pet.app.ticker.add((ticker) => {
   if (camera) drawFeed(now, g, frame % 997);
 
   drawMask(now);
+  drawHide(now);
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   if (!mask.canvas.hidden) boxes.push(mask.box());
-  const b = teleporting || doze.asleep || camera || peek ? null : pet.bounds(); // while she's gone, nothing to click
+  if (!hideMask.canvas.hidden) boxes.push(hideMask.box());
+  const b = teleporting || doze.asleep || camera || peek || hiding ? null : pet.bounds(); // while she's gone, nothing to click
   if (peek && !teleporting) {
     const c = petCanvas.getBoundingClientRect();
     boxes.push([c.left, c.top, c.width, c.height]);
   }
-  if (camera && !teleporting) {
+  if (camera && !teleporting && !hiding) {
     const c = cam.getBoundingClientRect();
     boxes.push([c.left, c.top, c.width, c.height]);
   }

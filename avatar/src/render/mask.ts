@@ -77,8 +77,9 @@ export function drawMask(g: CanvasRenderingContext2D, x: number, y: number, k: n
     if (look) {
       const lx = (look.x - x) / k - ex, ly = (look.y - y) / k - ey;
       const d = Math.hypot(lx, ly) || 1;
-      px = (lx / d) * 2.6;
-      py = (ly / d) * 2.2;
+      // the pupils turn at least ~2 screen px, or a small mask would seem not to look
+      px = (lx / d) * Math.max(2.6, 2 / k);
+      py = (ly / d) * Math.max(2.2, 1.7 / k);
     }
     g.save();
     g.translate(ex, ey);

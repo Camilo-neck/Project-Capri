@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewWindow};
+mod ollama;
 mod user_config;
 mod win_watch;
 
@@ -90,6 +91,7 @@ fn start_backend() -> (String, Option<Child>) {
     if let Ok(url) = std::env::var("CAPRI_WS_URL") {
         return (url, None);
     }
+    ollama::ensure(); // /cierra may have stopped it
     // ponytail: the backend runs from this checkout (its .venv), even in the release build; bundling
     // Python (PyInstaller) only matters to install Capri on another PC.
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../backend");
@@ -154,7 +156,8 @@ pub fn run() {
             win_watch::capture_guard,
             user_config::avatar_settings,
             user_config::save_style,
-            user_config::save_camera
+            user_config::save_camera,
+            ollama::quit
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

@@ -96,7 +96,7 @@ async function setCamera(on: boolean): Promise<void> {
   pet.app.stage.visible = !on;
 }
 await setCamera(settings.camara);
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, hide, unhide, hiding: () => hiding, startPeek, peek: () => peek, zapCursor, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, hide, unhide, hiding: () => hiding, startPeek, peek: () => peek, zapCursor, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -162,6 +162,12 @@ addEventListener("resize", () => {
   placeHud();
 });
 
+/** Her opaque area in canvas px, mirrored too when she sits mirrored. */
+function petBounds(): { x: number; y: number; w: number; h: number } | null {
+  const b = pet.bounds();
+  return b && petCanvas.style.transform === "scaleX(-1)" ? { ...b, x: petCanvas.offsetWidth - b.x - b.w } : b;
+}
+
 /** Her body on the page: center, feet line, and rough size, for the screen effects. */
 function body(): { x: number; y: number; ground: number; size: number } {
   if (peek) {
@@ -173,7 +179,7 @@ function body(): { x: number; y: number; ground: number; size: number } {
     return { x: c.left + c.width / 2, y: c.top + c.height / 2, ground: c.bottom, size: c.width };
   }
   const r = stage.getBoundingClientRect();
-  const b = pet.bounds() ?? { x: 0, y: 0, w: r.width, h: r.height };
+  const b = petBounds() ?? { x: 0, y: 0, w: r.width, h: r.height };
   return { x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2, ground: r.top + b.y + b.h, size: Math.max(b.w, b.h) };
 }
 
@@ -264,7 +270,7 @@ async function possess(): Promise<void> {
   fx.possess(win, covers, () => cursor, POSSESS_MS);
   await sleep(POSSESS_MS);
   teleporting = false;
-  await teleport(pickSeat(wins, limits(), Math.random, { except: id }), { dive: true });
+  await teleport(pickSeat(wins, limits(), { except: id }), { dive: true });
 }
 
 /** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then,
@@ -279,7 +285,7 @@ async function wander(): Promise<void> {
     void startPeek();
     return;
   }
-  if (cfg.deambular) void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
+  if (cfg.deambular) void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), { except: perch?.id }) : null);
 }
 
 /** Puts her canvas half off a screen edge (or upside down from the top); null puts it back under the HUD. */
@@ -448,7 +454,7 @@ function setStatus(s: Status): void {
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
   if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
     // while she works, she sits on the window in front if she can
-    const seat = pickSeat(wins, limits(), Math.random, { frontOnly: true });
+    const seat = pickSeat(wins, limits(), { frontOnly: true });
     if (seat && seat.id !== perch?.id) void teleport(seat);
   }
   linkStatus = s;
@@ -710,7 +716,7 @@ void listen("camera", async () => {
   glitch.kick("change", performance.now());
   void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
 });
-void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
+void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
   wins = e.payload;
@@ -777,7 +783,7 @@ function headOnPage(): [number, number] {
     return [c.left + c.width / 2, c.top + c.height * 0.4];
   }
   const r = stage.getBoundingClientRect();
-  const b = style === "original" && pet.bounds();
+  const b = style === "original" && petBounds();
   if (b) return [r.left + b.x + b.w / 2, r.top + b.y + b.h * 0.3]; // her mask, under the mane
   const [hx, hy] = solve(director.last).headCenter;
   return [r.left + hx * SCALE, r.top + hy * SCALE];
@@ -973,6 +979,9 @@ pet.app.ticker.add((ticker) => {
     clipFrame = eyes || (gestureFrame(s.gesto, s.gestureT, base, name) ?? base);
   }
   pet.showClip(clipFrame, jaw);
+  // on a window's left corner the show's art sits mirrored, legs hanging out to the left
+  const mirror = !peek && style === "original" && perch?.side === "left" ? "scaleX(-1)" : "";
+  if (!peek && petCanvas.style.transform !== mirror) petCanvas.style.transform = mirror;
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
@@ -983,7 +992,7 @@ pet.app.ticker.add((ticker) => {
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   if (!mask.canvas.hidden) boxes.push(mask.box());
   if (!hideMask.canvas.hidden) boxes.push(hideMask.box());
-  const b = teleporting || doze.asleep || camera || peek || hiding ? null : pet.bounds(); // while she's gone, nothing to click
+  const b = teleporting || doze.asleep || camera || peek || hiding ? null : petBounds(); // while she's gone, nothing to click
   if (peek && !teleporting) {
     const c = petCanvas.getBoundingClientRect();
     boxes.push([c.left, c.top, c.width, c.height]);

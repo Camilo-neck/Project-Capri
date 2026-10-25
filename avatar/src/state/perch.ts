@@ -1,5 +1,6 @@
-// Where Capri can sit: on the top edge of other windows (Rust watches them, see win_watch.rs).
-// Pure geometry, page px; window lists come front to back.
+// Where Capri can sit: on a top corner of other windows (Rust watches them, see win_watch.rs), her
+// legs hanging down outside it, never over what's in it. Pure geometry, page px; window lists come
+// front to back.
 
 export interface Win {
   id: number;
@@ -15,10 +16,12 @@ export interface Windows {
   wins: Win[]; // front to back
 }
 
-/** She sits on window `id`, `dx` px from its left edge. */
+export type Side = "left" | "right";
+
+/** She sits on a top corner of window `id` (on the left one she's mirrored, legs out to the left). */
 export interface Perch {
   id: number;
-  dx: number;
+  side: Side;
 }
 
 export type Point = { x: number; y: number };
@@ -32,16 +35,28 @@ export interface Limits {
 
 const HALF = 30; // half her width at the seat: that much of the ledge must be visible
 const MIN_W = 300;
+export const CORNER = 18; // px from the window's side to where she sits: her legs hang just past it
 
 /** A ledge she can use: not maximized, wide enough, room above it, and some of it on this screen. */
 export function canSit(win: Win, lim: Limits): boolean {
   return !win.max && win.w >= MIN_W && win.y >= lim.room && win.x + win.w - HALF * 2 > lim.margin && win.x + HALF * 2 < lim.width - lim.margin;
 }
 
-/** Her x on a window, kept on its ledge and on the screen. */
-function seatX(win: Win, dx: number, lim: Limits): number {
-  const x = win.x + Math.min(Math.max(dx, HALF * 2), win.w - HALF * 2);
-  return Math.min(Math.max(x, lim.margin), lim.width - lim.margin);
+const cornerX = (win: Win, side: Side) => (side === "right" ? win.x + win.w - CORNER : win.x + CORNER);
+
+/** Her x on a corner of a window, kept on the screen. */
+function seatX(win: Win, side: Side, lim: Limits): number {
+  return Math.min(Math.max(cornerX(win, side), lim.margin), lim.width - lim.margin);
+}
+
+/** A corner of `win` to sit on, `prefer` first: on the screen (else clamped) and not under another window. */
+function seatOn(ws: Windows, win: Win, lim: Limits, prefer: Side): Perch | null {
+  const fits = (side: Side) => cornerX(win, side) >= lim.margin && cornerX(win, side) <= lim.width - lim.margin;
+  const other: Side = prefer === "right" ? "left" : "right";
+  let sides: Side[] = [prefer, other].filter(fits);
+  if (!sides.length) sides = [prefer]; // a narrow screen: kept on it
+  const side = sides.find((s) => !covered(ws, win, seatX(win, s, lim)));
+  return side ? { id: win.id, side } : null;
 }
 
 /** Is the ledge at x hidden under a window in front of `win`? */
@@ -57,31 +72,29 @@ export function covered(ws: Windows, win: Win, x: number): boolean {
 export function seatOf(ws: Windows, perch: Perch, lim: Limits): Point | null {
   const win = ws.wins.find((w) => w.id === perch.id);
   if (!win || !canSit(win, lim)) return null;
-  const x = seatX(win, perch.dx, lim);
+  const x = seatX(win, perch.side, lim);
   return covered(ws, win, x) ? null : { x, y: win.y };
 }
 
-/** Dropped (dragged and let go) with her feet at `p`: the ledge right there, if any. The top-most window wins. */
+/** Dropped (dragged and let go) with her feet at `p`: the ledge right there, if any, at its nearer corner.
+ * The top-most window wins. */
 export function ledgeAt(ws: Windows, p: Point, lim: Limits, tolerance = 30): Perch | null {
   for (const win of ws.wins) {
     if (Math.abs(p.y - win.y) > tolerance || p.x < win.x || p.x > win.x + win.w || !canSit(win, lim)) continue;
-    if (!covered(ws, win, p.x)) return { id: win.id, dx: Math.round(p.x - win.x) };
+    const seat = seatOn(ws, win, lim, p.x < win.x + win.w / 2 ? "left" : "right");
+    if (seat) return seat;
   }
   return null;
 }
 
-/** A free seat, the focused window first. `except`: a window to skip (the one she's on). */
-export function pickSeat(
-  ws: Windows,
-  lim: Limits,
-  rand: () => number = Math.random,
-  { frontOnly = false, except = -1 } = {},
-): Perch | null {
+/** A free seat, the focused window first. `except`: a window to skip (the one she's on). On her own she
+ * takes the left corner: on the right one she'd sit on the window's close button. */
+export function pickSeat(ws: Windows, lim: Limits, { frontOnly = false, except = -1 } = {}): Perch | null {
   const options: Perch[] = [];
   for (const win of ws.wins) {
     if (win.id === except || !canSit(win, lim)) continue;
-    const dx = Math.round(seatX(win, win.w * (0.2 + rand() * 0.6), lim) - win.x);
-    if (!covered(ws, win, win.x + dx)) options.push({ id: win.id, dx });
+    const seat = seatOn(ws, win, lim, "left");
+    if (seat) options.push(seat);
   }
   const front = options.find((p) => p.id === ws.fg);
   return frontOnly ? front ?? null : front ?? options[0] ?? null;

@@ -81,6 +81,16 @@ class Hotkey(BaseModel):
     name: str
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest
+class Action(BaseModel):
+    """A tool runs (after its confirmation, if it has effects): the avatar's lightning while it does."""
+
+    type: Literal["action"] = "action"
+    nombre: str
+    fase: Literal["inicio", "fin"]
+    ok: bool | None = None  # fin: did it work
+    ms: int | None = None  # fin: how long it took
+
+
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

@@ -92,6 +92,47 @@ interface Item {
   born: number;
   life: number;
   draw(g: CanvasRenderingContext2D, t: number): void; // t: 0..1 through its life
+  alive?: () => boolean; // ends early once this says no
+}
+
+type Pt = { x: number; y: number };
+
+/** A lightning path from a to b: `n` segments pushed sideways at random (the same for a given rand). */
+function jag(a: Pt, b: Pt, rand: () => number, n = 9, jitter = 0.12): [number, number][] {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const pts: [number, number][] = [[a.x, a.y]];
+  for (let i = 1; i < n; i++) {
+    const k = i / n, off = (rand() - 0.5) * 2 * Math.min(40, len * jitter);
+    pts.push([a.x + dx * k + nx * off, a.y + dy * k + ny * off]);
+  }
+  pts.push([b.x, b.y]);
+  return pts;
+}
+
+/** Her lightning: a violet copy offset behind, the red arc glowing, a white-hot core. */
+function arc(g: CanvasRenderingContext2D, pts: [number, number][], w: number): void {
+  g.lineJoin = "miter";
+  g.lineCap = "square";
+  for (const [color, width, dx, dy, glow] of [[VIOLET, w + 1, -3, 3, 0], [RED, w * 1.6, 0, 0, 14], [WHITE, Math.max(1, w * 0.45), 0, 0, 0]] as const) {
+    g.strokeStyle = color;
+    g.lineWidth = width;
+    g.shadowColor = RED;
+    g.shadowBlur = glow;
+    g.beginPath();
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x + dx, y + dy) : g.moveTo(x + dx, y + dy)));
+    g.stroke();
+  }
+  g.shadowBlur = 0;
+}
+
+export interface Still {
+  img: CanvasImageSource;
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
 }
 
 export class Fx {
@@ -112,8 +153,8 @@ export class Fx {
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  private add(life: number, draw: Item["draw"]): void {
-    this.items.push({ born: performance.now(), life, draw });
+  private add(life: number, draw: Item["draw"], alive?: () => boolean): void {
+    this.items.push({ born: performance.now(), life, draw, alive });
     if (!this.running) {
       this.running = true;
       requestAnimationFrame(this.frame);
@@ -125,7 +166,7 @@ export class Fx {
     g.clearRect(0, 0, innerWidth, innerHeight);
     this.items = this.items.filter((it) => {
       const t = (now - it.born) / it.life;
-      if (t >= 1) return false;
+      if (t >= 1 || (it.alive && !it.alive())) return false;
       it.draw(g, Math.max(0, t));
       return true;
     });
@@ -225,6 +266,155 @@ export class Fx {
         g.fillStyle = GREEN;
         g.fillRect(0, y + dy, innerWidth, PX);
       }
+      g.globalAlpha = 1;
+    });
+  }
+
+  /** Red sparks crawling over her (around `at`, radius r) while `alive` says so: short arcs, strobing. */
+  crackle(at: () => Pt & { r: number }, alive: () => boolean, life: number): void {
+    this.add(life, (g, t) => {
+      const ms = t * life;
+      const step = Math.floor(ms / 70);
+      if (step % 4 === 3) return; // strobes
+      const rand = mulberry(step * 31 + 5);
+      const c = at();
+      for (let i = 0; i < 5; i++) {
+        const a = rand() * Math.PI * 2;
+        const from = { x: c.x + Math.cos(a) * c.r * 0.35, y: c.y + Math.sin(a) * c.r * 0.6 };
+        const to = { x: c.x + Math.cos(a) * c.r * (0.7 + rand() * 0.5), y: c.y + Math.sin(a) * c.r * (0.9 + rand() * 0.6) };
+        arc(g, jag(from, to, rand, 5, 0.3), 2.2);
+      }
+    }, alive);
+  }
+
+  /** A bolt leaping from one spot to another, forking, redrawn on twos; it fades in two steps. */
+  bolt(from: () => Pt, to: () => Pt, life = 420): void {
+    this.add(life, (g, t) => {
+      const step = Math.floor((t * life) / 80);
+      if (step % 3 === 2) return;
+      const rand = mulberry(step * 17 + 3);
+      const a = from(), b = to();
+      g.globalAlpha = t < 0.7 ? 1 : 0.5;
+      const pts = jag(a, b, rand, Math.min(26, Math.max(8, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 45))));
+      arc(g, pts, 4);
+      for (let f = 0; f < 3; f++) {
+        const [fx, fy] = pts[1 + Math.floor(rand() * (pts.length - 2))];
+        const ang = Math.atan2(b.y - a.y, b.x - a.x) + (rand() - 0.5) * 2.2;
+        const l = 25 + rand() * 45;
+        arc(g, jag({ x: fx, y: fy }, { x: fx + Math.cos(ang) * l, y: fy + Math.sin(ang) * l }, rand, 4, 0.3), 1.8);
+      }
+      g.globalAlpha = 1;
+    });
+  }
+
+  /** The current running round a window's frame: a bright head with a crackling tail, two laps. */
+  surge(r: Rect, life = 1100): void {
+    const per = 2 * (r.w + r.h);
+    const along = (d: number): Pt => {
+      d = ((d % per) + per) % per;
+      if (d < r.w) return { x: r.x + d, y: r.y };
+      if (d < r.w + r.h) return { x: r.x + r.w, y: r.y + d - r.w };
+      if (d < 2 * r.w + r.h) return { x: r.x + r.w - (d - r.w - r.h), y: r.y + r.h };
+      return { x: r.x, y: r.y + r.h - (d - 2 * r.w - r.h) };
+    };
+    this.add(life, (g, t) => {
+      const step = Math.floor((t * life) / 60);
+      const rand = mulberry(step * 13 + 1);
+      const head = t * per * 2;
+      const tail = per * 0.22;
+      for (let k = 0; k < 2; k++) {
+        // two runners, half a lap apart
+        const h = head + (k * per) / 2;
+        const pts: [number, number][] = [];
+        for (let d = h - tail; d <= h; d += tail / 14) {
+          const p = along(d);
+          pts.push([p.x + (rand() - 0.5) * 16, p.y + (rand() - 0.5) * 16]);
+        }
+        arc(g, pts, 3);
+        const tip = along(h); // sparks off the head
+        for (let i = 0; i < 2; i++) {
+          const ang = rand() * Math.PI * 2, l = 18 + rand() * 30;
+          arc(g, jag(tip, { x: tip.x + Math.cos(ang) * l, y: tip.y + Math.sin(ang) * l }, rand, 4, 0.3), 1.6);
+        }
+      }
+    });
+  }
+
+  /** Manga speed lines rushing out from (x, y), and a shockwave ring. */
+  rush(x: number, y: number, life = 650): void {
+    const rand = mulberry(Math.round(x * 3 + y));
+    const lines = Array.from({ length: 26 }, () => ({ a: rand() * Math.PI * 2, w: 2 + rand() * 5, r0: 70 + rand() * 60, len: 90 + rand() * 170 }));
+    this.add(life, (g, t) => {
+      g.globalAlpha = t < 0.6 ? 0.85 : 0.4;
+      for (const [i, l] of lines.entries()) {
+        const r0 = l.r0 + t * 260;
+        g.strokeStyle = i % 5 === 0 ? RED : WHITE;
+        g.lineWidth = l.w * (1 - t * 0.6);
+        g.beginPath();
+        g.moveTo(x + Math.cos(l.a) * r0, y + Math.sin(l.a) * r0);
+        g.lineTo(x + Math.cos(l.a) * (r0 + l.len), y + Math.sin(l.a) * (r0 + l.len));
+        g.stroke();
+      }
+      const ring = 30 + t * 220;
+      g.globalAlpha = 1 - t;
+      g.strokeStyle = WHITE;
+      g.lineWidth = 6 * (1 - t) + 1;
+      g.beginPath();
+      g.ellipse(x, y, ring, ring * 0.8, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.globalAlpha = 1;
+    });
+  }
+
+  /** An anime cut-in: a slanted panel with a frame of her from the show slides in by (x, y) and holds. */
+  cutin(x: number, y: number, still: Still, dir: 1 | -1 = 1, life = 1000): void {
+    const w = 290, h = 160, skew = 34;
+    this.add(life, (g, t) => {
+      const slide = Math.min(1, t / 0.15);
+      const leave = Math.max(0, (t - 0.85) / 0.15);
+      const cx = x + dir * ((1 - slide) * -140 + leave * 140);
+      g.globalAlpha = 1 - leave;
+      const quad = (pad: number) => {
+        g.beginPath();
+        g.moveTo(cx - w / 2 + skew - pad, y - h / 2 - pad);
+        g.lineTo(cx + w / 2 + pad, y - h / 2 - pad);
+        g.lineTo(cx + w / 2 - skew + pad, y + h / 2 + pad);
+        g.lineTo(cx - w / 2 - pad, y + h / 2 + pad);
+        g.closePath();
+      };
+      g.fillStyle = VIOLET;
+      g.save();
+      g.translate(5, 5);
+      quad(4);
+      g.fill();
+      g.restore();
+      g.fillStyle = WHITE;
+      quad(4);
+      g.fill();
+      g.save();
+      quad(0);
+      g.clip();
+      const zoom = 1 + t * 0.08;
+      g.drawImage(still.img, still.sx, still.sy, still.sw, still.sh, cx - (w * zoom) / 2, y - (h * zoom) / 2, w * zoom, (w * zoom * still.sh) / still.sw);
+      g.restore();
+      g.globalAlpha = 1;
+    });
+  }
+
+  /** It failed: one red frame over everything, then a fading red ring around her. */
+  impact(x: number, y: number, life = 380): void {
+    this.add(life, (g, t) => {
+      if (t < 0.12) {
+        g.fillStyle = RED;
+        g.globalAlpha = 0.28;
+        g.fillRect(0, 0, innerWidth, innerHeight);
+      }
+      g.globalAlpha = 1 - t;
+      g.strokeStyle = RED;
+      g.lineWidth = 8 * (1 - t) + 1;
+      g.beginPath();
+      g.arc(x, y, 40 + t * 120, 0, Math.PI * 2);
+      g.stroke();
       g.globalAlpha = 1;
     });
   }

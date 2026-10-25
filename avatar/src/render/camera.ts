@@ -50,6 +50,12 @@ export class CameraView {
     })());
   }
 
+  /** One frame of a shot, for a cut-in (null until the shots have loaded). */
+  still(shot: ShotName, index = 0): { img: HTMLImageElement; sx: number; sy: number; sw: number; sh: number } | null {
+    const img = this.strips[shot];
+    return img ? { img, sx: Math.min(index, SHOTS[shot].frames - 1) * FEED_W, sy: 0, sw: FEED_W, sh: FEED_H } : null;
+  }
+
   draw({ frame, glitch: gl, seed, mask }: FeedLook): void {
     const g = this.g;
     g.globalAlpha = 1;

@@ -66,12 +66,16 @@ def test_effect_runs_only_after_a_yes_with_the_right_id(opened):
     generate, calls = scripted(say("Te abro la calculadora.", OPEN), say("Listo."))
     with connect(Orchestrator(generate)) as ws:
         ws.send_json({"type": "text_input", "text": "abre la calculadora"})
-        ask = until(ws, "confirm_request")[-1]
+        msgs = until(ws, "confirm_request")
+        ask = msgs[-1]
         assert ask["texto"] == "Abrir Calculadora" and opened == []  # nothing before the click
+        assert "action" not in {m["type"] for m in msgs}  # no lightning before it runs
         ws.send_json({"type": "confirm_response", "id": "made-up", "ok": True})  # wrong id: ignored
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
-        until_idle(ws)
+        acts = [m for m in until_idle(ws) if m["type"] == "action"]
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})  # repeated: ignored
+    assert [(a["nombre"], a["fase"], a["ok"]) for a in acts] == [("abrir_app", "inicio", None), ("abrir_app", "fin", True)]
+    assert acts[1]["ms"] >= 0
     assert opened == ["calc.exe"]
     assert "Abrí Calculadora" in results(calls)[0]
     audit = [json.loads(l) for l in (settings.path().parent / "audit.jsonl").read_text(encoding="utf-8").splitlines()]

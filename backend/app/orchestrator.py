@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from app import calendar_ics, presence, settings, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
 from app.memory import Memory, fold, words
-from app.protocol import ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
+from app.protocol import Action, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
 
 log = logging.getLogger(__name__)
@@ -184,13 +184,17 @@ class Orchestrator:
             tools.audit({"accion": accion.nombre, "args": args.model_dump(), "pregunta": what, "confirmado": ok})
             if not ok:
                 return "El usuario no lo autorizó. No se hizo nada."
+        await send(Action(nombre=accion.nombre, fase="inicio"))
+        start, ok = time.monotonic(), False
         try:
             result = await asyncio.to_thread(tool.run, args, settings.load())
+            ok = True
         except tools.ToolError as e:
             result = f"No se pudo: {e}"
         except Exception as e:  # a tool failing must not end the turn
             log.exception("tool %s failed", accion.nombre)
             result = f"Falló: {type(e).__name__}: {e}"
+        await send(Action(nombre=accion.nombre, fase="fin", ok=ok, ms=round((time.monotonic() - start) * 1000)))
         if tool.effect:
             tools.audit({"accion": accion.nombre, "resultado": tools.clip(result)})
         return result

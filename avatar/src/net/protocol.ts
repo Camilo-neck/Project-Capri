@@ -76,5 +76,14 @@ export interface Hotkey {
   name: string;
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest;
+/** A tool runs (after its confirmation, if it has effects): the avatar's lightning while it does. */
+export interface Action {
+  type: "action";
+  nombre: string;
+  fase: "inicio" | "fin";
+  ok: boolean | null; // at the end, did it work
+  ms: number | null; // at the end, how long it took
+}
+
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action;
 export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey;

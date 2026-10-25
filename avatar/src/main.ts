@@ -3,7 +3,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import type { ServerMessage } from "./net/protocol.ts";
+import type { Action, ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -17,6 +17,7 @@ import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
@@ -89,7 +90,7 @@ async function setCamera(on: boolean): Promise<void> {
   pet.app.stage.visible = !on;
 }
 await setCamera(settings.camara);
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -124,6 +125,7 @@ let at: Point = { x: 0, y: 0 }; // her feet, page px
 let activeAt = performance.now(); // last time you did something with her (talking counts through lastTalk)
 let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
 let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it rides along with her window)
+let acting: object | null = null; // a tool running: her sparks last while this is the same run
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
@@ -346,6 +348,9 @@ const link = connect(
         status.dataset.dnd = dnd ? "1" : "";
         setStatus(linkStatus);
         break;
+      case "action":
+        zap(msg);
+        break;
       case "remembered":
         txMem.hidden = false;
         txMem.title = msg.texto; // hover shows what she saved
@@ -357,6 +362,67 @@ const link = connect(
     setStatus(up ? "idle" : "down");
   },
 );
+
+/** Where a bolt goes: the middle of the screen, the tray corner, or the window in front (nearest point). */
+function boltTo(target: BoltTarget): Point {
+  const front = wins.wins.find((w) => w.id === wins.fg && !w.max);
+  if (target === "tray") return { x: innerWidth - 40, y: innerHeight - 20 };
+  if (target === "window" && front) {
+    const b = body();
+    return { x: Math.min(Math.max(b.x, front.x), front.x + front.w), y: Math.min(Math.max(b.y, front.y), front.y + front.h) };
+  }
+  return { x: innerWidth / 2, y: innerHeight / 2 };
+}
+
+/** Her lightning while a tool runs (David's arcs in the show), and how it ends. */
+function zap(a: Action): void {
+  if (reducedMotion.matches) return;
+  const now = performance.now();
+  const aura = () => {
+    const b = body();
+    return { x: b.x, y: b.y, r: b.size * 0.6 };
+  };
+  if (a.fase === "inicio") {
+    const z = zapStart(a.nombre);
+    if (!z) return;
+    wakeUp();
+    const run = {};
+    acting = run;
+    fx.crackle(aura, () => acting === run, AURA_MAX_MS);
+    glitch.kick("change", now);
+    if (z.bolt) {
+      const to = boltTo(z.bolt);
+      fx.bolt(() => body(), () => to);
+    }
+    const front = wins.wins.find((w) => w.id === wins.fg && !w.max);
+    if (z.frame && front) fx.surge(front);
+    return;
+  }
+  acting = null;
+  const end = zapEnd(a.nombre, a.ok, a.ms);
+  const b = body();
+  if (end === "fallo") {
+    glitch.kick("hurt", now);
+    fx.impact(b.x, b.y);
+  } else if (end === "chispa") {
+    fx.crackle(aura, () => true, 450);
+  } else if (end === "victoria") {
+    void victory();
+  }
+}
+
+/** Done with something big: speed lines and a shockwave, and an anime cut-in of her laughing or grinning. */
+async function victory(): Promise<void> {
+  const b = body();
+  glitch.kick("change", performance.now());
+  fx.rush(b.x, b.y);
+  await camView.load();
+  const still = camView.still(Math.random() < 0.5 ? "risa" : "sonrisa", 1);
+  if (!still) return;
+  const dir = b.x > innerWidth / 2 ? -1 : 1; // toward the middle of the screen
+  const x = Math.min(Math.max(b.x + dir * 190, 140), innerWidth - 140);
+  fx.cutin(x, Math.max(90, b.y - 140), still, dir);
+}
 
 /** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected. */
 function showChoices(id: string, what: string): void {

@@ -1,7 +1,7 @@
 """Spotify through its Web API, to play what the user asks for. An external call authorized by the
 user (accounts.spotify.com and api.spotify.com only). Uses the same Spotify app as the user's
-"telon" project: PKCE, so only a public Client ID, no secret. Playback needs Spotify Premium; without
-it Capri opens the song in the Spotify app instead.
+"telon" project: PKCE, so only a public Client ID, no secret. Playback goes through the Spotify app (opening
+the song starts it): the API only finds what to play and checks that it plays.
 
 Connecting: authorize() opens the browser on Spotify's consent page and listens once on the
 registered redirect (127.0.0.1) for the code, then keeps the tokens next to the user's config."""
@@ -135,6 +135,10 @@ def authorize(open_url: Callable[[str], None] = os.startfile) -> str:
 
 
 class Spotify:
+    """Finds with the Web API and plays by opening the item in the Spotify app. Starting playback through
+    the API is refused for this app ("Restriction violated", the app's owner needs Premium), so the API
+    only reads: what to play, and whether it's playing."""
+
     def __init__(self, http: httpx.Client | None = None, open_url: Callable[[str], None] = os.startfile,
                  sleep: Callable[[float], None] = time.sleep):
         self.http = http or httpx.Client(timeout=15)
@@ -167,41 +171,22 @@ class Spotify:
             raise SpotifyError(f"no encontré nada en Spotify para «{query}»")
         return items[0]
 
-    def device(self) -> str | None:
-        """The active device, else this PC's Spotify app (opened if needed)."""
-        for attempt in range(6):
-            r = self.call("GET", "/me/player/devices")
-            r.raise_for_status()
-            devices = r.json()["devices"]
-            pick = next((d for d in devices if d["is_active"]), None) or next(
-                (d for d in devices if d["type"] == "Computer"), None) or (devices[0] if devices else None)
-            if pick:
-                return pick["id"]
-            if attempt == 0:
-                self.open_url("spotify:")  # the desktop app shows up as a device once it's running
-            self.sleep(1.5)
-        return None
+    def playing(self) -> bool:
+        r = self.call("GET", "/me/player")
+        return r.status_code == 200 and bool(r.content) and bool(r.json().get("is_playing"))
 
     def play(self, query: str, kind: str = "cancion") -> str:
-        item = self.find(query, kind)
+        if kind == "artista":  # a song by them, the way "pon algo de Shakira" means it
+            item = self.find(f'artist:"{query}"', "cancion")
+            kind = "cancion"
+        else:
+            item = self.find(query, kind)
         name = item["name"] + (f" de {item['artists'][0]['name']}" if item.get("artists") else "")
-        body = {"uris": [item["uri"]]} if kind == "cancion" else {"context_uri": item["uri"]}
-        device = self.device()
-        r = self.call("PUT", "/me/player/play", params={"device_id": device} if device else None, json=body)
-        if r.status_code in (200, 202, 204):
-            # Spotify may accept the command and still not play (seen on free accounts): check it really does.
-            for _ in range(3):
-                self.sleep(1)
-                st = self.call("GET", "/me/player")
-                if st.status_code == 200 and st.json().get("is_playing"):
-                    return f"Sonando en Spotify: {name}."
-            self.open_url(item["uri"])
-            return f"Spotify no la empezó a sonar (sin Premium no deja); abrí {name} en la app para que le des play."
-        if r.status_code == 403:  # playback through the API is Premium only: open it in the app instead
-            self.open_url(item["uri"])
-            return f"Abrí {name} en Spotify (para que suene solo hace falta Premium; dale a play)."
-        if r.status_code == 404:
-            self.open_url(item["uri"])
-            return f"No encontré un Spotify activo; abrí {name} en la app."
-        r.raise_for_status()
-        return f"Sonando en Spotify: {name}."
+        self.open_url(item["uri"])  # starts a song by itself; a playlist or album waits for a play
+        if kind != "cancion":
+            return f"Abrí {name} en Spotify. Dale play ahí; desde aquí no puedo empezarla sola."
+        for _ in range(6):  # the app takes a moment to start
+            self.sleep(1)
+            if self.playing():
+                return f"Sonando en Spotify: {name}."
+        return f"Abrí {name} en Spotify; si no suena, dale play ahí."

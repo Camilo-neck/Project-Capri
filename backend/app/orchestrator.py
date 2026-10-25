@@ -2,15 +2,16 @@ import asyncio
 import logging
 import secrets
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
 from pydantic import ValidationError
 
-from app import calendar_ics, settings, tools, vision
+from app import calendar_ics, presence, settings, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
 from app.memory import Memory, fold, words
-from app.protocol import ConfirmRequest, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
+from app.protocol import ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
 
 log = logging.getLogger(__name__)
@@ -25,11 +26,15 @@ CONFIRM_S = 60  # an unanswered confirmation counts as "no"
 TRIM_AT = 5000  # context tokens (of 8192): past this, the older half of the conversation becomes a summary
 TRANSCRIPT_MAX = 12_000  # chars of a past session handed to the summarizer
 FORGET_CMD = "/olvida"
+DND_CMD = "/nomolestes"
+ACTIVE_S = 120  # no keyboard or mouse for longer than this: the user isn't at the PC
+HELD_MIN = 30  # back from a fullscreen app, reminders of events that started this recently still get said
 
 
 class Orchestrator:
     def __init__(self, generate: Generate = ollama_generate, capture: Capture = vision.capture,
-                 confirm_s: float = CONFIRM_S, memory: Memory | None = None, summarize: Summarize = ollama_summarize):
+                 confirm_s: float = CONFIRM_S, memory: Memory | None = None, summarize: Summarize = ollama_summarize,
+                 idle_s: Callable[[], float] = presence.idle_seconds, clock: Callable[[], datetime] = datetime.now):
         self.generate = generate
         self.capture = capture
         self.confirm_s = confirm_s
@@ -42,6 +47,13 @@ class Orchestrator:
         self.lock = asyncio.Lock()  # one turn at a time (user turns, looks and reminders)
         self.pending: dict[str, asyncio.Future[bool]] = {}  # confirmation id -> answer
         self.reminded: set = set()  # calendar events already brought up
+        self.idle_s = idle_s
+        self.clock = clock  # one clock for everything time-based (tests set it)
+        self.dnd = False  # do not disturb: she never speaks up on her own
+        self.away = False  # a fullscreen app is in front
+        self.back = False  # just back from one
+        self.last_user_at = clock()  # last time the user spoke to her
+        self.chatted: deque[datetime] = deque()  # times she spoke up unasked in the last hour
 
     def add(self, role: str, content: str) -> None:
         """To the history and to the stored conversation."""
@@ -79,9 +91,19 @@ class Orchestrator:
         else:
             await self.turn(question, send, image=image)
 
-    async def turn(self, text: str, send: Send, image: bytes | None = None) -> None:
-        if image is None and text.strip().lower().startswith(FORGET_CMD):
+    async def turn(self, text: str, send: Send, image: bytes | None = None, own: bool = False) -> None:
+        """A user message (or, with `own`, something she brings up herself: a reminder, a greeting)."""
+        if not own:
+            self.last_user_at = self.clock()
+        command = text.strip().lower()
+        if image is None and command.startswith(FORGET_CMD):
             await self.forget_command(text.strip()[len(FORGET_CMD):].strip(), send)
+            return
+        if image is None and command == DND_CMD:
+            await send(State(value="thinking"))
+            await self.toggle_dnd(send)
+            await self.speak("Vale, me quedo calladita: no hablo por mi cuenta hasta que vuelvas a escribir /nomolestes."
+                             if self.dnd else "¡De vuelta! Ya puedo avisarte y decirte cosas.", send)
             return
         # The history never keeps the image (~900 tokens): only a mark, and the reply describes it.
         self.add("user", f"[captura de pantalla] {text}" if image else text)
@@ -187,25 +209,65 @@ class Orchestrator:
         finally:
             self.pending.pop(id, None)
 
-    async def reminders(self, send: Send, every_s: float = 60, now: Callable[[], datetime] = datetime.now) -> None:
+    async def reminders(self, send: Send, every_s: float = 60) -> None:
         """Checks the calendar every minute and, `aviso_minutos` before an event, has Capri bring it up."""
         while True:
             s = settings.load()
-            if s.calendar_url:
+            if s.calendar_url and not self.away:  # behind a fullscreen app: wait, don't mark them as said
+                grace, self.back = (HELD_MIN if self.back else 0), False
                 try:
                     ics = await asyncio.to_thread(calendar_ics.fetch, s.calendar_url)
-                    t = now()
-                    evs = calendar_ics.events(ics, t, t + timedelta(minutes=s.remind_minutes + 1))
+                    t = self.clock()
+                    evs = calendar_ics.events(ics, t - timedelta(minutes=grace), t + timedelta(minutes=s.remind_minutes + 1))
                 except Exception as e:
                     log.warning("calendar check failed: %s", e)
                     evs = []
-                for e in calendar_ics.due(evs, now(), s.remind_minutes, self.reminded):
+                for e in calendar_ics.due(evs, self.clock(), s.remind_minutes, self.reminded, grace_min=grace):
+                    if self.dnd:
+                        continue  # do not disturb silences reminders too (marked, so they don't pile up)
                     where = f" en {e.place}" if e.place else ""
+                    when = "empezó" if e.start < self.clock() else "empieza"
                     async with self.lock:  # never on top of a turn in progress
                         await self.turn(
                             f"[aviso automático, no lo escribió el usuario] Avísale de que «{e.title}» "
-                            f"empieza a las {e.start:%H:%M}{where}.", send)
+                            f"{when} a las {e.start:%H:%M}{where}.", send, own=True)
             await asyncio.sleep(every_s)
+
+    async def chatter(self, send: Send, every_s: float = 60) -> None:
+        """Speaking up unasked: a greeting the first time she sees you each day, and a short line after
+        long stretches at the PC without talking to her. Never while away, in do-not-disturb or quiet
+        hours, never when you're not at the PC, and at most `max_por_hora` times an hour."""
+        while True:
+            await asyncio.sleep(every_s)
+            s, t = settings.load(), self.clock()
+            if not s.proactive or self.dnd or self.away or s.quiet_now(t) or self.idle_s() > ACTIVE_S:
+                continue
+            while self.chatted and t - self.chatted[0] > timedelta(hours=1):
+                self.chatted.popleft()
+            if len(self.chatted) >= s.proactive_per_hour:
+                continue
+            if self.memory.get("saludo") != t.date().isoformat():
+                self.memory.put("saludo", t.date().isoformat())
+                prompt = "Es la primera vez que le ves hoy: salúdale según la hora del día, en una frase."
+            elif t - max(self.last_user_at, self.chatted[-1] if self.chatted else self.last_user_at) > timedelta(hours=s.idle_hours):
+                prompt = "Lleva un buen rato en el PC sin hablarte: dile algo corto y ligero, sin interrumpirle mucho."
+            else:
+                continue
+            self.chatted.append(t)
+            async with self.lock:
+                await self.turn(f"[aviso automático, no lo escribió el usuario] {prompt}", send, own=True)
+
+    # ---- modes ----
+
+    async def toggle_dnd(self, send: Send) -> None:
+        self.dnd = not self.dnd
+        await send(Mode(no_molestar=self.dnd))
+
+    def set_away(self, fullscreen: bool) -> None:
+        """A fullscreen app came or went. Back from it, reminders that came due meanwhile still get said."""
+        if self.away and not fullscreen:
+            self.back = True
+        self.away = fullscreen
 
     # ---- memory ----
 

@@ -6,9 +6,10 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewWindow};
+mod user_config;
 mod win_watch;
 
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[derive(Clone, Serialize)]
 struct Config {
@@ -40,8 +41,8 @@ fn set_hitboxes(boxes: Vec<[f64; 4]>, mouse: tauri::State<Mouse>) {
 
 /// The overlay: the primary monitor's work area plus BELOW_GROUND over the taskbar. Not the whole
 /// monitor, or Windows would take it for a fullscreen app and push the taskbar behind it.
-/// ponytail: fitted once at start; refit on display changes if that turns out to matter.
-fn fit(w: &WebviewWindow) -> tauri::Result<()> {
+/// Fitted at start and again when the screen or the taskbar changes (win_watch::watch).
+pub(crate) fn fit(w: &WebviewWindow) -> tauri::Result<()> {
     let Some(m) = w.primary_monitor()? else { return Ok(()) };
     let scale = m.scale_factor();
     let area = m.work_area();
@@ -89,7 +90,8 @@ fn start_backend() -> (String, Option<Child>) {
     if let Ok(url) = std::env::var("CAPRI_WS_URL") {
         return (url, None);
     }
-    // ponytail: dev layout path; packaging the backend is phase 8.
+    // ponytail: the backend runs from this checkout (its .venv), even in the release build; bundling
+    // Python (PyInstaller) only matters to install Capri on another PC.
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../backend");
     // The venv python.exe is a launcher that spawns the real interpreter, so killing it is not enough:
     // the backend exits on its own when the stdin pipe we hold closes (normal exit or crash).
@@ -117,9 +119,24 @@ fn start_backend() -> (String, Option<Child>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let (ws_url, child) = start_backend();
-    let open_input = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
-    let teleport = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT);
-    let look = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SHIFT), Code::KeyM);
+    // Global shortcuts from config.toml [atajos], each emitting an event to the frontend.
+    let keys = user_config::load().atajos;
+    let shortcuts: Vec<(Shortcut, &'static str)> = [
+        (keys.escribir, "open-input"),
+        (keys.teletransporte, "teleport"),
+        (keys.mirar, "look"),
+        (keys.no_molestar, "dnd"),
+    ]
+    .into_iter()
+    .filter_map(|(text, event)| match text.parse::<Shortcut>() {
+        Ok(s) => Some((s, event)),
+        Err(e) => {
+            eprintln!("shortcut {text:?} for {event} not understood: {e}");
+            None
+        }
+    })
+    .collect();
+    let registered = shortcuts.clone();
 
     let app = tauri::Builder::default()
         .manage(Config { ws_url })
@@ -131,7 +148,8 @@ pub fn run() {
             set_hitboxes,
             win_watch::windows,
             win_watch::look_target,
-            win_watch::capture_guard
+            win_watch::capture_guard,
+            user_config::avatar_settings
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -139,27 +157,22 @@ pub fn run() {
                     if event.state() != ShortcutState::Pressed {
                         return;
                     }
-                    if shortcut == &teleport {
-                        let _ = app.emit("teleport", ());
-                    }
-                    if shortcut == &look {
-                        let _ = app.emit("look", ());
-                    }
-                    if shortcut == &open_input {
+                    let Some(&(_, name)) = shortcuts.iter().find(|(s, _)| s == shortcut) else { return };
+                    if name == "open-input" {
                         // Keyboard focus only: the bar becomes clickable once the frontend reports its box.
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.set_focus();
                         }
-                        let _ = app.emit("open-input", ());
                     }
+                    let _ = app.emit(name, ());
                 })
                 .build(),
         )
         .setup(move |app| {
             // Another app may own a shortcut already: losing one is no reason not to start.
-            for shortcut in [open_input, teleport, look] {
+            for (shortcut, name) in registered {
                 if let Err(e) = app.global_shortcut().register(shortcut) {
-                    eprintln!("shortcut {shortcut:?} not available: {e}");
+                    eprintln!("shortcut for {name} not available (another app has it?): {e}");
                 }
             }
             fit(&app.get_webview_window("main").unwrap())?;

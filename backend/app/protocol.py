@@ -36,6 +36,13 @@ class Remembered(BaseModel):
     texto: str
 
 
+class Mode(BaseModel):
+    """Do-not-disturb state, so the avatar can show it."""
+
+    type: Literal["mode"] = "mode"
+    no_molestar: bool
+
+
 class ConfirmRequest(BaseModel):
     type: Literal["confirm_request"] = "confirm_request"
     id: str
@@ -62,11 +69,18 @@ class ConfirmResponse(BaseModel):
     ok: bool
 
 
+class Presence(BaseModel):
+    """A fullscreen app (game, video) is in front: Capri is hidden and keeps quiet until it goes."""
+
+    type: Literal["presence"] = "presence"
+    fullscreen: bool
+
+
 class Hotkey(BaseModel):
     type: Literal["hotkey"] = "hotkey"
     name: str
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | ConfirmRequest
-ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Hotkey, Field(discriminator="type")]
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest
+ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

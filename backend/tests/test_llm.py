@@ -5,7 +5,7 @@ import random
 from app.llm.client import SCHEMA, build_messages, reply, stream_reply
 from app.schema import FALLBACK_TEXT, Reply
 
-TEXTO = 'Hola, ¿qué tal? Dijo "mañana" \\ y luego… 😺\nFin'
+TEXTO = 'Hola, ¿qué tal? Dijo "mañana" \\ y luego… 20 € y 中文\nFin'  # multibyte, but no emoji (those get stripped)
 VALID = json.dumps({"emocion": "traviesa", "gesto": "guino", "accion": None, "texto": TEXTO})
 
 
@@ -71,3 +71,10 @@ def test_variable_context_goes_last():
     msgs = build_messages(history)
     assert msgs[0]["role"] == "system" and msgs[1:-1] == history
     assert msgs[-1]["content"].startswith("Contexto actual:")
+
+
+def test_emoji_never_reach_the_subtitle():
+    raw = json.dumps({"emocion": "feliz", "gesto": "ninguno", "accion": None, "texto": "¡Claro! 😄 Te ayudo 👍🏽"})
+    events = collect(reply([], generate=lambda m: chunked(raw, [2] * 80)))
+    shown = "".join(e[1] for e in events if e[0] == "delta")
+    assert shown == "¡Claro!  Te ayudo " and events[-1][1].texto == shown

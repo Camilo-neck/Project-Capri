@@ -61,6 +61,15 @@ export function seatOf(ws: Windows, perch: Perch, lim: Limits): Point | null {
   return covered(ws, win, x) ? null : { x, y: win.y };
 }
 
+/** Dropped (dragged and let go) with her feet at `p`: the ledge right there, if any. The top-most window wins. */
+export function ledgeAt(ws: Windows, p: Point, lim: Limits, tolerance = 30): Perch | null {
+  for (const win of ws.wins) {
+    if (Math.abs(p.y - win.y) > tolerance || p.x < win.x || p.x > win.x + win.w || !canSit(win, lim)) continue;
+    if (!covered(ws, win, p.x)) return { id: win.id, dx: Math.round(p.x - win.x) };
+  }
+  return null;
+}
+
 /** A free seat, the focused window first. `except`: a window to skip (the one she's on). */
 export function pickSeat(
   ws: Windows,

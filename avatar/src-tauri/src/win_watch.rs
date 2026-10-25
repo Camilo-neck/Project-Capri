@@ -47,14 +47,8 @@ pub fn windows(latest: tauri::State<Latest>) -> Option<Windows> {
 #[tauri::command]
 pub fn look_target(latest: tauri::State<Latest>) -> [i32; 4] {
     let fg = latest.0.lock().unwrap().as_ref().map_or(0, |w| w.fg);
-    unsafe {
-        let monitor = MonitorFromWindow(fg as HWND, MONITOR_DEFAULTTOPRIMARY);
-        let mut info: MONITORINFO = std::mem::zeroed();
-        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-        GetMonitorInfoW(monitor, &mut info);
-        let r = info.rcMonitor;
-        [r.left, r.top, r.right, r.bottom]
-    }
+    let r = monitor_rect(fg as HWND);
+    [r.left, r.top, r.right, r.bottom]
 }
 
 /// Keeps the overlay (Capri and her HUD) out of screen captures while she looks, so she
@@ -113,13 +107,56 @@ unsafe extern "system" fn collect(hwnd: HWND, out: LPARAM) -> BOOL {
     1
 }
 
-/// ~10 Hz (smooth enough to ride a dragged window): emits "windows" whenever the visible windows change.
+/// The whole monitor a window is on (the primary one for no window), physical px.
+fn monitor_rect(hwnd: HWND) -> RECT {
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(monitor, &mut info);
+        info.rcMonitor
+    }
+}
+
+/// Is the focused window covering its whole monitor (a game, a video)? Then Capri gets out of the way.
+fn fullscreen_app(fg: HWND, own: isize) -> bool {
+    if fg.is_null() || fg as isize == own || SHELL_CLASSES.contains(&class_name(fg).as_str()) {
+        return false;
+    }
+    let mut r: RECT = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<RECT>() as u32;
+    if unsafe { DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS as u32, &mut r as *mut _ as *mut _, size) } != 0 {
+        return false;
+    }
+    let m = monitor_rect(fg);
+    r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
+}
+
+/// ~10 Hz (smooth enough to ride a dragged window): emits "windows" whenever the visible windows
+/// change, "fullscreen" when a fullscreen app comes and goes, and refits the overlay when the
+/// screen or the taskbar changes.
 pub fn watch(app: tauri::AppHandle) {
     let mut last: Option<Windows> = None;
-    loop {
+    let mut last_fullscreen = false;
+    let mut last_area = None;
+    for tick in 0u64.. {
         std::thread::sleep(Duration::from_millis(100));
         let Some(w) = app.get_webview_window("main") else { continue };
+        if tick % 20 == 0 {
+            let area = w.primary_monitor().ok().flatten().map(|m| (m.work_area().position, m.work_area().size, *m.size()));
+            if area.is_some() && area != last_area {
+                if last_area.is_some() {
+                    let _ = crate::fit(&w);
+                }
+                last_area = area;
+            }
+        }
         let (Ok(own), Ok(pos), Ok(scale)) = (w.hwnd(), w.outer_position(), w.scale_factor()) else { continue };
+        let full = fullscreen_app(unsafe { GetForegroundWindow() }, own.0 as isize);
+        if full != last_fullscreen {
+            last_fullscreen = full;
+            let _ = app.emit("fullscreen", full);
+        }
         let mut found: Vec<(HWND, RECT, bool)> = Vec::new();
         unsafe { EnumWindows(Some(collect), &mut found as *mut _ as LPARAM) };
         let wins = found

@@ -9,6 +9,7 @@ Events yielded by `reply`:
 """
 
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
@@ -92,6 +93,15 @@ def build_messages(
     return [{"role": "system", "content": SYSTEM_PROMPT}, *turns, {"role": "system", "content": context}]
 
 
+# Emoji and pictographs (the prompt forbids them, the 8B model slips now and then; the text is
+# shown as a subtitle and will be read aloud), plus the joiners and variation selectors they use.
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF‍️]")
+
+
+def no_emoji(text: str) -> str:
+    return EMOJI.sub("", text)
+
+
 async def stream_reply(chunks: AsyncIterator[str | int]) -> AsyncIterator[tuple]:
     """Yield start/delta events from raw JSON chunks; the last event is ("raw", full_json)."""
     buf, sent, started = "", 0, False
@@ -112,6 +122,8 @@ async def stream_reply(chunks: AsyncIterator[str | int]) -> AsyncIterator[tuple]
             started = True
             yield ("start", partial.get("emocion"), partial.get("gesto"))
         text = partial["texto"]
+        if isinstance(text, str):
+            text = no_emoji(text)  # stripping is prefix-stable, so deltas stay consistent
         if isinstance(text, str) and len(text) > sent:
             yield ("delta", text[sent:])
             sent = len(text)
@@ -139,7 +151,8 @@ async def reply(
             yield event
         log.info("total: %.0f ms", (time.perf_counter() - t0) * 1000)
         try:
-            yield ("end", Reply.model_validate_json(raw))
+            r = Reply.model_validate_json(raw)
+            yield ("end", r.model_copy(update={"texto": no_emoji(r.texto)}))
             return
         except ValidationError as e:
             log.warning("invalid reply (attempt %d): %s | raw=%r", attempt + 1, e, raw[:500])

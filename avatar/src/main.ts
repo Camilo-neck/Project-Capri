@@ -12,7 +12,7 @@ import { Fx, type Rect } from "./render/fx.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
-import { pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
@@ -24,9 +24,7 @@ const BELOW = (H - GROUND) * SCALE; // HUD px under her feet: her legs dangle ov
 const EDGE = 16; // px kept free at the screen sides
 const GRAVITY = 0.0028; // px/ms², falling off a ledge
 const POSSESS_MS = 2000;
-// Possessing windows can be turned off with localStorage "capri.possess" = "0".
-// ponytail: localStorage until phase 8 brings a settings file.
-const possessAllowed = () => localStorage.getItem("capri.possess") !== "0";
+const DROP_TOLERANCE = 30; // px: let go this close to a window's top edge and she sits on it
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const hud = document.querySelector<HTMLElement>(".hud")!;
@@ -56,7 +54,8 @@ const cfg = await invoke<{ ws_url: string }>("config");
 const avatar = new AvatarState(performance.now());
 const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
-const fx = new Fx($<HTMLCanvasElement>("fx"));
+const fxCanvas = $<HTMLCanvasElement>("fx");
+const fx = new Fx(fxCanvas);
 const director = new Director();
 const clips = new ClipPlayer();
 const glitch = new GlitchFx(performance.now());
@@ -85,6 +84,10 @@ const latencies: number[] = [];
 let teleporting = false;
 let possessing: { since: number } | null = null; // the "peligro" eyes, before she dives in
 let falling: { vy: number } | null = null;
+let press: { x: number; y: number; dx: number; dy: number } | null = null; // pointer down on her
+let dragging = false;
+let dnd = false; // do not disturb (the backend owns it; this mirrors it for the status bar)
+let fullscreen = false; // a fullscreen app is in front: hidden and not rendering
 let nextWander = performance.now() + wanderGap();
 let wins: Windows = { fg: 0, wins: [] };
 let perch: Perch | null = null; // the window she sits on; null = the taskbar
@@ -95,7 +98,7 @@ function wanderGap(): number {
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling;
+const busy = () => teleporting || !!possessing || !!falling || dragging;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -191,13 +194,15 @@ async function possess(): Promise<void> {
   await teleport(pickSeat(wins, limits(), Math.random, { except: id }), { dive: true });
 }
 
-/** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then. */
-function wander(): void {
-  if (perch && possessAllowed() && Math.random() < 0.3) {
+/** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then,
+ * as far as config.toml [avatar] allows (read each time, so edits apply without a restart). */
+async function wander(): Promise<void> {
+  const cfg = await invoke<{ deambular: boolean; poseer_ventanas: boolean }>("avatar_settings");
+  if (perch && cfg.poseer_ventanas && Math.random() < 0.3) {
     void possess();
     return;
   }
-  void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
+  if (cfg.deambular) void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
 }
 
 function setStatus(s: Status): void {
@@ -213,7 +218,7 @@ function setStatus(s: Status): void {
   }
   linkStatus = s;
   status.dataset.state = s;
-  statusLabel.textContent = STATUS[s];
+  statusLabel.textContent = s === "idle" && dnd ? "NO MOLESTAR" : STATUS[s];
 }
 
 function updateMeta(): void {
@@ -259,6 +264,11 @@ const link = connect(
         break;
       case "confirm_request":
         showChoices(msg.id, msg.texto);
+        break;
+      case "mode":
+        dnd = msg.no_molestar;
+        status.dataset.dnd = dnd ? "1" : "";
+        setStatus(linkStatus);
         break;
       case "remembered":
         txMem.hidden = false;
@@ -357,6 +367,21 @@ async function look(question: string): Promise<void> {
 
 void listen("open-input", () => setInputOpen(true));
 void listen("look", () => void look(""));
+void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
+// A game or video fullscreen in front: hide, stop rendering (no GPU while you play), keep quiet.
+void listen<boolean>("fullscreen", (e) => {
+  if (e.payload === fullscreen) return;
+  fullscreen = e.payload;
+  hud.style.visibility = fxCanvas.style.visibility = fullscreen ? "hidden" : "";
+  if (fullscreen) {
+    pet.app.ticker.stop();
+    lastHitbox = "";
+    void invoke("set_hitboxes", { boxes: [] }); // nothing of hers to click while hidden
+  } else {
+    pet.app.ticker.start();
+  }
+  link.send({ type: "presence", fullscreen });
+});
 void listen("teleport", () => void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
@@ -398,13 +423,54 @@ function headOnPage(): [number, number] {
   return [r.left + hx * SCALE, r.top + hy * SCALE];
 }
 
-// Poke: click on her. Pet: rub the mouse back and forth over her head.
+// Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
+// edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || busy()) return;
+  press = { x: e.clientX, y: e.clientY, dx: at.x - e.clientX, dy: at.y - e.clientY };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointerup", () => {
+  if (!press) return;
+  const dragged = dragging;
+  press = null;
+  dragging = false;
+  if (dragged) {
+    drop();
+    return;
+  }
   pokeAt = performance.now();
   if (!teleporting) glitch.kick("poke", pokeAt);
 });
+
+/** Let go after a drag: onto the ledge under her feet, if any; otherwise she falls to the taskbar. */
+function drop(): void {
+  const seat = ledgeAt(wins, at, limits(), DROP_TOLERANCE);
+  const there = seat && seatOf(wins, seat, limits());
+  if (seat && there) {
+    perch = seat;
+    at = there;
+    placeHud();
+    glitch.kick("change", performance.now());
+  } else if (at.y < floor()) {
+    fall();
+  }
+}
+
 stage.addEventListener("pointermove", (e) => {
+  if (press) {
+    if (!dragging && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 6) {
+      dragging = true;
+      perch = null;
+      glitch.kick("change", performance.now());
+    }
+    if (dragging) {
+      const half = hud.offsetWidth / 2 + EDGE;
+      at = { x: Math.min(Math.max(e.clientX + press.dx, half), innerWidth - half), y: Math.min(e.clientY + press.dy, floor()) };
+      placeHud();
+    }
+    return;
+  }
   const [hx, hy] = headOnPage();
   if (Math.abs(e.clientY - hy) > 30 || Math.abs(e.clientX - hx) > 40) return;
   petEnergy += Math.abs(e.movementX);
@@ -457,7 +523,7 @@ pet.app.ticker.add((ticker) => {
   }
   if (now > nextWander) {
     nextWander = now + wanderGap();
-    if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) wander();
+    if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) void wander();
   }
 
   const frame = Math.floor(now / POSE_MS);
@@ -486,7 +552,7 @@ pet.app.ticker.add((ticker) => {
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
 
-  const boxes: number[][] = [];
+  const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   const b = teleporting ? null : pet.bounds(); // while she's gone, nothing to click
   if (b) {
     const r = stage.getBoundingClientRect();

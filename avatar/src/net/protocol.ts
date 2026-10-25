@@ -34,6 +34,12 @@ export interface Remembered {
   texto: string;
 }
 
+/** Do-not-disturb state, so the avatar can show it. */
+export interface Mode {
+  type: "mode";
+  no_molestar: boolean;
+}
+
 export interface ConfirmRequest {
   type: "confirm_request";
   id: string;
@@ -59,10 +65,16 @@ export interface ConfirmResponse {
   ok: boolean;
 }
 
+/** A fullscreen app (game, video) is in front: Capri is hidden and keeps quiet until it goes. */
+export interface Presence {
+  type: "presence";
+  fullscreen: boolean;
+}
+
 export interface Hotkey {
   type: "hotkey";
   name: string;
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | ConfirmRequest;
-export type ClientMessage = TextInput | Look | ConfirmResponse | Hotkey;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey;

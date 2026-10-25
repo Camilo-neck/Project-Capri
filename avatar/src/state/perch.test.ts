@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { canSit, covered, pickSeat, seatOf, type Win, type Windows } from "./perch.ts";
+import { canSit, covered, ledgeAt, pickSeat, seatOf, type Win, type Windows } from "./perch.ts";
 
 const ROOM = { room: 500, width: 2560, margin: 180 };
 const win = (id: number, x: number, y: number, w = 800, h = 400, max = false): Win => ({ id, x, y, w, h, max });
@@ -40,4 +40,14 @@ test("seats prefer the focused window, skip the current one, and can insist on t
   assert.equal(pickSeat(ws, ROOM, () => 0.5, { except: 2 })?.id, 1);
   assert.equal(pickSeat({ fg: 9, wins: ws.wins }, ROOM, () => 0.5, { frontOnly: true }), null);
   assert.equal(pickSeat({ fg: 1, wins: [] }, ROOM), null);
+});
+
+test("letting her go right on a ledge seats her there; elsewhere, nothing", () => {
+  const ws: Windows = { fg: 1, wins: [win(1, 1000, 650, 600, 300), win(2, 200, 700)] };
+  assert.deepEqual(ledgeAt(ws, { x: 1100, y: 640 }, ROOM), { id: 1, dx: 100 }); // 10 px above its top edge
+  assert.deepEqual(ledgeAt(ws, { x: 400, y: 715 }, ROOM), { id: 2, dx: 200 });
+  assert.equal(ledgeAt(ws, { x: 1100, y: 900 }, ROOM), null); // in the middle of the window
+  assert.equal(ledgeAt(ws, { x: 1700, y: 650 }, ROOM), null); // past its right end
+  const front: Windows = { fg: 1, wins: [win(1, 100, 600, 800, 400), win(2, 200, 610)] };
+  assert.equal(ledgeAt(front, { x: 400, y: 612 }, ROOM)?.id, 1); // two ledges close: the front one
 });

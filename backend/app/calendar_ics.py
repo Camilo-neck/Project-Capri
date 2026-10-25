@@ -59,12 +59,14 @@ def events(ics: bytes, start: datetime, end: datetime) -> list[Event]:
     return sorted(out, key=lambda e: e.start)
 
 
-def due(evs: list[Event], now: datetime, lead_min: int, notified: set) -> list[Event]:
-    """Timed events starting within the next `lead_min` minutes not reminded yet (marks them)."""
+def due(evs: list[Event], now: datetime, lead_min: int, notified: set, grace_min: int = 0) -> list[Event]:
+    """Timed events starting within the next `lead_min` minutes (or, with `grace_min`, that started
+    that recently) not reminded yet. Marks them."""
     out = []
     for e in evs:
         key = (e.title, e.start)
-        if not e.all_day and now <= e.start <= now + timedelta(minutes=lead_min) and key not in notified:
+        early, late = now - timedelta(minutes=grace_min), now + timedelta(minutes=lead_min)
+        if not e.all_day and early <= e.start <= late and key not in notified:
             notified.add(key)
             out.append(e)
     return out

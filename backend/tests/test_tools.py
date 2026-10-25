@@ -235,14 +235,14 @@ def test_reminder_loop_has_capri_bring_up_the_event(monkeypatch):
     settings.save_calendar_url("https://calendar.google.com/calendar/ical/x/private-y/basic.ics")
     monkeypatch.setattr(calendar_ics, "fetch", lambda url: ICS)
     generate, calls = scripted(say("¡Ojo, en 9 minutos tienes dentista!"))
-    orch = Orchestrator(generate)
+    orch = Orchestrator(generate, clock=lambda: datetime(2026, 10, 27, 16, 21))
     sent = []
 
     async def send(msg):
         sent.append(msg)
 
     async def run():
-        task = asyncio.create_task(orch.reminders(send, every_s=0.01, now=lambda: datetime(2026, 10, 27, 16, 21)))
+        task = asyncio.create_task(orch.reminders(send, every_s=0.01))
         await asyncio.sleep(0.2)
         task.cancel()
 

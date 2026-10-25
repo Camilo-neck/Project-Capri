@@ -29,6 +29,7 @@ create trigger if not exists recuerdos_ad after delete on recuerdos begin
   insert into recuerdos_fts(recuerdos_fts, rowid, texto) values ('delete', old.id, old.texto);
 end;
 create table if not exists sesiones (id integer primary key, inicio text not null, resumen text);
+create table if not exists estado (clave text primary key, valor text not null);
 create table if not exists mensajes (
   id integer primary key,
   sesion integer not null references sesiones(id) on delete cascade,
@@ -137,6 +138,16 @@ class Memory:
             else:
                 self.set_summary(sid, "")  # nothing to summarize
         return out
+
+    # ---- small state that must survive a restart (e.g. the day she last greeted) ----
+
+    def get(self, key: str) -> str | None:
+        row = self.db.execute("select valor from estado where clave = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def put(self, key: str, value: str) -> None:
+        with self.db:
+            self.db.execute("insert or replace into estado (clave, valor) values (?, ?)", (key, value))
 
     # ---- what goes into the prompt ----
 

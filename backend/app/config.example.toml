@@ -20,3 +20,24 @@ buscar = ["~/Documents"]
 url = ""
 # Cuántos minutos antes de cada evento te avisa.
 aviso_minutos = 10
+
+# Lo que Capri hace sola en el escritorio. Se aplica la próxima vez que le toque moverse.
+[avatar]
+deambular = true        # se teletransporta de vez en cuando a otro sitio de la barra o a una ventana
+poseer_ventanas = true  # a veces se mete en la ventana donde está sentada (solo dibuja encima)
+
+# Cuándo habla sin que le escribas: saludo del día y algún comentario si lleva rato sin hablaros.
+# Los avisos del calendario no cuentan para el máximo, pero el modo no molestar los calla también.
+[proactividad]
+activa = true
+max_por_hora = 2
+inactividad_horas = 2
+silencio = "23:00-08:00"  # horas en las que no habla por iniciativa propia ("" = nunca)
+
+# Atajos globales. Si alguno choca con otra app, cámbialo aquí y reinicia Capri.
+# Formato: modificadores (Ctrl, Alt, Shift, Super) y una tecla, separados por "+".
+[atajos]
+escribir = "Ctrl+Alt+Space"
+teletransporte = "Ctrl+Alt+T"
+mirar = "Ctrl+Alt+Shift+M"
+no_molestar = "Ctrl+Alt+Shift+D"

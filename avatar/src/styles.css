@@ -244,9 +244,17 @@ body {
 }
 
 /* Quiet by default: the status bar only shows while the input is open. */
-/* ...except while she captures the screen: that indicator always shows. */
-.hud:not(.input-open) .status:not([data-state="looking"]) {
+/* ...except while she captures the screen or in do-not-disturb: those always show. */
+.hud:not(.input-open) .status:not([data-state="looking"]):not([data-dnd="1"]) {
   display: none;
+}
+
+.status[data-dnd="1"][data-state="idle"] {
+  color: var(--dim);
+}
+
+.status[data-dnd="1"][data-state="idle"] .segs i {
+  animation: none;
 }
 
 .stage canvas {

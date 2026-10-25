@@ -7,7 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator
-from app.protocol import ConfirmResponse, Hotkey, Look, ServerMessage, TextInput, client_message
+from app.protocol import ConfirmResponse, Hotkey, Look, Mode, Presence, ServerMessage, TextInput, client_message
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri:/
 
 
 def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -> FastAPI:
+    """`reminders`: run the background loops (calendar reminders, speaking up unasked); off in tests."""
     app = FastAPI()
 
     @app.websocket("/ws")
@@ -45,9 +46,12 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
             tasks.add(task)
             task.add_done_callback(tasks.discard)
 
+        if orchestrator.dnd:  # the avatar starts assuming it's off
+            await send(Mode(no_molestar=True))
         spawn(orchestrator.catch_up())  # summaries of sessions that ended with the app closed
         if reminders:
             tasks.add(asyncio.create_task(orchestrator.reminders(send)))
+            tasks.add(asyncio.create_task(orchestrator.chatter(send)))
         try:
             while True:
                 raw = await ws.receive_text()
@@ -63,6 +67,10 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
                         spawn(orchestrator.look(text, rect, send))
                     case ConfirmResponse(id=id, ok=ok):
                         orchestrator.confirm(id, ok)
+                    case Presence(fullscreen=full):
+                        orchestrator.set_away(full)
+                    case Hotkey(name="no_molestar"):
+                        await orchestrator.toggle_dnd(send)
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
         except WebSocketDisconnect:

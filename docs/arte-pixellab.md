@@ -255,19 +255,27 @@ Adjunta la tabla "Dirección de arte", las secciones 2, 4 y 5 de este documento,
 
 ## 11. Estado de la generación (25/10/2026)
 
-Cuenta de prueba (40 generaciones): gastadas 32, quedan 8.
+Cuenta de prueba agotada: 39 de 40 generaciones.
 
-**Hecho:**
-- Personaje base de la fusión: `avatar/assets/pet/base/base_de_pie.png` (Pro Flash con la versión chibi anterior como imagen de estilo). Tiene brazos y piernas legibles; la primera versión chibi tenía extremidades demasiado pequeñas para posar.
-- Personaje con esqueleto en PixelLab: **`79cce1f3-d6bf-4247-917c-f34c06639c78`** ("Capri"; 4 direcciones; vista *side*; 96×96). Las animaciones se generan con `animate_character` sobre este id.
-- `de_pie_idle` (9 fotogramas, de la versión chibi anterior): buen ejemplo de movimiento en el sitio. Hay que reproducirlo en ida y vuelta, porque cierra los ojos y no los vuelve a abrir.
+**Personaje a usar desde ahora:** **`a8d5ef9f-16d5-4804-a349-a9cf47cb626e`** ("Capri 8dir": 8 direcciones, vista *side*, 96×96, creado desde `avatar/assets/pet/base/base_de_pie.png`). El anterior de 4 direcciones (`79cce1f3-…`) queda obsoleto.
+
+**Generado y guardado** en `avatar/assets/pet/anim/` (los fotogramas de animación salen a 132×132: el lienzo crece para dejar sitio al movimiento):
+- `sentarse`: 9 fotogramas, 3/4 (*south-east*). Se sienta en el borde con las piernas colgando. ✅
+- `sentada_idle`: 7 fotogramas, 3/4. Bucle sentada balanceando las piernas, con parpadeo. ✅
+- `de_pie_idle`: 9 fotogramas, de frente, de la versión chibi anterior. Reproducir en ida y vuelta. Sirve de muestra, pero hay que regenerarlo con el personaje nuevo.
 
 **Aprendido:**
-- **Funciona:** movimientos en el sitio de frente (respirar, mecer el pelo, parpadear) con `animate_image` o `animate_character` (v3, solo *south*). Cuestan 2–3 generaciones por animación de 8 fotogramas a 96 px; el lienzo crece a 132 px.
-- **No funciona:** cambiar de pose de frente, en especial **sentarse con las piernas colgando hacia la cámara**. Se probó con edición por referencia, `animate_image` y `animate_character`: o no cambia nada, o se encoge, o se agacha y vuelve.
+- **Usar el circuito de personaje** (`create_character` v3 desde la base y `animate_character` v3 por dirección), no el de imagen suelta.
+- **Movimientos en el sitio de frente:** funcionan.
+- **Cambiar de pose de frente** (sentarse hacia la cámara): no funciona; se probó con edición por referencia, `animate_image` y `animate_character`.
+- **La familia sentada va en 3/4 (*south-east*):** ahí sí funciona, sentarse y el bucle en reposo.
+- **Para animar desde una pose ya generada:** `animate_character` con `custom_start_frame_url` (sube el fotograma con `get_upload_url`). Así se encadenan transición → bucle.
+- **Coste real:** 2–3 generaciones por animación de 6–8 fotogramas.
 - **Descargas:** el servidor de archivos de PixelLab rechaza el agente de usuario de Python. `scripts/fetch_pet_anim.py` ya lo tiene en cuenta.
 
-**Próximo paso (decidir):**
-1. Con plan de pago, intentar la pose sentada con `create_character_state` (10–25 generaciones).
-2. Sentarla en 3/4 (*south-east*) en vez de de frente.
-3. Rediseñar el reposo sin sentarse (de pie, flotando o apoyada) y generar solo animaciones en el sitio.
+**Ajuste del plan de animaciones:**
+- **En 3/4 (*south-east*):** las familias sentada, piernas cruzadas, portátil y abrazando rodillas (`sentada_idle`, `meditar`, `dormir`, `escribir`, `triste`, `acariciada`, `pinchada`), generadas encadenando desde `sentarse` o su bucle.
+- **De frente (*south*):** las de pie (habla, emociones, gestos, `saludar`, `peligro`).
+- **La transición `levantarse`** es `sentarse` al revés, y al ponerse de pie gira de 3/4 a frente con un fotograma de rotación.
+
+**Para continuar** hace falta el plan de pago: quedan unas 30 animaciones, unas 90 generaciones más las repeticiones.

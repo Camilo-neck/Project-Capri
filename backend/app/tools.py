@@ -50,7 +50,7 @@ class ScriptArgs(BaseModel):
 
 
 class CalendarArgs(BaseModel):
-    dias: int = Field(default=1, ge=1, le=14)
+    dias: int = Field(default=2, ge=1, le=14)  # from today: 2 = today and tomorrow
 
 
 class CalendarUrlArgs(BaseModel):
@@ -134,7 +134,14 @@ def calendar(a: CalendarArgs, s: Settings) -> str:
         return SETUP_STEPS
     start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     evs = calendar_ics.events(calendar_ics.fetch(s.calendar_url), start, start + timedelta(days=a.dias))
-    return "\n".join(e.line() for e in evs) or "No hay eventos en esos días."
+    # Every day labeled and "sin eventos" said outright: the model must never infer an empty day.
+    lines = []
+    for i in range(a.dias):
+        day = start + timedelta(days=i)
+        label = {0: "Hoy", 1: "Mañana"}.get(i, calendar_ics.DAYS[day.weekday()].capitalize())
+        todays = [e for e in evs if e.start.date() == day.date()]
+        lines.append(f"{label} ({day:%d/%m}): " + ("; ".join(e.line().split(" ", 1)[1] for e in todays) or "sin eventos"))
+    return "\n".join(lines)
 
 
 def configure_calendar(a: CalendarUrlArgs, s: Settings) -> str:

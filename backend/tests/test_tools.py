@@ -250,3 +250,21 @@ def test_reminder_loop_has_capri_bring_up_the_event(monkeypatch):
     assert len(calls) == 1  # once, though it checked many times
     assert "Dentista" in orch.history[0]["content"] and "aviso automático" in orch.history[0]["content"]
     assert sent[-1].value == "idle"
+
+
+def test_calendar_tool_labels_every_day_and_says_when_one_is_empty(monkeypatch):
+    class Fixed(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 25, 9, 0)
+
+    monkeypatch.setattr(tools, "datetime", Fixed)
+    monkeypatch.setattr(calendar_ics, "fetch", lambda url: ICS)
+    s = settings.load()
+    s.calendar_url = "https://calendar.google.com/calendar/ical/x/private-y/basic.ics"
+    assert tools.calendar(tools.CalendarArgs(), s) == (
+        "Hoy (25/10): sin eventos\n"
+        "Mañana (26/10): 09:00-09:15: Standup (Meet)"
+    )
+    week = tools.calendar(tools.CalendarArgs(dias=4), s).splitlines()
+    assert week[2] == "Martes (27/10): 16:30-17:00: Dentista" and week[3].startswith("Miércoles (28/10): 09:00")

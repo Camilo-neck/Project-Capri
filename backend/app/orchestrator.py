@@ -218,7 +218,9 @@ class Orchestrator:
                 try:
                     ics = await asyncio.to_thread(calendar_ics.fetch, s.calendar_url)
                     t = self.clock()
-                    evs = calendar_ics.events(ics, t - timedelta(minutes=grace), t + timedelta(minutes=s.remind_minutes + 1))
+                    # in a thread: parsing a fresh download takes ~1 s and must not stall replies
+                    evs = await asyncio.to_thread(
+                        calendar_ics.events, ics, t - timedelta(minutes=grace), t + timedelta(minutes=s.remind_minutes + 1))
                 except Exception as e:
                     log.warning("calendar check failed: %s", e)
                     evs = []

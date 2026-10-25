@@ -20,13 +20,13 @@ from pydantic import ValidationError
 from pydantic_core import from_json
 
 from app import config
+from app.calendar_ics import DAYS
 from app.schema import FALLBACK_TEXT, Reply
 
 log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (Path(__file__).parent.parent / "persona" / "system_prompt.md").read_text(encoding="utf-8")
 SCHEMA = Reply.model_json_schema()
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 # Yields JSON text chunks, then optionally an int: context tokens used by the call.
 Generate = Callable[[list[dict]], AsyncIterator[str | int]]

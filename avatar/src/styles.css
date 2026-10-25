@@ -171,7 +171,13 @@ body {
 }
 
 .stage {
-  height: 560px;
+  height: 250px;
+  align-self: center;
+}
+
+/* Quiet by default: the status bar only shows while the input is open. */
+.hud:not(.input-open) .status {
+  display: none;
 }
 
 .stage canvas {

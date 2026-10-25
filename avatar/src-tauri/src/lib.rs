@@ -10,7 +10,6 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[derive(Clone, Serialize)]
 struct Config {
     ws_url: String,
-    style: String,
 }
 
 struct Backend(Mutex<Option<Child>>);
@@ -54,11 +53,10 @@ fn start_backend() -> (String, Option<Child>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let (ws_url, child) = start_backend();
-    let style = std::env::var("CAPRI_STYLE").unwrap_or_default(); // set = style comparison mode with fps overlay
     let open_input = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
 
     let app = tauri::Builder::default()
-        .manage(Config { ws_url, style })
+        .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .invoke_handler(tauri::generate_handler![config])
         .plugin(

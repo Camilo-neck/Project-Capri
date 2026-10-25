@@ -6,14 +6,16 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
-import { createAvatar, type Style } from "./render/avatar.ts";
+import { createPet } from "./render/pet.ts";
 import { AvatarState } from "./state/avatar.ts";
+import { pickSprite } from "./state/pet.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
 const NUM_CTX = 8192;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const hud = document.querySelector<HTMLElement>(".hud")!;
 const tx = $("tx");
 const txN = $("tx-n");
 const txMeta = $("tx-meta");
@@ -27,11 +29,11 @@ const input = $<HTMLInputElement>("input");
 const STATUS = { down: "SIN ENLACE", idle: "ENLACE ESTABLE", thinking: "PROCESANDO", speaking: "TRANSMITIENDO" };
 type Status = keyof typeof STATUS;
 
-const cfg = await invoke<{ ws_url: string; style: string }>("config");
+const cfg = await invoke<{ ws_url: string }>("config");
 const win = getCurrentWindow();
 const avatar = new AvatarState(performance.now());
 const typewriter = new Typewriter(50);
-const renderer = await createAvatar($("stage"), (cfg.style || "layers") as Style, cfg.style !== "");
+const pet = await createPet($("stage"));
 
 let turn = 0;
 let sentAt = 0;
@@ -39,9 +41,13 @@ let latency: number | null = null;
 let ctx: number | null = null;
 let ended = true;
 let hideTimer = 0;
+let linkStatus: Status = "down";
+let variant = 0;
+let lastTalk = performance.now();
 const latencies: number[] = [];
 
 function setStatus(s: Status): void {
+  linkStatus = s;
   status.dataset.state = s;
   statusLabel.textContent = STATUS[s];
 }
@@ -71,6 +77,7 @@ const link = connect(
         // Also covers a retry: the new utterance replaces the text shown so far.
         avatar.setEmotion(msg.emocion, now);
         avatar.playGesture(msg.gesto, now);
+        variant = Math.floor(Math.random() * 1000);
         typewriter.clear();
         txText.textContent = "";
         ended = false;
@@ -95,6 +102,7 @@ const link = connect(
 // Click-through except while the input bar is open (and, from phase 5, while a confirmation is pending).
 function setInputOpen(open: boolean): void {
   inputRow.hidden = !open;
+  hud.classList.toggle("input-open", open);
   void win.setIgnoreCursorEvents(!open);
   if (open) {
     input.focus();
@@ -122,7 +130,7 @@ inputRow.addEventListener("submit", (e) => {
 });
 setInputOpen(false);
 
-renderer.app.ticker.add((ticker) => {
+pet.app.ticker.add((ticker) => {
   const now = performance.now();
   const revealed = typewriter.tick(ticker.deltaMS);
   if (revealed) {
@@ -145,5 +153,7 @@ renderer.app.ticker.add((ticker) => {
       if (inputRow.hidden) hideTimer = window.setTimeout(() => (tx.hidden = true), HIDE_AFTER_MS);
     }
   }
-  renderer.draw(avatar.pose(now), now);
+  if (!ended || typewriter.pending) lastTalk = now;
+  const sprite = pickSprite({ now, status: linkStatus, emocion: avatar.emocion, variant, lastTalk });
+  pet.draw(sprite, avatar.pose(now), now);
 });

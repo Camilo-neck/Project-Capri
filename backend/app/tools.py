@@ -2,6 +2,7 @@
 safe (runs at once) or has effects (runs only after the user confirms with a click in the UI).
 Everything they touch is allowlisted in the user's config (app/settings.py)."""
 
+import ctypes
 import json
 import os
 import subprocess
@@ -11,11 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote, urlparse
 
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, settings
+from app import calendar_ics, settings, spotify
 from app.settings import Settings
 
 MAX_RESULTS = 20
@@ -64,6 +66,24 @@ class RememberArgs(BaseModel):
 
 class ForgetArgs(BaseModel):
     texto: str = Field(min_length=2)
+
+
+class UrlArgs(BaseModel):
+    url: str
+
+
+class WebSearchArgs(BaseModel):
+    sitio: Literal["youtube", "google", "spotify"]
+    consulta: str = Field(min_length=1, max_length=200)
+
+
+class MediaArgs(BaseModel):
+    accion: Literal["play_pausa", "siguiente", "anterior", "subir_volumen", "bajar_volumen", "silencio"]
+
+
+class SpotifyArgs(BaseModel):
+    consulta: str = Field(min_length=1, max_length=200)
+    tipo: Literal["cancion", "playlist", "album", "artista"] = "cancion"
 
 
 @dataclass(frozen=True)
@@ -152,6 +172,56 @@ def configure_calendar(a: CalendarUrlArgs, s: Settings) -> str:
     return "Calendario configurado. Ya puedes consultarlo."
 
 
+def open_url(a: UrlArgs, s: Settings) -> str:
+    url = a.url.strip()
+    if not (url.startswith("https://") or url.startswith("http://")) or not urlparse(url).hostname:
+        raise ToolError(f"«{url}» no es una dirección web (tiene que empezar por https://)")
+    os.startfile(url)  # noqa: S606  (the user confirmed this exact address)
+    return f"Abrí {urlparse(url).hostname}."
+
+
+SEARCH_URLS = {
+    "youtube": "https://www.youtube.com/results?search_query={}",
+    "google": "https://www.google.com/search?q={}",
+    "spotify": "spotify:search:{}",  # the desktop app's search
+}
+
+
+def web_search(a: WebSearchArgs, s: Settings) -> str:
+    os.startfile(SEARCH_URLS[a.sitio].format(quote(a.consulta)))  # noqa: S606  (fixed sites)
+    return f"Abrí la búsqueda de «{a.consulta}» en {a.sitio}."
+
+
+# Windows media keys: they drive whatever is playing (Spotify, YouTube in the browser, ...).
+MEDIA_KEYS = {"play_pausa": 0xB3, "siguiente": 0xB0, "anterior": 0xB1,
+              "subir_volumen": 0xAF, "bajar_volumen": 0xAE, "silencio": 0xAD}
+
+
+def press_key(vk: int) -> None:
+    ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+    ctypes.windll.user32.keybd_event(vk, 0, 2, 0)  # KEYEVENTF_KEYUP
+
+
+def media(a: MediaArgs, s: Settings) -> str:
+    for _ in range(5 if "volumen" in a.accion else 1):  # one volume step is barely audible
+        press_key(MEDIA_KEYS[a.accion])
+    return "Hecho."
+
+
+def play_spotify(a: SpotifyArgs, s: Settings) -> str:
+    try:
+        return spotify.Spotify().play(a.consulta, a.tipo)
+    except spotify.SpotifyError as e:
+        raise ToolError(str(e)) from e
+
+
+def connect_spotify(a: NoArgs, s: Settings) -> str:
+    try:
+        return spotify.authorize()
+    except spotify.SpotifyError as e:
+        raise ToolError(str(e)) from e
+
+
 TOOLS: dict[str, Tool] = {
     "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}"),
     "buscar_archivos": Tool(SearchArgs, False, search_files),
@@ -165,6 +235,13 @@ TOOLS: dict[str, Tool] = {
     # deletes, so it confirms (with the list of what goes) like any action with effects.
     "recordar": Tool(RememberArgs, False, None),
     "olvidar": Tool(ForgetArgs, True, None),
+    # Web and music. Any address can be anything, so it confirms; searches on fixed sites, media
+    # keys and playing music change nothing that matters, so they don't.
+    "abrir_web": Tool(UrlArgs, True, open_url, lambda a: f"Abrir {urlparse(a.url).hostname or a.url} en el navegador"),
+    "buscar": Tool(WebSearchArgs, False, web_search),
+    "musica": Tool(MediaArgs, False, media),
+    "spotify": Tool(SpotifyArgs, False, play_spotify),
+    "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)"),
 }
 
 ToolName = Literal[tuple(TOOLS)]  # type: ignore[valid-type]  # the grammar only lets the model pick these

@@ -21,6 +21,13 @@ url = ""
 # Cuántos minutos antes de cada evento te avisa.
 aviso_minutos = 10
 
+# Spotify, para que ponga la música que le pidas. Client ID de una app de
+# https://developer.spotify.com/dashboard con este Redirect URI registrado tal cual.
+# Luego dile a Capri "conecta Spotify". Que suene solo requiere Spotify Premium.
+[spotify]
+client_id = ""
+redirect_uri = "http://127.0.0.1:5173/callback"
+
 # Lo que Capri hace sola en el escritorio. Se aplica la próxima vez que le toque moverse.
 [avatar]
 deambular = true        # se teletransporta de vez en cuando a otro sitio de la barra o a una ventana

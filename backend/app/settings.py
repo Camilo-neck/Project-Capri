@@ -3,6 +3,7 @@
 Read on every use, so edits apply without a restart. Created from config.example.toml if missing.
 """
 
+import json
 import os
 import re
 import tomllib
@@ -12,6 +13,7 @@ from pathlib import Path
 
 DIR = Path(os.environ.get("APPDATA", Path.home())) / "Capri"
 EXAMPLE = Path(__file__).parent / "config.example.toml"
+SPOTIFY_REDIRECT = "http://127.0.0.1:5173/callback"  # the one registered for the Spotify app (shared with telon)
 GOOGLE_ICAL = re.compile(r"^https://calendar\.google\.com/calendar/ical/[^\s\"']+\.ics$")
 
 
@@ -26,6 +28,8 @@ class Settings:
     proactive_per_hour: int = 2
     idle_hours: float = 2
     quiet: tuple[time, time] | None = (time(23), time(8))  # no chatter from..to (may wrap midnight)
+    spotify_client_id: str = ""
+    spotify_redirect: str = SPOTIFY_REDIRECT
 
     def quiet_now(self, now: datetime) -> bool:
         if not self.quiet:
@@ -64,22 +68,31 @@ def load() -> Settings:
         proactive_per_hour=int(pro.get("max_por_hora", 2)),
         idle_hours=float(pro.get("inactividad_horas", 2)),
         quiet=parse_quiet(pro.get("silencio", "23:00-08:00")),
+        spotify_client_id=data.get("spotify", {}).get("client_id", ""),
+        spotify_redirect=data.get("spotify", {}).get("redirect_uri", SPOTIFY_REDIRECT),
     )
 
 
-def save_calendar_url(url: str) -> None:
-    """Writes [calendario] url, keeping the rest of the file (and its comments) as it is."""
-    if not GOOGLE_ICAL.match(url):
-        raise ValueError("no es una dirección secreta de Google Calendar en formato iCal")
+def set_value(section: str, key: str, value: str) -> None:
+    """Writes `key = "value"` in [section], keeping the rest of the file (and its comments) as it is."""
     load()  # creates the file if needed
     p = path()
     text = p.read_text(encoding="utf-8")
-    line = f'url = "{url}"'
-    if re.search(r"^\[calendario\]", text, re.M):
-        if re.search(r"^url\s*=.*$", text, re.M):
-            text = re.sub(r"^url\s*=.*$", lambda _: line, text, count=1, flags=re.M)
-        else:
-            text = re.sub(r"^\[calendario\]\s*$", lambda m: f"{m.group(0)}\n{line}", text, count=1, flags=re.M)
+    line = f"{key} = {json.dumps(value, ensure_ascii=False)}"  # a TOML basic string is JSON-compatible
+    head = re.search(rf"^\[{re.escape(section)}\]\s*$", text, re.M)
+    if not head:
+        text = text.rstrip() + f"\n\n[{section}]\n{line}\n"
     else:
-        text = text.rstrip() + f"\n\n[calendario]\n{line}\n"
+        nxt = re.search(r"^\[", text[head.end():], re.M)
+        end = head.end() + (nxt.start() if nxt else len(text) - head.end())
+        body = text[head.end():end]
+        key_line = re.compile(rf"^{re.escape(key)}\s*=.*$", re.M)
+        body = key_line.sub(lambda _: line, body, count=1) if key_line.search(body) else f"\n{line}" + body
+        text = text[:head.end()] + body + text[end:]
     p.write_text(text, encoding="utf-8")
+
+
+def save_calendar_url(url: str) -> None:
+    if not GOOGLE_ICAL.match(url):
+        raise ValueError("no es una dirección secreta de Google Calendar en formato iCal")
+    set_value("calendario", "url", url)

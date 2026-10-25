@@ -3,8 +3,10 @@ name = "capri-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.162.0",
     "ollama>=0.6.3",
     "pydantic>=2.14.1",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [tool.pytest.ini_options]

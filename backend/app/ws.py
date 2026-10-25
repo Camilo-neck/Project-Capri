@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator
-from app.protocol import ConfirmResponse, Hotkey, ServerMessage, TextInput, client_message
+from app.protocol import ConfirmResponse, Hotkey, Look, ServerMessage, TextInput, client_message
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ def create_app(token: str, orchestrator: Orchestrator) -> FastAPI:
                     # ponytail: turns run inline, so input received mid-turn waits; add a task queue if barge-in matters.
                     case TextInput(text=text):
                         await orchestrator.turn(text, send)
+                    case Look(text=text, rect=rect):
+                        await orchestrator.look(text, rect, send)
                     case ConfirmResponse():
                         log.info("confirm_response %s (no pending actions until phase 5)", msg.id)
                     case Hotkey(name=name):

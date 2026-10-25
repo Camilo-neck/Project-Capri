@@ -9,7 +9,7 @@ export type Gesto = "ninguno" | "asentir" | "ladear_cabeza" | "guino" | "saltar"
 // Backend -> avatar
 export interface State {
   type: "state";
-  value: "idle" | "thinking" | "speaking";
+  value: "idle" | "looking" | "thinking" | "speaking"; // looking: capturing the screen
 }
 
 export interface UtteranceStart {
@@ -40,6 +40,13 @@ export interface TextInput {
   text: string;
 }
 
+/** Look at the screen: capture `rect` (monitor, physical px: left, top, right, bottom) and answer `text` about it. */
+export interface Look {
+  type: "look";
+  text: string;
+  rect: [number, number, number, number];
+}
+
 export interface ConfirmResponse {
   type: "confirm_response";
   id: string;
@@ -52,4 +59,4 @@ export interface Hotkey {
 }
 
 export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | ConfirmRequest;
-export type ClientMessage = TextInput | ConfirmResponse | Hotkey;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Hotkey;

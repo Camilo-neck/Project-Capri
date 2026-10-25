@@ -41,7 +41,13 @@ const inputRow = $<HTMLFormElement>("input-row");
 const input = $<HTMLInputElement>("input");
 const stage = $("stage");
 
-const STATUS = { down: "SIN ENLACE", idle: "ENLACE ESTABLE", thinking: "PROCESANDO", speaking: "TRANSMITIENDO" };
+const STATUS = {
+  down: "SIN ENLACE",
+  idle: "ENLACE ESTABLE",
+  looking: "ESCANEANDO PANTALLA",
+  thinking: "PROCESANDO",
+  speaking: "TRANSMITIENDO",
+};
 type Status = keyof typeof STATUS;
 
 const cfg = await invoke<{ ws_url: string }>("config");
@@ -192,6 +198,8 @@ function wander(): void {
 
 function setStatus(s: Status): void {
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
+  if (s === "looking") fx.scan();
+  if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
   if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
     // while she works, she sits on the window in front if she can
     const seat = pickSeat(wins, limits(), Math.random, { frontOnly: true });
@@ -261,7 +269,39 @@ function setInputOpen(open: boolean): void {
   }
 }
 
+let guardTimer = 0;
+
+function guardOff(): void {
+  clearTimeout(guardTimer);
+  void invoke("capture_guard", { on: false });
+}
+
+/** Bookkeeping for a message just sent: turn number, latency clock, the transmission header. */
+function startTurn(shown: string): void {
+  turn += 1;
+  sentAt = performance.now();
+  latency = null;
+  txN.textContent = String(turn).padStart(4, "0");
+  txUser.textContent = `› ${shown}`;
+  txText.textContent = "";
+  updateMeta();
+  showTx();
+}
+
+/** Looks at the screen you were on (Ctrl+Alt+M or /mira), with Capri kept out of the shot. */
+async function look(question: string): Promise<void> {
+  const rect = await invoke<[number, number, number, number]>("look_target");
+  await invoke("capture_guard", { on: true }).catch((e) => console.warn("capture_guard", e));
+  if (!link.send({ type: "look", text: question, rect })) {
+    guardOff();
+    return;
+  }
+  guardTimer = window.setTimeout(guardOff, 5000); // in case the backend never answers
+  startTurn(question ? `/mira ${question}` : "/mira");
+}
+
 void listen("open-input", () => setInputOpen(true));
+void listen("look", () => void look(""));
 void listen("teleport", () => void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
@@ -284,16 +324,15 @@ input.addEventListener("keydown", (e) => {
 inputRow.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value.trim();
+  const mira = text.match(/^\/mira(?:\s+|$)(.*)$/s);
+  if (mira) {
+    input.value = "";
+    void look(mira[1]);
+    return;
+  }
   if (!text || !link.send({ type: "text_input", text })) return;
   input.value = "";
-  turn += 1;
-  sentAt = performance.now();
-  latency = null;
-  txN.textContent = String(turn).padStart(4, "0");
-  txUser.textContent = `› ${text}`;
-  txText.textContent = "";
-  updateMeta();
-  showTx();
+  startTurn(text);
 });
 setInputOpen(false);
 
@@ -376,7 +415,7 @@ pet.app.ticker.add((ticker) => {
     look = [Math.max(-1, Math.min(1, (cursor[0] - hx) / LOOK_RANGE)), Math.max(-1, Math.min(1, (cursor[1] - hy) / LOOK_RANGE))];
   }
   const { name, pose } = director.frame(
-    { now: t, status: linkStatus, emocion: avatar.emocion, variant, lastTalk, pokeAt, petAt, greetAt },
+    { now: t, status: linkStatus === "looking" ? "thinking" : linkStatus, emocion: avatar.emocion, variant, lastTalk, pokeAt, petAt, greetAt },
     { look, petSide },
     { gesto: s.gesto, gestureT: s.gestureT, mouth: s.mouth, blinking: s.blinking },
   );

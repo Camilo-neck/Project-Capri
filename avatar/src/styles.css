@@ -145,6 +145,10 @@ body {
   color: var(--accent-2);
 }
 
+.status[data-state="looking"] {
+  color: var(--warn);
+}
+
 .status[data-state="down"] {
   color: var(--dim);
 }
@@ -170,6 +174,7 @@ body {
   opacity: 0.8;
 }
 
+.status[data-state="looking"] .segs i,
 .status[data-state="thinking"] .segs i,
 .status[data-state="speaking"] .segs i {
   animation-duration: 0.5s;
@@ -190,7 +195,8 @@ body {
 }
 
 /* Quiet by default: the status bar only shows while the input is open. */
-.hud:not(.input-open) .status {
+/* ...except while she captures the screen: that indicator always shows. */
+.hud:not(.input-open) .status:not([data-state="looking"]) {
   display: none;
 }
 

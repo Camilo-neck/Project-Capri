@@ -1,16 +1,18 @@
-//! Where the other top-level windows are, so Capri can sit on them and possess them.
-//! Only rectangles, z-order and the foreground window: never titles or contents.
+//! Where the other top-level windows are, so Capri can sit on them and possess them, and which
+//! monitor to capture when she looks at the screen. Only rectangles, z-order and the foreground
+//! window: never titles or contents.
 
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewWindow};
 use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowLongW, IsIconic, IsWindowVisible, IsZoomed, GWL_EXSTYLE,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowLongW, IsIconic, IsWindowVisible, IsZoomed,
+    SetWindowDisplayAffinity, GWL_EXSTYLE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 /// One window, in logical px relative to the overlay.
@@ -38,6 +40,30 @@ pub struct Latest(Mutex<Option<Windows>>);
 #[tauri::command]
 pub fn windows(latest: tauri::State<Latest>) -> Option<Windows> {
     latest.0.lock().unwrap().clone()
+}
+
+/// The monitor of the window the user was on (never Capri's own; the primary if none), physical px:
+/// left, top, right, bottom. That's what she captures when asked to look.
+#[tauri::command]
+pub fn look_target(latest: tauri::State<Latest>) -> [i32; 4] {
+    let fg = latest.0.lock().unwrap().as_ref().map_or(0, |w| w.fg);
+    unsafe {
+        let monitor = MonitorFromWindow(fg as HWND, MONITOR_DEFAULTTOPRIMARY);
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(monitor, &mut info);
+        let r = info.rcMonitor;
+        [r.left, r.top, r.right, r.bottom]
+    }
+}
+
+/// Keeps the overlay (Capri and her HUD) out of screen captures while she looks, so she
+/// doesn't see herself; off again afterwards so the user's own screenshots still show her.
+#[tauri::command]
+pub fn capture_guard(on: bool, window: WebviewWindow) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    let ok = unsafe { SetWindowDisplayAffinity(hwnd.0 as HWND, if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE }) };
+    if ok == 0 { Err("SetWindowDisplayAffinity failed".into()) } else { Ok(()) }
 }
 
 const SHELL_CLASSES: [&str; 4] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"];

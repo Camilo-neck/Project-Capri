@@ -125,13 +125,21 @@ pub fn run() {
     let (ws_url, child) = start_backend();
     let open_input = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
     let teleport = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT);
+    let look = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SHIFT), Code::KeyM);
 
     let app = tauri::Builder::default()
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .manage(Mouse::default())
         .manage(win_watch::Latest::default())
-        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive, win_watch::windows])
+        .invoke_handler(tauri::generate_handler![
+            config,
+            set_hitbox,
+            set_interactive,
+            win_watch::windows,
+            win_watch::look_target,
+            win_watch::capture_guard
+        ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -140,6 +148,9 @@ pub fn run() {
                     }
                     if shortcut == &teleport {
                         let _ = app.emit("teleport", ());
+                    }
+                    if shortcut == &look {
+                        let _ = app.emit("look", ());
                     }
                     if shortcut == &open_input {
                         app.state::<Mouse>().forced.store(true, Ordering::Relaxed);
@@ -153,8 +164,12 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
-            app.global_shortcut().register(open_input)?;
-            app.global_shortcut().register(teleport)?;
+            // Another app may own a shortcut already: losing one is no reason not to start.
+            for shortcut in [open_input, teleport, look] {
+                if let Err(e) = app.global_shortcut().register(shortcut) {
+                    eprintln!("shortcut {shortcut:?} not available: {e}");
+                }
+            }
             fit(&app.get_webview_window("main").unwrap())?;
             let handle = app.handle().clone();
             std::thread::spawn(move || watch_mouse(handle));

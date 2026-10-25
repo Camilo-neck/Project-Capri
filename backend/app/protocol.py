@@ -10,7 +10,7 @@ from app.schema import Emocion, Gesto
 # Backend -> avatar
 class State(BaseModel):
     type: Literal["state"] = "state"
-    value: Literal["idle", "thinking", "speaking"]
+    value: Literal["idle", "looking", "thinking", "speaking"]  # looking: capturing the screen
 
 
 class UtteranceStart(BaseModel):
@@ -41,6 +41,14 @@ class TextInput(BaseModel):
     text: str
 
 
+class Look(BaseModel):
+    """Look at the screen (hotkey or /mira): capture `rect` and answer `text` about it."""
+
+    type: Literal["look"] = "look"
+    text: str = ""
+    rect: tuple[int, int, int, int]  # monitor to capture, physical px: left, top, right, bottom
+
+
 class ConfirmResponse(BaseModel):
     type: Literal["confirm_response"] = "confirm_response"
     id: str
@@ -53,5 +61,5 @@ class Hotkey(BaseModel):
 
 
 ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | ConfirmRequest
-ClientMessage = Annotated[TextInput | ConfirmResponse | Hotkey, Field(discriminator="type")]
+ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

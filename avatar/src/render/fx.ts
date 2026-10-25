@@ -216,6 +216,19 @@ export class Fx {
     });
   }
 
+  /** The capture indicator: a scan line sweeping down the screen with a short trail. */
+  scan(life = 450): void {
+    this.add(life, (g, t) => {
+      const y = snap(t * innerHeight);
+      for (const [dy, alpha] of [[0, 0.9], [-3 * PX, 0.45], [-8 * PX, 0.2]] as const) {
+        g.globalAlpha = alpha;
+        g.fillStyle = GREEN;
+        g.fillRect(0, y + dy, innerWidth, PX);
+      }
+      g.globalAlpha = 1;
+    });
+  }
+
   /** A streak of light from one spot to the other, in three misregistered colors. */
   streak(x1: number, y1: number, x2: number, y2: number): void {
     const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / PX);

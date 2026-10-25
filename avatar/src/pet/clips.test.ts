@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ClipPlayer, CLIPS, clipDuration } from "./clips.ts";
+import { ClipPlayer, CLIPS, clipDuration, gestureFrame, SPRITE_FOR } from "./clips.ts";
 
 const sit = clipDuration(CLIPS.sentarse);
 
@@ -23,24 +23,68 @@ test("pingpong loops go forth and back without jumping", () => {
   assert.ok(seq.includes(CLIPS.sentada_idle.frames - 1));
 });
 
-test("leaving plays the enter clip reversed, then hands back to the code-drawn pet", () => {
+test("standing up before a standing clip: reversed sit-down, then the new loop", () => {
   const p = new ClipPlayer();
   p.update("sentada", 0);
   p.update("feliz", 10_000);
   assert.deepEqual(p.frame(10_000), { clip: "sentarse", index: CLIPS.sentarse.frames - 1 });
-  assert.equal(p.frame(10_000 + sit - 1)!.index, 0);
-  assert.equal(p.frame(10_000 + sit), null);
+  assert.equal(p.frame(10_000 + sit)!.clip, "feliz");
+  p.update("hablar", 20_000); // same (standing) family: straight to the loop
+  assert.equal(p.frame(20_000)!.clip, "hablar");
 });
 
-test("mouse reactions leave the clip instantly", () => {
+/** Runs fn with a behavior's clips removed, as if its art had not arrived yet. */
+function withoutClips(b: keyof typeof SPRITE_FOR, fn: () => void): void {
+  const saved = SPRITE_FOR[b];
+  delete SPRITE_FOR[b];
+  try {
+    fn();
+  } finally {
+    SPRITE_FOR[b] = saved;
+  }
+}
+
+test("leaving for a behavior without clips: reversed sit-down, then the code-drawn pet", () =>
+  withoutClips("escribir", () => {
+    const p = new ClipPlayer();
+    p.update("sentada", 0);
+    p.update("escribir", 10_000);
+    assert.deepEqual(p.frame(10_000), { clip: "sentarse", index: CLIPS.sentarse.frames - 1 });
+    assert.equal(p.frame(10_000 + sit - 1)!.index, 0);
+    assert.equal(p.frame(10_000 + sit + 1), null);
+  }));
+
+test("transition chains: sitting -> typing opens the laptop; typing -> talking closes it and stands up", () => {
   const p = new ClipPlayer();
+  const open = clipDuration(CLIPS.abrir_portatil);
   p.update("sentada", 0);
-  p.update("pinchada", 5_000);
-  assert.equal(p.frame(5_000), null);
+  p.update("escribir", 10_000);
+  assert.deepEqual(p.frame(10_000), { clip: "abrir_portatil", index: 0 });
+  assert.equal(p.frame(10_000 + open)!.clip, "escribir");
+  p.update("hablar", 20_000);
+  assert.deepEqual(p.frame(20_000), { clip: "abrir_portatil", index: CLIPS.abrir_portatil.frames - 1 });
+  assert.equal(p.frame(20_000 + open)!.clip, "sentarse");
+  assert.equal(p.frame(20_000 + open + sit + 1)!.clip, "hablar");
 });
 
-test("behaviors without clips never show one", () => {
-  const p = new ClipPlayer();
-  p.update("escribir", 0);
-  assert.equal(p.frame(0), null);
+test("gestures play over standing loops only", () => {
+  const standing = { clip: "feliz", index: 3 };
+  assert.deepEqual(gestureFrame("saltar", 0.5, standing, "feliz"), { clip: "saltar", index: 4 });
+  assert.equal(gestureFrame("saltar", 0.5, { clip: "sentada_idle", index: 0 }, "sentada"), null);
+  assert.equal(gestureFrame("ninguno", 0.5, standing, "feliz"), null);
+  assert.equal(gestureFrame("saltar", 0.5, null, "feliz"), null);
 });
+
+test("mouse reactions skip transitions", () => {
+  const p = new ClipPlayer();
+  p.update("feliz", 0); // standing
+  p.update("pinchada", 5_000); // sitting reaction: no sit-down first
+  assert.equal(p.frame(5_000)!.clip, "pinchada");
+});
+
+test("behaviors without clips never show one", () =>
+  withoutClips("escribir", () => {
+    const p = new ClipPlayer();
+    p.update("escribir", 0);
+    assert.equal(p.frame(0), null);
+  }));

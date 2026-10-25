@@ -62,9 +62,19 @@ Las animaciones dibujadas con PixelLab (`avatar/assets/pet/anim/<clip>/<clip>_NN
 - Al entrar en un estado con clips se reproduce su clip de entrada y luego el bucle. Al salir, el de entrada al revés; las reacciones al ratón cambian al instante.
 - Los fotogramas se muestran a ×2, con los pies de su primer fotograma en la misma línea de suelo que la mascota por código. La zona de clic sale de los píxeles de cada fotograma.
 
+Todos los estados tienen ya clip de PixelLab; la mascota por código solo se ve si falta alguno. En la tabla, `a → b` indica que se reproduce `a` una vez y después `b` en bucle (ida y vuelta).
+
 | Estado | Clips | Vista |
 |---|---|---|
-| `sentada` | `sentarse` (9 fotogramas, 12 fps, una vez) → `sentada_idle` (7 fotogramas, 7 fps, ida y vuelta) | 3/4 |
+| `sentada` (reposo) | `sentarse` → `sentada_idle` | 3/4 |
+| `estirarse`, `meditar`, `triste`, `pinchada`, `acariciada` | `sentarse` → el clip del mismo nombre | 3/4 |
+| `dormir` | `sentarse` → `dormirse` → `dormir` | 3/4 |
+| `escribir` (pensando) | `sentarse` → `abrir_portatil` → `escribir` | 3/4 |
+| `hablar`, `feliz`, `enamorada`, `emocionada`, `traviesa`, `curiosa`, `pensativa`, `sorprendida`, `molesta`, `seria`, `saludar` | el clip del mismo nombre | frente |
+| Gestos `asentir`, `ladear_cabeza`, `guino`, `saltar`, `senalar`, `cruzar_brazos` | `asentir`, `ladear`, `guino`, `saltar`, `senalar`, `cruzar_brazos`, sobre las poses de pie | frente |
+| Sin uso aún | `peligro` (transformación hacia ojos múltiples, para confirmar acciones en la fase 5), `de_pie_idle`, `hablar_sentada` | frente / 3/4 |
+
+Al cambiar de estado se deshacen al revés las transiciones que el nuevo no comparte y se reproducen las que añade. Por ejemplo, de escribir a hablar se cierra el portátil y se levanta, y de sentada a escribir solo se abre el portátil. Las reacciones al ratón no esperan transiciones.
 
 **Para añadir un clip:**
 1. Descárgalo con `scripts/fetch_pet_anim.py <clip> <urls…>`.

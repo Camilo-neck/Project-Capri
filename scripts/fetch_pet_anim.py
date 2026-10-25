@@ -1,8 +1,10 @@
 """Download a PixelLab animation job into avatar/assets/pet/anim/<name>/ and build review files.
 
 Run: uv run --no-project --with pillow python scripts/fetch_pet_anim.py <name> <url> [<url> ...]
-Each url is one frame (PixelLab's per-frame download links, in order). Writes <name>_01.png ...,
-plus <name>_strip.png (frames side by side) and <name>.gif (both 4x, for review only).
+     uv run --no-project --with pillow python scripts/fetch_pet_anim.py <name> --pattern <url with {i}> <count>
+Each url is one frame, in order; --pattern takes get_character's ".../{i}.png?t=..." link and the
+frame count (i = 0..count-1). Writes <name>_01.png ..., plus <name>_strip.png (frames side by side)
+and <name>.gif (both 4x, for review only).
 """
 
 import sys
@@ -17,6 +19,8 @@ REVIEW_SCALE = 4
 
 def main() -> None:
     name, urls = sys.argv[1], sys.argv[2:]
+    if urls and urls[0] == "--pattern":
+        urls = [urls[1].replace("{i}", str(i)) for i in range(int(urls[2]))]
     out = ROOT / name
     out.mkdir(parents=True, exist_ok=True)
     frames = []

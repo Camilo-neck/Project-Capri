@@ -286,3 +286,16 @@ Cuenta de prueba agotada: 39 de 40 generaciones.
 3. Rehacer `sentarse` y `sentada_idle`.
 
 **Para continuar** hace falta el plan de pago: quedan unas 30 animaciones, unas 90 generaciones más las repeticiones.
+
+
+## 12. Encargo generado (25/10/2026, Tier 1)
+
+- **Personaje:** `9bbf406a-dd99-40f3-b29d-d26077288b57` (8 direcciones, **sin cuernos**). Base en `avatar/assets/pet/base/base_de_pie.png`.
+- **Clips:** 31 en `avatar/assets/pet/anim/`. Reparto y transiciones en `docs/capri-sprites.md`. Unas 130 generaciones de 2.000.
+- **Ajustes durante la revisión:**
+  - `sentarse` se recortó a 7 fotogramas, porque al final se volvía a levantar.
+  - `dormir` se quedó en 3 fotogramas, porque los demás tenían un artefacto en el pelo.
+  - `acariciada` se rehízo: la primera versión dibujaba una mano humana.
+  - `cruzar_piernas` falló y se descartó; `meditar`, `dormirse` y `triste` se encadenan directamente desde la pose sentada.
+- **`peligro`:** se hizo dibujando primero la pose final (ojos extra, sonrisa dentada y garras) con una edición de imagen, y animando después hasta ella (`end_frame_url`). La versión libre invertía los colores y no abría los ojos.
+- **`enamorada`:** versión sutil (mano en la mejilla y balanceo suave), como se pidió.

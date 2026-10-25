@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { Director, LINGER_MS } from "./pet/behaviors.ts";
-import { ClipPlayer } from "./pet/clips.ts";
+import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
 import { solve } from "./pet/rig.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
@@ -215,7 +215,8 @@ pet.app.ticker.add((ticker) => {
   );
   // Behaviors with PixelLab sprite clips show those; the rest use the code-drawn pet.
   clips.update(name, t);
-  const clipFrame = clips.frame(t);
+  const base = clips.frame(t);
+  const clipFrame = gestureFrame(s.gesto, s.gestureT, base, name) ?? base;
   pet.showClip(clipFrame);
   if (!clipFrame) pet.paint(pose, t, s.glitch * 0.6);
 

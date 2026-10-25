@@ -1,6 +1,6 @@
 // Shows the pet on screen through PixiJS with crisp pixels: either the code-drawn pet (src/pet)
 // or, for behaviors that have them, frame-by-frame sprite clips (avatar/assets/pet/anim).
-import { Application, Container, Sprite, Texture } from "pixi.js";
+import { Application, Sprite, Texture } from "pixi.js";
 
 import type { ClipFrame } from "../pet/clips.ts";
 import { Painter } from "../pet/draw.ts";
@@ -13,18 +13,6 @@ export const CLIP_SCALE = 2; // sprite clips are drawn at a higher native resolu
 
 type Box = { x: number; y: number; w: number; h: number };
 
-const SHARD_COLORS = [0xff2152, 0xff2152, 0x8b38ff, 0x36ff7a, 0xffffff];
-const SHARD_MS = 260;
-
-interface Shard {
-  sprite: Sprite;
-  x: number;
-  y: number;
-  vx: number; // px/ms
-  vy: number;
-  age: number;
-}
-
 interface ClipFrames {
   textures: Texture[];
   boxes: Box[]; // opaque area of each frame, native px
@@ -36,10 +24,6 @@ export interface PetRenderer {
   paint(pose: Pose, time: number): void;
   /** Glitch on top of whatever is shown; seed picks the bands, change it per frame. */
   glitch(g: Glitch, seed: number): void;
-  /** Teleport shards: flying off her body, or (inward) gathering into it. */
-  burst(inward: boolean): void;
-  /** Moves the shards along; call every render tick. */
-  step(dtMs: number): void;
   /** Shows a sprite clip frame instead of the code-drawn pet; null switches back. */
   showClip(frame: ClipFrame | null): void;
   /** Opaque area of the current frame in CSS px, relative to the canvas. */
@@ -114,16 +98,11 @@ export async function createPet(parent: HTMLElement): Promise<PetRenderer> {
   const clip = new Sprite();
   clip.scale.set(CLIP_SCALE);
   clip.visible = false;
-  // The filter goes on her body only; shards fly outside it so a collapse doesn't swallow them.
-  const body = new Container();
-  body.addChild(drawn, clip);
+  app.stage.addChild(drawn, clip);
   const filter = glitchFilter();
   filter.padding = 36; // room for shifted bands
   filter.enabled = false;
-  body.filters = [filter];
-  const shardLayer = new Container();
-  app.stage.addChild(body, shardLayer);
-  let shards: Shard[] = [];
+  app.stage.filters = [filter];
 
   let shown: { frames: ClipFrames; index: number } | null = null;
   const feet: [number, number] = [(W * SCALE) / 2, GROUND * SCALE];
@@ -166,44 +145,6 @@ export async function createPet(parent: HTMLElement): Promise<PetRenderer> {
       clip.texture = shown.frames.textures[shown.index];
       const [ax, ay] = shown.frames.anchor;
       clip.position.set(Math.round(feet[0] - ax * CLIP_SCALE), Math.round(feet[1] - ay * CLIP_SCALE));
-    },
-    burst(inward) {
-      const b = bounds();
-      if (!b) return;
-      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-      for (let i = 0; i < 18; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const speed = 0.25 + Math.random() * 0.45; // px/ms
-        const sprite = new Sprite(Texture.WHITE);
-        sprite.tint = SHARD_COLORS[i % SHARD_COLORS.length];
-        sprite.width = CLIP_SCALE * (i % 3 === 0 ? 4 : 2); // strips and specks, in native px
-        sprite.height = CLIP_SCALE * (i % 3 === 0 ? 1 : 2);
-        shardLayer.addChild(sprite);
-        // inward: start where an outward shard would be at the end, flying back to the middle
-        const r = inward ? speed * SHARD_MS : Math.random() * b.w * 0.4;
-        shards.push({
-          sprite,
-          x: cx + Math.cos(a) * r,
-          y: cy + Math.sin(a) * r * 1.4,
-          vx: Math.cos(a) * speed * (inward ? -1 : 1),
-          vy: Math.sin(a) * speed * 1.4 * (inward ? -1 : 1),
-          age: 0,
-        });
-      }
-    },
-    step(dt) {
-      shards = shards.filter((s) => {
-        s.age += dt;
-        if (s.age >= SHARD_MS) {
-          s.sprite.destroy();
-          return false;
-        }
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        s.sprite.position.set(Math.round(s.x / CLIP_SCALE) * CLIP_SCALE, Math.round(s.y / CLIP_SCALE) * CLIP_SCALE);
-        s.sprite.alpha = s.age < SHARD_MS * 0.6 ? 1 : 0.5; // two steps, no smooth fade
-        return true;
-      });
     },
   };
 }

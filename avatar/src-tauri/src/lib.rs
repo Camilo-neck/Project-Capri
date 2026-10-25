@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{Emitter, LogicalPosition, Manager, RunEvent, WebviewWindow};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[derive(Clone, Serialize)]
@@ -24,8 +24,8 @@ struct Mouse {
     forced: AtomicBool,
 }
 
-/// Logical px between the window bottom and her ground line: room for her legs to dangle
-/// over the taskbar while she sits on its edge. Matches (H - GROUND) * SCALE in the frontend.
+/// Logical px between her ground line (the taskbar's top edge) and the bottom of the overlay:
+/// room for her legs to dangle over the taskbar. Matches (H - GROUND) * SCALE in the frontend.
 const BELOW_GROUND: f64 = 54.0;
 
 #[tauri::command]
@@ -43,25 +43,19 @@ fn set_interactive(on: bool, mouse: tauri::State<Mouse>) {
     mouse.forced.store(on, Ordering::Relaxed);
 }
 
-/// Puts the window on the primary monitor's taskbar edge, `frac` 0..1 from left to right.
-fn place(w: &WebviewWindow, frac: f64) -> tauri::Result<()> {
-    let (Some(m), Ok(size)) = (w.primary_monitor()?, w.outer_size()) else { return Ok(()) };
+/// The overlay: the primary monitor's work area plus BELOW_GROUND over the taskbar. Not the whole
+/// monitor, or Windows would take it for a fullscreen app and push the taskbar behind it.
+/// ponytail: fitted once at start; refit on display changes if that turns out to matter.
+fn fit(w: &WebviewWindow) -> tauri::Result<()> {
+    let Some(m) = w.primary_monitor()? else { return Ok(()) };
     let scale = m.scale_factor();
     let area = m.work_area();
     let pos = area.position.to_logical::<f64>(scale);
     let work = area.size.to_logical::<f64>(scale);
-    let screen = m.size().to_logical::<f64>(scale);
-    let win = size.to_logical::<f64>(scale);
-    // Windows keeps windows on screen, so with a short taskbar she sits a few px above it.
-    let bottom = (pos.y + work.height + BELOW_GROUND).min(m.position().to_logical::<f64>(scale).y + screen.height);
-    let x = pos.x + 16.0 + frac.clamp(0.0, 1.0) * (work.width - win.width - 32.0);
-    w.set_position(LogicalPosition::new(x, bottom - win.height))
-}
-
-/// Teleport: the frontend hides her, moves the window here, and brings her back.
-#[tauri::command]
-fn move_to(frac: f64, window: WebviewWindow) -> Result<(), String> {
-    place(&window, frac).map_err(|e| e.to_string())
+    let screen_bottom = m.position().to_logical::<f64>(scale).y + m.size().to_logical::<f64>(scale).height;
+    let height = (work.height + BELOW_GROUND).min(screen_bottom - pos.y);
+    w.set_position(LogicalPosition::new(pos.x, pos.y))?;
+    w.set_size(LogicalSize::new(work.width, height))
 }
 
 /// ~30 Hz: forwards the cursor (for her gaze) and toggles click-through by hit-testing her.
@@ -134,7 +128,7 @@ pub fn run() {
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .manage(Mouse::default())
-        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive, move_to])
+        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -158,7 +152,7 @@ pub fn run() {
         .setup(move |app| {
             app.global_shortcut().register(open_input)?;
             app.global_shortcut().register(teleport)?;
-            place(&app.get_webview_window("main").unwrap(), 1.0)?; // bottom right, on the taskbar
+            fit(&app.get_webview_window("main").unwrap())?;
             let handle = app.handle().clone();
             std::thread::spawn(move || watch_mouse(handle));
             Ok(())

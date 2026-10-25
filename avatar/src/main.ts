@@ -8,6 +8,7 @@ import { connect } from "./net/ws.ts";
 import { Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
 import { solve } from "./pet/rig.ts";
+import { Fx } from "./render/fx.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
@@ -39,6 +40,7 @@ const cfg = await invoke<{ ws_url: string }>("config");
 const avatar = new AvatarState(performance.now());
 const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
+const fx = new Fx($<HTMLCanvasElement>("fx"));
 const director = new Director();
 const clips = new ClipPlayer();
 const glitch = new GlitchFx(performance.now());
@@ -62,7 +64,7 @@ let greetAt = -Infinity;
 let cursor: [number, number] | null = null;
 let cursorAt = -Infinity;
 const latencies: number[] = [];
-let spot = 1; // window position along the taskbar, 0..1 (Rust starts it at the right)
+let spot = 1; // where she is along the taskbar, 0..1 from left to right
 let teleporting = false;
 let nextWander = performance.now() + wanderGap();
 
@@ -72,21 +74,42 @@ function wanderGap(): number {
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** Collapses, moves the window somewhere else along the taskbar (at least a third of it away), comes back. */
+/** Slides the HUD column (transmission, input and Capri) to `spot` along the taskbar. */
+function placeHud(): void {
+  const edge = 16;
+  hud.style.transform = `translateX(${Math.round(edge + spot * (innerWidth - hud.offsetWidth - 2 * edge))}px)`;
+}
+placeHud();
+addEventListener("resize", placeHud);
+
+/** Her body on the page: center, feet line, and rough size, for the screen effects. */
+function body(): { x: number; y: number; ground: number; size: number } {
+  const r = stage.getBoundingClientRect();
+  const b = pet.bounds() ?? { x: 0, y: 0, w: r.width, h: r.height };
+  return { x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2, ground: r.top + b.y + b.h, size: Math.max(b.w, b.h) };
+}
+
+/** Collapses, leaves a column of light, streaks to another spot (at least a third of the taskbar away) and lands. */
 async function teleport(): Promise<void> {
   if (teleporting) return;
   teleporting = true;
   const to = spot > 0.5 ? Math.random() * (spot - 0.35) : spot + 0.35 + Math.random() * (0.65 - spot);
+  const from = body();
   if (!reducedMotion.matches) {
     glitch.kick("vanish", performance.now());
-    pet.burst(false);
-    await sleep(VANISH_OUT_MS + 60);
+    fx.burst(from.x, from.y, from.size, false);
+    await sleep(VANISH_OUT_MS);
+    fx.beam(from.x, from.ground);
   }
-  await invoke("move_to", { frac: to }).catch((e) => console.warn("move_to", e));
   spot = to;
+  placeHud();
   if (!reducedMotion.matches) {
+    const at = body();
+    fx.streak(from.x, from.y, at.x, at.y);
+    await sleep(60);
+    fx.beam(at.x, at.ground, true);
     glitch.kick("arrive", performance.now());
-    pet.burst(true);
+    fx.burst(at.x, at.y, at.size, true);
   }
   teleporting = false;
 }
@@ -232,7 +255,6 @@ pet.app.ticker.add((ticker) => {
   }
   if (!ended || typewriter.pending) lastTalk = now;
   petEnergy = Math.max(0, petEnergy - ticker.deltaMS * 0.08);
-  pet.step(ticker.deltaMS);
   if (now > nextWander) {
     nextWander = now + wanderGap();
     if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS) void teleport();

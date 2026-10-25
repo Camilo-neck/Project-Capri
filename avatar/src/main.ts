@@ -346,6 +346,8 @@ function hide(): void {
     placePeek(null);
   }
   hiding = true;
+  clearTimeout(hideTimer);
+  hideTx(); // nothing of hers left floating around
   glitch.kick("doze", performance.now());
   cam.style.visibility = "hidden";
   if (!reducedMotion.matches) {
@@ -627,7 +629,16 @@ function setInputOpen(open: boolean): void {
   if (open) {
     input.focus();
     if (txText.textContent) showTx();
+  } else if (!tx.hidden && !tx.classList.contains("typing") && !hideTimer) {
+    // she's done talking: the transmission goes like it does with the bar closed
+    hideTimer = window.setTimeout(hideTx, HIDE_AFTER_MS);
   }
+}
+
+/** The transmission goes away, unless a choice still waits on it. */
+function hideTx(): void {
+  hideTimer = 0;
+  if (!confirming) tx.hidden = true;
 }
 
 let guardTimer = 0;
@@ -903,9 +914,7 @@ pet.app.ticker.add((ticker) => {
     avatar.mouth = ended ? null : "closed";
     if (ended && tx.classList.contains("typing")) {
       tx.classList.remove("typing");
-      if (inputRow.hidden) hideTimer = window.setTimeout(() => {
-          if (!confirming) tx.hidden = true; // a pending choice stays up
-        }, HIDE_AFTER_MS);
+      if (inputRow.hidden) hideTimer = window.setTimeout(hideTx, HIDE_AFTER_MS);
     }
   }
   if (!ended || typewriter.pending) lastTalk = now;

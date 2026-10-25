@@ -108,7 +108,10 @@ pub fn watch(app: tauri::AppHandle) {
                 max,
             })
             .collect();
-        let now = Windows { fg: unsafe { GetForegroundWindow() } as isize, wins };
+        // Typing to her focuses her own window: "the window in front" is then the one you came from.
+        let fg = unsafe { GetForegroundWindow() } as isize;
+        let fg = if fg == own.0 as isize { last.as_ref().map_or(0, |l| l.fg) } else { fg };
+        let now = Windows { fg, wins };
         if last.as_ref() != Some(&now) {
             let _ = app.emit("windows", &now);
             *app.state::<Latest>().0.lock().unwrap() = Some(now.clone());

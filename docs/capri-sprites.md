@@ -54,3 +54,20 @@ La ventana deja pasar los clics al escritorio salvo justo sobre Capri, o mientra
 2. Si hacen falta ojos, bocas o efectos nuevos, dibújalos como sellos en `stamps.ts` (una letra por píxel) o como efecto en `draw.ts`.
 3. Decide cuándo se activa en `choose()` o en `EMOTION_BEHAVIOR`.
 4. Regenera esta hoja: con `npx vite` corriendo en `avatar/`, ejecuta `uv run --project backend python scripts/export_sprite_sheet.py` desde la raíz.
+
+## Clips de PixelLab (arte definitivo, en curso)
+
+Las animaciones dibujadas con PixelLab (`avatar/assets/pet/anim/<clip>/<clip>_NN.png`) sustituyen a la mascota por código en los estados que ya las tienen:
+- `avatar/src/pet/clips.ts` declara los clips (`CLIPS`: fotogramas, fps y si van en ida y vuelta) y a qué estado pertenecen (`SPRITE_FOR`).
+- Al entrar en un estado con clips se reproduce su clip de entrada y luego el bucle. Al salir, el de entrada al revés; las reacciones al ratón cambian al instante.
+- Los fotogramas se muestran a ×2, con los pies de su primer fotograma en la misma línea de suelo que la mascota por código. La zona de clic sale de los píxeles de cada fotograma.
+
+| Estado | Clips | Vista |
+|---|---|---|
+| `sentada` | `sentarse` (9 fotogramas, 12 fps, una vez) → `sentada_idle` (7 fotogramas, 7 fps, ida y vuelta) | 3/4 |
+
+**Para añadir un clip:**
+1. Descárgalo con `scripts/fetch_pet_anim.py <clip> <urls…>`.
+2. Añádelo a `CLIPS` y a `SPRITE_FOR`.
+
+El plan completo y su estado están en `docs/arte-pixellab.md`.

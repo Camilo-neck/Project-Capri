@@ -5,7 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 
 import type { ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
-import { Director } from "./pet/behaviors.ts";
+import { Director, LINGER_MS } from "./pet/behaviors.ts";
+import { ClipPlayer } from "./pet/clips.ts";
 import { solve } from "./pet/rig.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
@@ -37,6 +38,7 @@ const avatar = new AvatarState(performance.now());
 const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
 const director = new Director();
+const clips = new ClipPlayer();
 
 let turn = 0;
 let sentAt = 0;
@@ -46,7 +48,7 @@ let ended = true;
 let hideTimer = 0;
 let linkStatus: Status = "down";
 let variant = 0;
-let lastTalk = performance.now();
+let lastTalk = performance.now() - LINGER_MS; // start idle, not as if she had just spoken
 let pokeAt = -Infinity;
 let petAt = -Infinity;
 let petSide = 1;
@@ -206,12 +208,16 @@ pet.app.ticker.add((ticker) => {
     const [hx, hy] = headOnPage();
     look = [Math.max(-1, Math.min(1, (cursor[0] - hx) / LOOK_RANGE)), Math.max(-1, Math.min(1, (cursor[1] - hy) / LOOK_RANGE))];
   }
-  const { pose } = director.frame(
+  const { name, pose } = director.frame(
     { now: t, status: linkStatus, emocion: avatar.emocion, variant, lastTalk, pokeAt, petAt, greetAt },
     { look, petSide },
     { gesto: s.gesto, gestureT: s.gestureT, mouth: s.mouth, blinking: s.blinking },
   );
-  pet.paint(pose, t, s.glitch * 0.6);
+  // Behaviors with PixelLab sprite clips show those; the rest use the code-drawn pet.
+  clips.update(name, t);
+  const clipFrame = clips.frame(t);
+  pet.showClip(clipFrame);
+  if (!clipFrame) pet.paint(pose, t, s.glitch * 0.6);
 
   const b = pet.bounds();
   if (b) {

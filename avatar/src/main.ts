@@ -10,13 +10,14 @@ import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
 import { solve } from "./pet/rig.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
-import { GlitchFx, OFF } from "./state/glitch.ts";
+import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
 const NUM_CTX = 8192;
 const LOOK_RANGE = 140; // px from her head at which the gaze reaches its limit
 const LOOK_IDLE_MS = 4000; // gaze returns to you when the mouse rests this long
+const WANDER_MS = [3 * 60_000, 6 * 60_000]; // idle, she teleports elsewhere on the taskbar this often
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const hud = document.querySelector<HTMLElement>(".hud")!;
@@ -42,7 +43,7 @@ const director = new Director();
 const clips = new ClipPlayer();
 const glitch = new GlitchFx(performance.now());
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch, teleport } }); // inspection from devtools
 
 let turn = 0;
 let sentAt = 0;
@@ -61,6 +62,34 @@ let greetAt = -Infinity;
 let cursor: [number, number] | null = null;
 let cursorAt = -Infinity;
 const latencies: number[] = [];
+let spot = 1; // window position along the taskbar, 0..1 (Rust starts it at the right)
+let teleporting = false;
+let nextWander = performance.now() + wanderGap();
+
+function wanderGap(): number {
+  return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
+}
+
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/** Collapses, moves the window somewhere else along the taskbar (at least a third of it away), comes back. */
+async function teleport(): Promise<void> {
+  if (teleporting) return;
+  teleporting = true;
+  const to = spot > 0.5 ? Math.random() * (spot - 0.35) : spot + 0.35 + Math.random() * (0.65 - spot);
+  if (!reducedMotion.matches) {
+    glitch.kick("vanish", performance.now());
+    pet.burst(false);
+    await sleep(VANISH_OUT_MS + 60);
+  }
+  await invoke("move_to", { frac: to }).catch((e) => console.warn("move_to", e));
+  spot = to;
+  if (!reducedMotion.matches) {
+    glitch.kick("arrive", performance.now());
+    pet.burst(true);
+  }
+  teleporting = false;
+}
 
 function setStatus(s: Status): void {
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
@@ -92,7 +121,7 @@ const link = connect(
         break;
       case "utterance_start":
         // Also covers a retry: the new utterance replaces the text shown so far.
-        if (avatar.setEmotion(msg.emocion)) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
+        if (avatar.setEmotion(msg.emocion) && !teleporting) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
         avatar.playGesture(msg.gesto, now);
         variant = Math.floor(Math.random() * 1000);
         typewriter.clear();
@@ -129,6 +158,7 @@ function setInputOpen(open: boolean): void {
 }
 
 void listen("open-input", () => setInputOpen(true));
+void listen("teleport", () => void teleport());
 void listen<[number, number]>("cursor", (e) => {
   cursor = e.payload;
   cursorAt = performance.now();
@@ -163,7 +193,7 @@ function headOnPage(): [number, number] {
 stage.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return;
   pokeAt = performance.now();
-  glitch.kick("poke", pokeAt);
+  if (!teleporting) glitch.kick("poke", pokeAt);
 });
 stage.addEventListener("pointermove", (e) => {
   const [hx, hy] = headOnPage();
@@ -202,6 +232,11 @@ pet.app.ticker.add((ticker) => {
   }
   if (!ended || typewriter.pending) lastTalk = now;
   petEnergy = Math.max(0, petEnergy - ticker.deltaMS * 0.08);
+  pet.step(ticker.deltaMS);
+  if (now > nextWander) {
+    nextWander = now + wanderGap();
+    if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS) void teleport();
+  }
 
   const frame = Math.floor(now / POSE_MS);
   if (frame === lastFrame) return; // pixel art pacing: 20 fps

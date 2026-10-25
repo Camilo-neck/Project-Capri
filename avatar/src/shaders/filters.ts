@@ -17,7 +17,8 @@ uniform highp vec4 uOutputFrame;
 `;
 
 /**
- * Glitch on pixel art: displaced horizontal bands, RGB split and a flat silhouette frame.
+ * Glitch on pixel art: displaced horizontal bands, RGB split, a flat silhouette frame, and the
+ * teleport's collapse into a vertical line and dissolve into missing cells.
  * Bands and shifts are whole native pixels of the grid at uGrid (screen origin xy, pixel size z),
  * so the art never goes blurry. All uniforms at 0 = off.
  */
@@ -28,6 +29,9 @@ uniform float uSplit;
 uniform float uSeed;
 uniform vec4 uSil;
 uniform vec3 uGrid;
+uniform float uCollapse;
+uniform float uDissolve;
+uniform float uAxis; // screen x she collapses toward
 
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -42,13 +46,18 @@ vec4 at(vec2 uv) {
 
 void main() {
   vec2 screen = vTextureCoord * uInputSize.xy + uOutputFrame.xy;
+  if (uCollapse >= 1.0) { finalColor = vec4(0.0); return; }
   vec2 cell = floor((screen - uGrid.xy) / uGrid.z);
+  if (uDissolve > 0.0 && hash(floor(cell / vec2(4.0, 3.0)) + 0.5) < uDissolve) { finalColor = vec4(0.0); return; }
+  // teleport: squeezed toward the axis, in whole native pixels
+  float axis = floor((uAxis - uGrid.x) / uGrid.z);
+  float sx = axis + floor((cell.x - axis) / max(1.0 - uCollapse, 0.05) + 0.5);
   float bandH = 2.0 + floor(hash(vec2(uSeed, 7.0)) * 5.0);
   float band = floor(cell.y / bandH);
   float dx = 0.0;
   if (hash(vec2(band, uSeed)) < uGlitch * 0.6) dx = floor((hash(vec2(band + 3.0, uSeed)) - 0.5) * 16.0 * uGlitch + 0.5);
   float px = uGrid.z * uInputSize.z; // one native pixel, in uv
-  vec2 uv = vTextureCoord - vec2(dx * px, 0.0);
+  vec2 uv = vTextureCoord + vec2((sx - cell.x - dx) * px, 0.0);
   vec4 c = at(uv);
   if (uSplit > 0.0) {
     vec4 r = at(uv + vec2(uSplit * px, 0.0));
@@ -63,6 +72,9 @@ void main() {
     uSeed: { value: 0, type: "f32" },
     uSil: { value: [0, 0, 0, 0], type: "vec4<f32>" },
     uGrid: { value: [0, 0, 1], type: "vec3<f32>" },
+    uCollapse: { value: 0, type: "f32" },
+    uDissolve: { value: 0, type: "f32" },
+    uAxis: { value: 0, type: "f32" },
   });
 }
 

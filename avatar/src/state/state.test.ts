@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { AvatarState, GESTURE_MS, POSE_MS } from "./avatar.ts";
-import { GLITCH_MS, GlitchFx } from "./glitch.ts";
+import { GLITCH_MS, GlitchFx, OFF, VANISH_OUT_MS } from "./glitch.ts";
 import { mouthFor, Typewriter } from "./text.ts";
 
 test("mouth follows vowels and closes on punctuation", () => {
@@ -48,6 +48,21 @@ test("glitch effects play once; poke and hurt open with a silhouette frame", () 
   assert.ok(after.glitch > 0 && after.split > 0);
   fx.kick("poke", 3000);
   assert.equal(fx.at(3000, false).sil[3], 1);
+});
+
+test("teleport: vanish collapses and stays gone until arrive, which ends on two impact frames", () => {
+  const fx = new GlitchFx(0, () => 1);
+  fx.kick("vanish", 0);
+  assert.equal(fx.at(0, false).collapse, 0);
+  const mid = fx.at(VANISH_OUT_MS / 2, false);
+  assert.ok(mid.collapse > 0 && mid.collapse < 1 && mid.dissolve > 0);
+  assert.equal(fx.at(VANISH_OUT_MS + 500, false).collapse, 1); // the window moves meanwhile
+  fx.kick("arrive", 2000);
+  assert.ok(fx.at(2000, false).collapse > 0.9);
+  const end = GLITCH_MS.arrive;
+  assert.deepEqual(fx.at(2000 + end - 2 * POSE_MS, false).sil, [0.21, 1, 0.48, 1]);
+  assert.deepEqual(fx.at(2000 + end - POSE_MS, false).sil, [0.08, 0.06, 0.11, 1]);
+  assert.deepEqual(fx.at(2000 + end, false), OFF);
 });
 
 test("idle twitches every 5-13 s, never while busy or over another effect", () => {

@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{Emitter, LogicalPosition, Manager, RunEvent};
+use tauri::{Emitter, LogicalPosition, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[derive(Clone, Serialize)]
@@ -41,6 +41,27 @@ fn set_hitbox(x: f64, y: f64, w: f64, h: f64, mouse: tauri::State<Mouse>) {
 #[tauri::command]
 fn set_interactive(on: bool, mouse: tauri::State<Mouse>) {
     mouse.forced.store(on, Ordering::Relaxed);
+}
+
+/// Puts the window on the primary monitor's taskbar edge, `frac` 0..1 from left to right.
+fn place(w: &WebviewWindow, frac: f64) -> tauri::Result<()> {
+    let (Some(m), Ok(size)) = (w.primary_monitor()?, w.outer_size()) else { return Ok(()) };
+    let scale = m.scale_factor();
+    let area = m.work_area();
+    let pos = area.position.to_logical::<f64>(scale);
+    let work = area.size.to_logical::<f64>(scale);
+    let screen = m.size().to_logical::<f64>(scale);
+    let win = size.to_logical::<f64>(scale);
+    // Windows keeps windows on screen, so with a short taskbar she sits a few px above it.
+    let bottom = (pos.y + work.height + BELOW_GROUND).min(m.position().to_logical::<f64>(scale).y + screen.height);
+    let x = pos.x + 16.0 + frac.clamp(0.0, 1.0) * (work.width - win.width - 32.0);
+    w.set_position(LogicalPosition::new(x, bottom - win.height))
+}
+
+/// Teleport: the frontend hides her, moves the window here, and brings her back.
+#[tauri::command]
+fn move_to(frac: f64, window: WebviewWindow) -> Result<(), String> {
+    place(&window, frac).map_err(|e| e.to_string())
 }
 
 /// ~30 Hz: forwards the cursor (for her gaze) and toggles click-through by hit-testing her.
@@ -107,16 +128,23 @@ fn start_backend() -> (String, Option<Child>) {
 pub fn run() {
     let (ws_url, child) = start_backend();
     let open_input = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+    let teleport = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT);
 
     let app = tauri::Builder::default()
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .manage(Mouse::default())
-        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive])
+        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive, move_to])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
-                    if shortcut == &open_input && event.state() == ShortcutState::Pressed {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if shortcut == &teleport {
+                        let _ = app.emit("teleport", ());
+                    }
+                    if shortcut == &open_input {
                         app.state::<Mouse>().forced.store(true, Ordering::Relaxed);
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.set_ignore_cursor_events(false);
@@ -129,19 +157,8 @@ pub fn run() {
         )
         .setup(move |app| {
             app.global_shortcut().register(open_input)?;
-            // Bottom-right of the primary monitor, sitting on the taskbar's top edge.
-            let w = app.get_webview_window("main").unwrap();
-            if let (Some(m), Ok(size)) = (w.primary_monitor()?, w.outer_size()) {
-                let scale = m.scale_factor();
-                let area = m.work_area();
-                let pos = area.position.to_logical::<f64>(scale);
-                let work = area.size.to_logical::<f64>(scale);
-                let screen = m.size().to_logical::<f64>(scale);
-                let win = size.to_logical::<f64>(scale);
-                // Windows keeps windows on screen, so with a short taskbar she sits a few px above it.
-                let bottom = (pos.y + work.height + BELOW_GROUND).min(m.position().to_logical::<f64>(scale).y + screen.height);
-                w.set_position(LogicalPosition::new(pos.x + work.width - win.width - 16.0, bottom - win.height))?;
-            }
+            app.global_shortcut().register(teleport)?;
+            place(&app.get_webview_window("main").unwrap(), 1.0)?; // bottom right, on the taskbar
             let handle = app.handle().clone();
             std::thread::spawn(move || watch_mouse(handle));
             Ok(())

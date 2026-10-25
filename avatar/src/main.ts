@@ -39,6 +39,7 @@ const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
 const director = new Director();
 const clips = new ClipPlayer();
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips } }); // inspection from devtools
 
 let turn = 0;
 let sentAt = 0;

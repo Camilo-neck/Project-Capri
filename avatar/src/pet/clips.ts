@@ -100,7 +100,11 @@ interface Step {
   clip: string;
   reverse: boolean;
   once: boolean;
+  speed: number;
 }
+
+/** Undoing transitions (standing up, closing the laptop) runs faster so replies aren't delayed. */
+export const EXIT_SPEED = 2;
 
 export interface ClipFrame {
   clip: string;
@@ -126,10 +130,10 @@ export class ClipPlayer {
     if (!INSTANT.has(behavior)) {
       let shared = 0; // length of the common prefix
       while (shared < had.length && had[shared] === wants[shared]) shared++;
-      for (const clip of had.slice(shared).reverse()) steps.push({ clip, reverse: true, once: true });
-      for (const clip of wants.slice(shared)) steps.push({ clip, reverse: false, once: true });
+      for (const clip of had.slice(shared).reverse()) steps.push({ clip, reverse: true, once: true, speed: EXIT_SPEED });
+      for (const clip of wants.slice(shared)) steps.push({ clip, reverse: false, once: true, speed: 1 });
     }
-    if (next) steps.push({ clip: next.loop, reverse: false, once: false });
+    if (next) steps.push({ clip: next.loop, reverse: false, once: false, speed: 1 });
     this.steps = steps;
     this.stepStart = now;
   }
@@ -140,12 +144,13 @@ export class ClipPlayer {
       const step = this.steps[0];
       const info = CLIPS[step.clip];
       const t = now - this.stepStart;
-      if (step.once && t >= clipDuration(info)) {
+      const duration = clipDuration(info) / step.speed;
+      if (step.once && t >= duration) {
         this.steps.shift();
-        this.stepStart += clipDuration(info);
+        this.stepStart += duration;
         continue;
       }
-      let i = Math.floor((t / 1000) * info.fps);
+      let i = Math.floor((t / 1000) * info.fps * step.speed);
       if (step.once) i = Math.min(i, info.frames - 1);
       else if (info.pingpong && info.frames > 1) {
         const period = 2 * (info.frames - 1);

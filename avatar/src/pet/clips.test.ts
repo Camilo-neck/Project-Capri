@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ClipPlayer, CLIPS, clipDuration, gestureFrame, SPRITE_FOR } from "./clips.ts";
+import { ClipPlayer, CLIPS, clipDuration, EXIT_SPEED, gestureFrame, SPRITE_FOR } from "./clips.ts";
 
 const sit = clipDuration(CLIPS.sentarse);
+const standUp = sit / EXIT_SPEED;
 
 test("arriving at a clip behavior plays the enter clip once, then loops", () => {
   const p = new ClipPlayer();
@@ -28,7 +29,7 @@ test("standing up before a standing clip: reversed sit-down, then the new loop",
   p.update("sentada", 0);
   p.update("feliz", 10_000);
   assert.deepEqual(p.frame(10_000), { clip: "sentarse", index: CLIPS.sentarse.frames - 1 });
-  assert.equal(p.frame(10_000 + sit)!.clip, "feliz");
+  assert.equal(p.frame(10_000 + standUp + 1)!.clip, "feliz");
   p.update("hablar", 20_000); // same (standing) family: straight to the loop
   assert.equal(p.frame(20_000)!.clip, "hablar");
 });
@@ -50,8 +51,8 @@ test("leaving for a behavior without clips: reversed sit-down, then the code-dra
     p.update("sentada", 0);
     p.update("escribir", 10_000);
     assert.deepEqual(p.frame(10_000), { clip: "sentarse", index: CLIPS.sentarse.frames - 1 });
-    assert.equal(p.frame(10_000 + sit - 1)!.index, 0);
-    assert.equal(p.frame(10_000 + sit + 1), null);
+    assert.equal(p.frame(10_000 + standUp - 1)!.index, 0);
+    assert.equal(p.frame(10_000 + standUp + 1), null);
   }));
 
 test("transition chains: sitting -> typing opens the laptop; typing -> talking closes it and stands up", () => {
@@ -63,8 +64,8 @@ test("transition chains: sitting -> typing opens the laptop; typing -> talking c
   assert.equal(p.frame(10_000 + open)!.clip, "escribir");
   p.update("hablar", 20_000);
   assert.deepEqual(p.frame(20_000), { clip: "abrir_portatil", index: CLIPS.abrir_portatil.frames - 1 });
-  assert.equal(p.frame(20_000 + open)!.clip, "sentarse");
-  assert.equal(p.frame(20_000 + open + sit + 1)!.clip, "hablar");
+  assert.equal(p.frame(20_000 + open / EXIT_SPEED + 1)!.clip, "sentarse");
+  assert.equal(p.frame(20_000 + (open + sit) / EXIT_SPEED + 1)!.clip, "hablar");
 });
 
 test("gestures play over standing loops only", () => {

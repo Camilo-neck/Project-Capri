@@ -10,7 +10,7 @@ import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Styl
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
 import { CameraView } from "./render/camera.ts";
-import { MaskView, type MaskLook } from "./render/mask.ts";
+import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
@@ -133,14 +133,14 @@ let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
 let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it rides along with her window)
 let acting: object | null = null; // a tool running: her sparks last while this is the same run
 let peek: (PeekPose & { until: number; ducks: number }) | null = null; // peeking in from a screen edge
-let hiding: Point | null = null; // /escondete: just her small mask, eyes open, this far from her feet
+let hiding = false; // /escondete: just her small mask in the bottom-left corner, eyes open
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || !!hiding;
+const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || hiding;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -333,44 +333,49 @@ function zapCursor(): void {
   lastTalk = Math.max(lastTalk, now - LINGER_MS + 2500); // grins for a couple of seconds
 }
 
-/** /escondete: she comes apart and only a small mask is left where her head was, eyes open on the pointer. */
+/** Where she hides: the bottom-left corner, just over the taskbar (the right one has the tray and the clock). */
+function hideSpot(): Point {
+  return { x: EDGE + (6 - MASK_BOX.left * HIDE_SCALE), y: floor() - (10 + MASK_BOX.bottom * HIDE_SCALE) };
+}
+
+/** /escondete: she comes apart and streaks off to the corner, where only a small mask is left, eyes open on the pointer. */
 function hide(): void {
   if (hiding || teleporting || doze.asleep) return;
   if (peek) {
     peek = null;
     placePeek(null);
   }
-  const [hx, hy] = headOnPage();
-  hiding = { x: hx - at.x, y: hy - at.y };
-  const now = performance.now();
-  glitch.kick("doze", now);
+  hiding = true;
+  glitch.kick("doze", performance.now());
   cam.style.visibility = "hidden";
   if (!reducedMotion.matches) {
-    const b = body();
+    const b = body(), to = hideSpot();
     fx.burst(b.x, b.y, b.size * 0.4, false);
+    fx.streak(b.x, b.y, to.x, to.y);
   }
 }
 
 /** Out of hiding (a click on her mask, /vuelve, /escondete again, or something to say). */
 function unhide(): void {
   if (!hiding) return;
-  hiding = null;
+  hiding = false;
   hideMask.show(false);
   cam.style.visibility = "";
   glitch.kick("arrive", performance.now());
   if (!reducedMotion.matches) {
-    const b = body();
+    const b = body(), from = hideSpot();
+    fx.streak(from.x, from.y, b.x, b.y);
     fx.burst(b.x, b.y, b.size, true);
   }
 }
 
-/** Hiding: the small mask riding along with her spot, eyes open on the pointer, a blink now and then. */
+/** Hiding: the small mask in its corner, eyes open on the pointer, a blink now and then. */
 function drawHide(now: number): void {
   // shown once her body has come apart
-  const shown = !!hiding && glitch.at(now, false).collapse >= 1;
+  const shown = hiding && glitch.at(now, false).collapse >= 1;
   hideMask.show(shown);
   if (!shown) return;
-  hideMask.center = { x: at.x + hiding!.x, y: at.y + hiding!.y };
+  hideMask.center = hideSpot();
   const blink = now % HIDE_BLINK_MS < 130;
   hideMask.draw(
     { eyes: blink ? [0, 0] : [1, 1], look: cursor ? { x: cursor[0], y: cursor[1] } : null },

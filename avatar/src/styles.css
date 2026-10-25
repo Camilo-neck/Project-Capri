@@ -34,6 +34,14 @@ body {
   pointer-events: none;
 }
 
+/* her mask, asleep (render/mask.ts places it) */
+.mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  cursor: pointer;
+}
+
 .hud {
   position: absolute;
   left: 0;

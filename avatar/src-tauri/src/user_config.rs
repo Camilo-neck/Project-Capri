@@ -19,11 +19,13 @@ pub struct Avatar {
     pub poseer_ventanas: bool,
     /// "original" (the show's art) or "pixel" (the PixelLab pet).
     pub estilo: String,
+    /// Minutes without using the PC or talking to her before she sleeps down to her mask; 0 = never.
+    pub dormir_min: u32,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true, estilo: "original".into() }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20 }
     }
 }
 
@@ -108,6 +110,7 @@ mod tests {
         assert!(partial.avatar.deambular && !partial.avatar.poseer_ventanas);
         assert_eq!(partial.atajos.escribir, "Ctrl+Alt+Space");
         assert_eq!(partial.avatar.estilo, "original");
+        assert_eq!(partial.avatar.dormir_min, 20);
     }
 
     #[test]

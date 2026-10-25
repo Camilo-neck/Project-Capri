@@ -1,8 +1,9 @@
 // When and how hard Capri glitches: a pure function of time, fed to the glitch filter
 // (shaders/filters.ts). One effect at a time; idle twitches only fill quiet moments.
 import { POSE_MS } from "./avatar.ts";
+import { DOZE_OUT_MS } from "./doze.ts";
 
-export type GlitchKind = "twitch" | "change" | "poke" | "hurt" | "vanish" | "arrive";
+export type GlitchKind = "twitch" | "change" | "poke" | "hurt" | "vanish" | "arrive" | "doze";
 export type RGBA = [number, number, number, number];
 
 export interface Glitch {
@@ -30,6 +31,7 @@ export const GLITCH_MS: Record<GlitchKind, number> = {
   hurt: 500,
   vanish: 3000, // safety net (longer than a possession): back even if "arrive" never comes
   arrive: ARRIVE_IN_MS + 2 * POSE_MS,
+  doze: Infinity, // gone until she wakes ("arrive")
 };
 
 function shape(kind: GlitchKind, e: number): Glitch {
@@ -47,6 +49,12 @@ function shape(kind: GlitchKind, e: number): Glitch {
       if (e >= VANISH_OUT_MS) return { ...OFF, collapse: 1 };
       const k = e / VANISH_OUT_MS;
       return { ...OFF, glitch: 0.4 + 0.5 * k, split: Math.round(1 + 2 * k), collapse: k * k, dissolve: 0.6 * k };
+    }
+    case "doze": {
+      // her body comes apart into missing cells, then only the mask is left
+      if (e >= DOZE_OUT_MS) return { ...OFF, collapse: 1 };
+      const k = e / DOZE_OUT_MS;
+      return { ...OFF, glitch: 0.25 * k, split: Math.round(2 * k), dissolve: 0.9 * k * k };
     }
     case "arrive": {
       if (e >= ARRIVE_IN_MS) return { ...OFF, sil: e < ARRIVE_IN_MS + POSE_MS ? GREEN : INK }; // two impact frames
@@ -72,6 +80,7 @@ export class GlitchFx {
   }
 
   kick(kind: GlitchKind, now: number): void {
+    if (this.kind === "doze" && kind !== "arrive") return; // asleep: only waking brings her body back
     this.kind = kind;
     this.start = now;
   }

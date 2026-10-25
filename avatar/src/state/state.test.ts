@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { AvatarState, GESTURE_MS, POSE_MS } from "./avatar.ts";
 import { GLITCH_MS, GlitchFx, OFF, VANISH_OUT_MS } from "./glitch.ts";
 import { mouthFor, Typewriter } from "./text.ts";
+import { DOZE_OUT_MS } from "./doze.ts";
 
 test("mouth follows vowels and closes on punctuation", () => {
   assert.equal(mouthFor("a"), "A");
@@ -63,6 +64,19 @@ test("teleport: vanish collapses and stays gone until arrive, which ends on two 
   assert.deepEqual(fx.at(2000 + end - 2 * POSE_MS, false).sil, [0.21, 1, 0.48, 1]);
   assert.deepEqual(fx.at(2000 + end - POSE_MS, false).sil, [0.08, 0.06, 0.11, 1]);
   assert.deepEqual(fx.at(2000 + end, false), OFF);
+});
+
+test("dozing: her body dissolves away and stays gone, with no twitches, until she arrives again", () => {
+  const fx = new GlitchFx(0, () => 0);
+  fx.kick("doze", 0);
+  const mid = fx.at(DOZE_OUT_MS / 2, true);
+  assert.ok(mid.dissolve > 0 && mid.dissolve < 0.9 && mid.collapse === 0);
+  assert.equal(fx.at(DOZE_OUT_MS, true).collapse, 1);
+  assert.equal(fx.at(60 * 60_000, true).collapse, 1); // an hour later: still only the mask
+  fx.kick("change", 60 * 60_000); // e.g. landing after her window closed: no body yet
+  assert.equal(fx.at(60 * 60_000 + 10, true).collapse, 1);
+  fx.kick("arrive", 3_600_001);
+  assert.deepEqual(fx.at(3_600_001 + GLITCH_MS.arrive, true), OFF);
 });
 
 test("idle twitches every 5-13 s, never while busy or over another effect", () => {

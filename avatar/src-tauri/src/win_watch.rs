@@ -42,6 +42,19 @@ pub fn windows(latest: tauri::State<Latest>) -> Option<Windows> {
     latest.0.lock().unwrap().clone()
 }
 
+/// Milliseconds since the last keyboard or mouse input anywhere (for her falling asleep).
+#[tauri::command]
+pub fn idle_ms() -> u32 {
+    use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    // SAFETY: plain out-parameter with its size set
+    if unsafe { GetLastInputInfo(&mut info) } == 0 {
+        return 0;
+    }
+    unsafe { GetTickCount() }.wrapping_sub(info.dwTime)
+}
+
 /// The monitor of the window the user was on (never Capri's own; the primary if none), physical px:
 /// left, top, right, bottom. That's what she captures when asked to look.
 #[tauri::command]

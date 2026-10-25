@@ -148,6 +148,7 @@ pub fn run() {
             config,
             set_hitboxes,
             win_watch::windows,
+            win_watch::idle_ms,
             win_watch::look_target,
             win_watch::capture_guard,
             user_config::avatar_settings,

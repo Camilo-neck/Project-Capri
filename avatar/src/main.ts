@@ -9,8 +9,10 @@ import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
+import { MaskView } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
+import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
@@ -25,6 +27,9 @@ const EDGE = 16; // px kept free at the screen sides
 const GRAVITY = 0.0028; // px/ms², falling off a ledge
 const POSSESS_MS = 2000;
 const DROP_TOLERANCE = 30; // px: let go this close to a window's top edge and she sits on it
+const MASK_SCALE = 0.55; // her mask asleep, about 55 px wide
+const WAKE_NEAR = 30; // px around the mask: the pointer this close wakes her
+const STIR_NEAR = 110; // closer than this, she stirs and her eyes follow it
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const hud = document.querySelector<HTMLElement>(".hud")!;
@@ -57,12 +62,17 @@ const pet = await createPet(stage);
 const fxCanvas = $<HTMLCanvasElement>("fx");
 const fx = new Fx(fxCanvas);
 const director = new Director();
-let style: Style = (await invoke<{ estilo: string }>("avatar_settings")).estilo === "pixel" ? "pixel" : "original";
+type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number };
+const settings = await invoke<AvatarSettings>("avatar_settings");
+let style: Style = settings.estilo === "pixel" ? "pixel" : "original";
+let sleepAfter = settings.dormir_min * 60_000;
 await pet.setStyle(style);
 let clips = new ClipPlayer(style);
 const glitch = new GlitchFx(performance.now());
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+const doze = new Doze();
+const mask = new MaskView($<HTMLCanvasElement>("mask"), MASK_SCALE);
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -94,13 +104,16 @@ let nextWander = performance.now() + wanderGap();
 let wins: Windows = { fg: 0, wins: [] };
 let perch: Perch | null = null; // the window she sits on; null = the taskbar
 let at: Point = { x: 0, y: 0 }; // her feet, page px
+let activeAt = performance.now(); // last time you did something with her (talking counts through lastTalk)
+let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
+let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it rides along with her window)
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging;
+const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -199,7 +212,7 @@ async function possess(): Promise<void> {
 /** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then,
  * as far as config.toml [avatar] allows (read each time, so edits apply without a restart). */
 async function wander(): Promise<void> {
-  const cfg = await invoke<{ deambular: boolean; poseer_ventanas: boolean }>("avatar_settings");
+  const cfg = await invoke<AvatarSettings>("avatar_settings");
   if (perch && cfg.poseer_ventanas && Math.random() < 0.3) {
     void possess();
     return;
@@ -207,7 +220,46 @@ async function wander(): Promise<void> {
   if (cfg.deambular) void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
 }
 
+/** A long while with nobody around: she comes apart and only her mask is left, eyes shut, where her head was. */
+function fallAsleep(now: number): void {
+  const [hx, hy] = headOnPage();
+  maskOffset = { x: hx - at.x, y: hy - at.y };
+  doze.start(now);
+  glitch.kick("doze", now);
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size * 0.5, false);
+  }
+}
+
+/** Her eyes snap open (the ticker brings her body back after them). */
+function wakeUp(): void {
+  const now = performance.now();
+  activeAt = now;
+  if (!doze.asleep) return;
+  doze.wake(now);
+  if (!doze.asleep) back(now); // she was still coming apart
+}
+
+function back(now: number): void {
+  mask.show(false);
+  glitch.kick("arrive", now);
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size, true);
+  }
+  greetAt = now; // she says hi again
+  lastTalk = Math.max(lastTalk, now - LINGER_MS); // awake and idle, not straight back to her nap
+}
+
+// Once in a while: how long the PC has been idle, and the setting (edits apply without a restart).
+setInterval(async () => {
+  pcIdle = await invoke<number>("idle_ms");
+  sleepAfter = (await invoke<AvatarSettings>("avatar_settings")).dormir_min * 60_000;
+}, 10_000);
+
 function setStatus(s: Status): void {
+  if (s === "thinking" || s === "speaking" || s === "looking") wakeUp();
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
   if (s === "looking") fx.scan();
   if (s === "thinking" && linkStatus === "idle" && !awaiting) startTurn(""); // she speaks up on her own
@@ -245,6 +297,7 @@ const link = connect(
         setStatus(msg.value);
         break;
       case "utterance_start":
+        wakeUp();
         if (confirming) hideChoices(); // the confirmation timed out: the turn moved on
         // Also covers a retry: the new utterance replaces the text shown so far.
         if (avatar.setEmotion(msg.emocion) && !teleporting) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
@@ -325,6 +378,7 @@ addEventListener("keydown", (e) => {
 // The window lets clicks through except over the boxes reported to Rust each frame: Capri, the
 // input bar and transmission while the bar is open, and the transmission while a choice waits.
 function setInputOpen(open: boolean): void {
+  if (open) wakeUp();
   inputRow.hidden = !open;
   hud.classList.toggle("input-open", open);
   if (open) {
@@ -368,13 +422,16 @@ async function look(question: string): Promise<void> {
 }
 
 void listen("open-input", () => setInputOpen(true));
-void listen("look", () => void look(""));
+void listen("look", () => {
+  wakeUp();
+  void look("");
+});
 void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
 // A game or video fullscreen in front: hide, stop rendering (no GPU while you play), keep quiet.
 void listen<boolean>("fullscreen", (e) => {
   if (e.payload === fullscreen) return;
   fullscreen = e.payload;
-  hud.style.visibility = fxCanvas.style.visibility = fullscreen ? "hidden" : "";
+  hud.style.visibility = fxCanvas.style.visibility = mask.canvas.style.visibility = fullscreen ? "hidden" : "";
   if (fullscreen) {
     pet.app.ticker.stop();
     lastHitbox = "";
@@ -393,7 +450,7 @@ void listen("style", async () => {
   glitch.kick("change", performance.now());
   void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
 });
-void listen("teleport", () => void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
+void listen("teleport", () => doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
   wins = e.payload;
@@ -408,7 +465,16 @@ void listen<Windows>("windows", (e) => {
 void listen<[number, number]>("cursor", (e) => {
   cursor = e.payload;
   cursorAt = performance.now();
+  if (doze.phase === "mask" && nearMask(WAKE_NEAR)) wakeUp();
 });
+mask.canvas.addEventListener("pointerdown", () => wakeUp());
+
+/** The pointer within `pad` px of her mask. */
+function nearMask(pad: number): boolean {
+  if (!cursor) return false;
+  const [x, y, w, h] = mask.box();
+  return cursor[0] >= x - pad && cursor[0] <= x + w + pad && cursor[1] >= y - pad && cursor[1] <= y + h + pad;
+}
 input.addEventListener("keydown", (e) => {
   if (e.key === "Escape") setInputOpen(false);
 });
@@ -449,6 +515,7 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 // edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || busy()) return;
+  activeAt = performance.now();
   press = { x: e.clientX, y: e.clientY, dx: at.x - e.clientX, dy: at.y - e.clientY };
   stage.setPointerCapture(e.pointerId);
 });
@@ -502,6 +569,24 @@ stage.addEventListener("pointermove", (e) => {
   }
 });
 
+/** Asleep: her mask floating where her head was, bobbing slowly; stirring as the pointer comes close. */
+function drawMask(now: number): void {
+  const shown = doze.phase === "mask" || doze.phase === "waking";
+  mask.show(shown);
+  if (!shown) return;
+  mask.center = { x: at.x + maskOffset.x, y: at.y + maskOffset.y };
+  const calm = reducedMotion.matches;
+  const stirred = doze.phase === "mask" && nearMask(STIR_NEAR);
+  const look = doze.landing(now)
+    ? { eyes: [0, 0] as [number, number], flat: "#fff4f6" }
+    : { eyes: doze.eyes(now, stirred), look: stirred && cursor ? { x: cursor[0], y: cursor[1] } : null };
+  mask.draw(look, {
+    bob: calm ? 0 : [0, -1.5, -3, -1.5][Math.floor(now / 500) % 4],
+    shake: doze.phase === "waking" && !calm ? Math.round(Math.random() * 4 - 2) : 0,
+    px: style === "pixel" ? SCALE : 1,
+  });
+}
+
 let lastHitbox = "";
 let lastFrame = -1;
 pet.app.ticker.add((ticker) => {
@@ -543,6 +628,10 @@ pet.app.ticker.add((ticker) => {
     }
     placeHud();
   }
+  const was = doze.phase;
+  if (doze.tick(now) === "awake" && was === "waking") back(now);
+  if (!doze.asleep && linkStatus === "idle" && tx.hidden && inputRow.hidden && !confirming && !busy() &&
+      sleepy(sleepAfter, now - Math.max(lastTalk, activeAt), pcIdle)) fallAsleep(now);
   if (now > nextWander) {
     nextWander = now + wanderGap();
     if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) void wander();
@@ -579,8 +668,10 @@ pet.app.ticker.add((ticker) => {
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
 
+  drawMask(now);
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
-  const b = teleporting ? null : pet.bounds(); // while she's gone, nothing to click
+  if (!mask.canvas.hidden) boxes.push(mask.box());
+  const b = teleporting || doze.asleep ? null : pet.bounds(); // while she's gone, nothing to click
   if (b) {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);

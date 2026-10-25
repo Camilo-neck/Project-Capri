@@ -127,6 +127,7 @@ pub fn run() {
         (keys.mirar, "look"),
         (keys.no_molestar, "dnd"),
         (keys.estilo, "style"),
+        (keys.camara, "camera"),
     ]
     .into_iter()
     .filter_map(|(text, event)| match text.parse::<Shortcut>() {
@@ -152,7 +153,8 @@ pub fn run() {
             win_watch::look_target,
             win_watch::capture_guard,
             user_config::avatar_settings,
-            user_config::save_style
+            user_config::save_style,
+            user_config::save_camera
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

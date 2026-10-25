@@ -9,11 +9,13 @@ import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
-import { MaskView } from "./render/mask.ts";
+import { CameraView } from "./render/camera.ts";
+import { MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
+import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
-import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
+import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
@@ -45,6 +47,9 @@ const statusLabel = $("status-label");
 const inputRow = $<HTMLFormElement>("input-row");
 const input = $<HTMLInputElement>("input");
 const stage = $("stage");
+const cam = $("cam");
+const camTag = $("cam-tag");
+const camClock = $("cam-clock");
 
 const STATUS = {
   down: "SIN ENLACE",
@@ -62,7 +67,7 @@ const pet = await createPet(stage);
 const fxCanvas = $<HTMLCanvasElement>("fx");
 const fx = new Fx(fxCanvas);
 const director = new Director();
-type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number };
+type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean };
 const settings = await invoke<AvatarSettings>("avatar_settings");
 let style: Style = settings.estilo === "pixel" ? "pixel" : "original";
 let sleepAfter = settings.dormir_min * 60_000;
@@ -72,7 +77,19 @@ const glitch = new GlitchFx(performance.now());
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const doze = new Doze();
 const mask = new MaskView($<HTMLCanvasElement>("mask"), MASK_SCALE);
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+const camView = new CameraView($<HTMLCanvasElement>("cam-feed"));
+const camPlayer = new CameraPlayer();
+let camera = false; // camera mode: her close-ups in a transmission frame instead of her body
+
+/** Camera mode on or off: the feed takes her body's place (same spot, same ledges). */
+async function setCamera(on: boolean): Promise<void> {
+  if (on) await camView.load();
+  camera = on;
+  cam.hidden = !on;
+  pet.app.stage.visible = !on;
+}
+await setCamera(settings.camara);
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -137,6 +154,10 @@ addEventListener("resize", () => {
 
 /** Her body on the page: center, feet line, and rough size, for the screen effects. */
 function body(): { x: number; y: number; ground: number; size: number } {
+  if (camera) {
+    const c = cam.getBoundingClientRect();
+    return { x: c.left + c.width / 2, y: c.top + c.height / 2, ground: c.bottom, size: c.width };
+  }
   const r = stage.getBoundingClientRect();
   const b = pet.bounds() ?? { x: 0, y: 0, w: r.width, h: r.height };
   return { x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2, ground: r.top + b.y + b.h, size: Math.max(b.w, b.h) };
@@ -213,7 +234,7 @@ async function possess(): Promise<void> {
  * as far as config.toml [avatar] allows (read each time, so edits apply without a restart). */
 async function wander(): Promise<void> {
   const cfg = await invoke<AvatarSettings>("avatar_settings");
-  if (perch && cfg.poseer_ventanas && Math.random() < 0.3) {
+  if (perch && cfg.poseer_ventanas && !camera && Math.random() < 0.3) {
     void possess();
     return;
   }
@@ -450,6 +471,12 @@ void listen("style", async () => {
   glitch.kick("change", performance.now());
   void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
 });
+// Ctrl+Alt+Shift+C: camera mode on/off, saved in config.toml for next time.
+void listen("camera", async () => {
+  await setCamera(!camera);
+  glitch.kick("change", performance.now());
+  void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
+});
 void listen("teleport", () => doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {
@@ -469,10 +496,11 @@ void listen<[number, number]>("cursor", (e) => {
 });
 mask.canvas.addEventListener("pointerdown", () => wakeUp());
 
-/** The pointer within `pad` px of her mask. */
+/** The pointer within `pad` px of her mask (in camera mode, of the feed showing it). */
 function nearMask(pad: number): boolean {
   if (!cursor) return false;
-  const [x, y, w, h] = mask.box();
+  const c = cam.getBoundingClientRect();
+  const [x, y, w, h] = camera ? [c.left, c.top, c.width, c.height] : mask.box();
   return cursor[0] >= x - pad && cursor[0] <= x + w + pad && cursor[1] >= y - pad && cursor[1] <= y + h + pad;
 }
 input.addEventListener("keydown", (e) => {
@@ -495,6 +523,10 @@ setInputOpen(false);
 
 /** Her head center in page (CSS) px. */
 function headOnPage(): [number, number] {
+  if (camera) {
+    const c = cam.getBoundingClientRect();
+    return [c.left + c.width / 2, c.top + c.height * 0.4];
+  }
   const r = stage.getBoundingClientRect();
   const b = style === "original" && pet.bounds();
   if (b) return [r.left + b.x + b.w / 2, r.top + b.y + b.h * 0.3]; // her mask, under the mane
@@ -514,6 +546,7 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 // Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
 // edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
+  if (doze.asleep) return wakeUp(); // the feed showing her mask
   if (e.button !== 0 || busy()) return;
   activeAt = performance.now();
   press = { x: e.clientX, y: e.clientY, dx: at.x - e.clientX, dy: at.y - e.clientY };
@@ -569,22 +602,44 @@ stage.addEventListener("pointermove", (e) => {
   }
 });
 
-/** Asleep: her mask floating where her head was, bobbing slowly; stirring as the pointer comes close. */
+/** Asleep: her mask's eyes (stirring as the pointer comes close); null while she's awake. */
+function maskLook(now: number): MaskLook | null {
+  if (doze.phase !== "mask" && doze.phase !== "waking") return null;
+  const stirred = doze.phase === "mask" && nearMask(STIR_NEAR);
+  return doze.landing(now)
+    ? { eyes: [0, 0], flat: "#fff4f6" }
+    : { eyes: doze.eyes(now, stirred), look: stirred && cursor ? { x: cursor[0], y: cursor[1] } : null };
+}
+
+/** Asleep: her mask floating where her head was, bobbing slowly (in camera mode the feed shows it instead). */
 function drawMask(now: number): void {
-  const shown = doze.phase === "mask" || doze.phase === "waking";
-  mask.show(shown);
-  if (!shown) return;
+  const look = camera ? null : maskLook(now);
+  mask.show(!!look);
+  if (!look) return;
   mask.center = { x: at.x + maskOffset.x, y: at.y + maskOffset.y };
   const calm = reducedMotion.matches;
-  const stirred = doze.phase === "mask" && nearMask(STIR_NEAR);
-  const look = doze.landing(now)
-    ? { eyes: [0, 0] as [number, number], flat: "#fff4f6" }
-    : { eyes: doze.eyes(now, stirred), look: stirred && cursor ? { x: cursor[0], y: cursor[1] } : null };
   mask.draw(look, {
     bob: calm ? 0 : [0, -1.5, -3, -1.5][Math.floor(now / 500) % 4],
     shake: doze.phase === "waking" && !calm ? Math.round(Math.random() * 4 - 2) : 0,
     px: style === "pixel" ? SCALE : 1,
   });
+}
+
+/** Camera mode: the shot for the moment (cuts glitch), its tag, the clock, the voice level. */
+function drawFeed(now: number, g: Glitch, seed: number): void {
+  const sc = {
+    status: linkStatus,
+    emocion: avatar.emocion,
+    talking: now - lastTalk < LINGER_MS,
+    listening: !inputRow.hidden,
+    confirming: !!confirming,
+    asleep: doze.phase === "mask" || doze.phase === "waking",
+  };
+  if (camPlayer.want(shotFor(sc), now) && !doze.asleep) glitch.kick("change", now);
+  camTag.textContent = tagFor(sc);
+  camClock.textContent = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false });
+  cam.classList.toggle("talking", !ended || typewriter.pending);
+  camView.draw({ frame: camPlayer.frame(now), glitch: reducedMotion.matches ? OFF : g, seed, mask: maskLook(now) });
 }
 
 let lastHitbox = "";
@@ -667,11 +722,16 @@ pet.app.ticker.add((ticker) => {
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
+  if (camera) drawFeed(now, g, frame % 997);
 
   drawMask(now);
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   if (!mask.canvas.hidden) boxes.push(mask.box());
-  const b = teleporting || doze.asleep ? null : pet.bounds(); // while she's gone, nothing to click
+  const b = teleporting || doze.asleep || camera ? null : pet.bounds(); // while she's gone, nothing to click
+  if (camera && !teleporting) {
+    const c = cam.getBoundingClientRect();
+    boxes.push([c.left, c.top, c.width, c.height]);
+  }
   if (b) {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);

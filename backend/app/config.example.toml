@@ -33,6 +33,7 @@ redirect_uri = "http://127.0.0.1:5173/callback"
 deambular = true        # se teletransporta de vez en cuando a otro sitio de la barra o a una ventana
 poseer_ventanas = true  # a veces se mete en la ventana donde está sentada (solo dibuja encima)
 estilo = "original"     # "original" (el arte de la serie) o "pixel"; el atajo de [atajos] lo alterna y lo guarda aquí
+camara = false          # modo cámara: sus primeros planos de la serie en un recuadro de transmisión; el atajo lo alterna
 dormir_min = 20         # minutos sin usar el PC ni hablarle para dormirse hasta quedar en la máscara; 0 = nunca
 
 # Cuándo habla sin que le escribas: saludo del día y algún comentario si lleva rato sin hablaros.
@@ -51,3 +52,4 @@ teletransporte = "Ctrl+Alt+T"
 mirar = "Ctrl+Alt+Shift+M"
 no_molestar = "Ctrl+Alt+Shift+D"
 estilo = "Ctrl+Alt+Shift+P"
+camara = "Ctrl+Alt+Shift+C"

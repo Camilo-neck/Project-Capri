@@ -35,7 +35,15 @@
         <label for="input" class="prompt">›_</label>
         <input id="input" autocomplete="off" spellcheck="false" placeholder="escribe aquí" />
       </form>
-      <div id="stage" class="stage"></div>
+      <div id="stage" class="stage">
+        <div id="cam" class="cam" hidden>
+          <canvas id="cam-feed" class="cam-feed"></canvas>
+          <span class="cam-tag">CAPRI // <b id="cam-tag">EN LÍNEA</b></span>
+          <span class="cam-jp" aria-hidden="true">カプリ</span>
+          <span class="cam-rec"><i></i>REC <span id="cam-clock">00:00</span></span>
+          <span class="cam-level" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
+      </div>
     </main>
   </body>
 </html>

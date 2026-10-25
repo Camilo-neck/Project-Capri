@@ -246,9 +246,144 @@ body {
 }
 
 .stage {
+  position: relative;
   height: 288px;
   align-self: center;
   margin-top: 4px;
+}
+
+/* Camera mode: her close-ups in a transmission frame, its bottom on her ledge (54 px over the stage's bottom) */
+.cam {
+  --cam: #2de2ff;
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  width: 336px;
+  height: 224px;
+  transform: translateX(-50%);
+  border: 2px solid var(--cam);
+  box-shadow: 0 0 12px rgb(45 226 255 / 0.45), inset 0 0 18px rgb(0 0 0 / 0.6);
+  background: #0b0916;
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.08em;
+  color: var(--cam);
+}
+
+.cam-feed {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* scanlines and a vignette over the picture */
+.cam::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.55));
+}
+
+/* corner brackets, outside the border */
+.cam::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  pointer-events: none;
+  --c: linear-gradient(var(--cam), var(--cam));
+  background:
+    var(--c) top left / 14px 3px, var(--c) top left / 3px 14px,
+    var(--c) top right / 14px 3px, var(--c) top right / 3px 14px,
+    var(--c) bottom left / 14px 3px, var(--c) bottom left / 3px 14px,
+    var(--c) bottom right / 14px 3px, var(--c) bottom right / 3px 14px;
+  background-repeat: no-repeat;
+}
+
+.cam-tag {
+  position: absolute;
+  left: 14px;
+  top: -11px;
+  padding: 1px 7px;
+  background: #0b0916;
+  border: 1.5px solid var(--cam);
+  z-index: 1;
+}
+
+.cam-tag b {
+  font-weight: 600;
+}
+
+.cam-jp {
+  position: absolute;
+  right: 8px;
+  top: 10px;
+  writing-mode: vertical-rl;
+  font-size: 18px;
+  color: rgb(255 255 255 / 0.28);
+  z-index: 1;
+}
+
+.cam-rec {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  color: #fff;
+  font-size: 10px;
+  z-index: 1;
+}
+
+.cam-rec i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #ff2152;
+  animation: rec 1s steps(2) infinite;
+}
+
+@keyframes rec {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* her voice level while she transmits */
+.cam-level {
+  position: absolute;
+  left: 10px;
+  bottom: 7px;
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+  z-index: 1;
+}
+
+.cam-level i {
+  width: 3px;
+  height: 3px;
+  background: var(--cam);
+}
+
+.cam.talking .cam-level i {
+  animation: level 420ms steps(3) infinite alternate;
+}
+
+.cam.talking .cam-level i:nth-child(2n) {
+  animation-duration: 300ms;
+}
+
+.cam.talking .cam-level i:nth-child(3n) {
+  animation-duration: 520ms;
+}
+
+@keyframes level {
+  to {
+    height: 12px;
+  }
 }
 
 /* Quiet by default: the status bar only shows while the input is open. */

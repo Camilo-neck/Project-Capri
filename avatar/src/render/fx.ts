@@ -419,6 +419,34 @@ export class Fx {
     });
   }
 
+  /** Afterimages of her (`img`, drawn centred) left along the way from one spot to the other, each in
+   * one of her colours, fading in steps. */
+  ghosts(img: CanvasImageSource & { width: number; height: number }, from: Pt, to: Pt, life = 420): void {
+    const tints = [VIOLET, RED, GREEN].map((color) => {
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d")!;
+      g.drawImage(img, 0, 0);
+      g.globalCompositeOperation = "source-atop";
+      g.globalAlpha = 0.75;
+      g.fillStyle = color;
+      g.fillRect(0, 0, c.width, c.height);
+      return c;
+    });
+    tints.forEach((c, i) => {
+      const k = (i + 1) / (tints.length + 1);
+      const x = from.x + (to.x - from.x) * k, y = from.y + (to.y - from.y) * k;
+      const delay = i * 0.12;
+      this.add(life, (g, t) => {
+        if (t < delay) return;
+        g.globalAlpha = t < delay + 0.35 ? 0.7 : t < delay + 0.6 ? 0.35 : 0;
+        g.drawImage(c, Math.round(x - c.width / 2), Math.round(y - c.height / 2));
+        g.globalAlpha = 1;
+      });
+    });
+  }
+
   /** A streak of light from one spot to the other, in three misregistered colors. */
   streak(x1: number, y1: number, x2: number, y2: number): void {
     const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / PX);

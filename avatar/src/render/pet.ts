@@ -1,7 +1,7 @@
 // Shows the pet on screen through PixiJS: in the pixel style, either the code-drawn pet (src/pet) or,
 // for behaviors that have them, PixelLab sprite clips (avatar/assets/pet/anim), with crisp pixels; in
 // the original style, the show's art (avatar/assets/original), scaled down smoothly once on load.
-import { Application, Sprite, Texture } from "pixi.js";
+import { Application, Rectangle, Sprite, Texture } from "pixi.js";
 
 import { ORIGINAL_CLIPS, type ClipFrame, type Style } from "../pet/clips.ts";
 import { Painter } from "../pet/draw.ts";
@@ -38,6 +38,8 @@ export interface PetRenderer {
   showClip(frame: ClipFrame | null, mouth?: number | null): void;
   /** Opaque area of the current frame in CSS px, relative to the canvas. */
   bounds(): Box | null;
+  /** A copy of what's on the canvas now (for her afterimages), the canvas's size. */
+  snapshot(): HTMLCanvasElement;
 }
 
 const clipUrls = import.meta.glob("../../assets/pet/anim/*/*.png", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
@@ -163,6 +165,9 @@ export async function createPet(parent: HTMLElement): Promise<PetRenderer> {
   return {
     app,
     bounds,
+    snapshot() {
+      return app.renderer.extract.canvas({ target: app.stage, frame: new Rectangle(0, 0, W * SCALE, H * SCALE) }) as HTMLCanvasElement;
+    },
     paint(pose, time) {
       painter.paint(pose, time);
       texture.source.update();

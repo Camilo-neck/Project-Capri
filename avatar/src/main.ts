@@ -16,6 +16,7 @@ import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
+import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
@@ -75,6 +76,8 @@ let sleepAfter = settings.dormir_min * 60_000;
 await pet.setStyle(style);
 let clips = new ClipPlayer(style);
 const glitch = new GlitchFx(performance.now());
+const mischief = new Mischief(performance.now());
+const petCanvas = pet.app.canvas as HTMLCanvasElement;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const doze = new Doze();
 const mask = new MaskView($<HTMLCanvasElement>("mask"), MASK_SCALE);
@@ -90,7 +93,7 @@ async function setCamera(on: boolean): Promise<void> {
   pet.app.stage.visible = !on;
 }
 await setCamera(settings.camara);
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask, zap, fx, startPeek, peek: () => peek, zapCursor, camera: () => camera, camPlayer, clips: () => clips, style: () => style, glitch, teleport, possess, fall, hop: () => teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })), wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
@@ -126,13 +129,14 @@ let activeAt = performance.now(); // last time you did something with her (talki
 let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
 let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it rides along with her window)
 let acting: object | null = null; // a tool running: her sparks last while this is the same run
+let peek: (PeekPose & { until: number; ducks: number }) | null = null; // peeking in from a screen edge
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep;
+const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -156,6 +160,10 @@ addEventListener("resize", () => {
 
 /** Her body on the page: center, feet line, and rough size, for the screen effects. */
 function body(): { x: number; y: number; ground: number; size: number } {
+  if (peek) {
+    const c = petCanvas.getBoundingClientRect();
+    return { x: c.left + c.width / 2, y: c.top + c.height / 2, ground: c.bottom, size: Math.min(c.width, c.height) * 0.7 };
+  }
   if (camera) {
     const c = cam.getBoundingClientRect();
     return { x: c.left + c.width / 2, y: c.top + c.height / 2, ground: c.bottom, size: c.width };
@@ -171,11 +179,33 @@ function farOnTaskbar(): Point {
   return onTaskbar(spot > 0.5 ? Math.random() * Math.max(0, spot - 0.35) : Math.min(1, spot + 0.35 + Math.random() * (0.65 - spot)));
 }
 
+/** What she looks like right now and where (her canvas, or the feed in camera mode), for afterimages. */
+function likeness(): { img: HTMLCanvasElement; x: number; y: number } {
+  const el = camera ? cam : petCanvas;
+  const r = el.getBoundingClientRect();
+  let img: HTMLCanvasElement;
+  if (camera) {
+    img = document.createElement("canvas");
+    img.width = r.width;
+    img.height = r.height;
+    img.getContext("2d")!.drawImage(camView.canvas, 0, 0, r.width, r.height);
+  } else img = pet.snapshot();
+  return { img, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/** Her afterimages from where she was (`was`) to where she is now. */
+function trail(was: ReturnType<typeof likeness>): void {
+  const el = camera ? cam : petCanvas;
+  const r = el.getBoundingClientRect();
+  fx.ghosts(was.img, was, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+}
+
 /** Collapses, leaves a column of light, streaks to `to` (a window ledge, or null: the taskbar) and lands. */
 async function teleport(to: Perch | null = null, { dive = false } = {}): Promise<void> {
   if (teleporting || falling) return;
   teleporting = true;
   const from = body();
+  const was = !reducedMotion.matches && !dive ? likeness() : null;
   if (!reducedMotion.matches && !dive) {
     glitch.kick("vanish", performance.now());
     fx.burst(from.x, from.y, from.size, false);
@@ -189,6 +219,7 @@ async function teleport(to: Perch | null = null, { dive = false } = {}): Promise
   if (!reducedMotion.matches) {
     const there = body();
     if (!dive) fx.streak(from.x, from.y, there.x, there.y);
+    if (was) trail(was);
     await sleep(60);
     fx.beam(there.x, there.ground, true);
     glitch.kick("arrive", performance.now());
@@ -240,7 +271,62 @@ async function wander(): Promise<void> {
     void possess();
     return;
   }
+  if (cfg.deambular && !camera && Math.random() < 0.2) {
+    void startPeek();
+    return;
+  }
   if (cfg.deambular) void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
+}
+
+/** Puts her canvas half off a screen edge (or upside down from the top); null puts it back under the HUD. */
+function placePeek(p: PeekPose | null): void {
+  if (!p) {
+    petCanvas.style.transform = "";
+    return;
+  }
+  const r = stage.getBoundingClientRect(); // where the canvas sits untransformed
+  const dx = p.cx - (r.left + r.width / 2), dy = p.cy - (r.top + r.height / 2);
+  petCanvas.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px) rotate(${p.rot}deg) scaleX(${p.flip ? -1 : 1})`;
+}
+
+/** Vanishes, and comes back peeking in from an edge (another one than now), or (edge null) back under her HUD. */
+async function hopPeek(edge: Edge | null, ducks = 0): Promise<void> {
+  if (teleporting) return;
+  teleporting = true;
+  const was = likeness();
+  if (!reducedMotion.matches) {
+    glitch.kick("vanish", performance.now());
+    fx.burst(was.x, was.y, petCanvas.offsetHeight * 0.5, false);
+    await sleep(VANISH_OUT_MS);
+  }
+  const now = performance.now();
+  const pose = edge && peekPose(edge, innerWidth, innerHeight, Math.random());
+  peek = pose ? { ...pose, until: now + PEEK_MS[0] + Math.random() * (PEEK_MS[1] - PEEK_MS[0]), ducks } : null;
+  placePeek(pose);
+  if (!reducedMotion.matches) {
+    trail(was);
+    glitch.kick("arrive", performance.now());
+    const b = body();
+    fx.burst(b.x, b.y, b.size, true);
+  }
+  teleporting = false;
+}
+
+/** Sometimes, instead of moving along the taskbar or the windows, she peeks in from a screen edge. */
+function startPeek(edge?: Edge): Promise<void> {
+  return hopPeek(edge ?? pickEdge(Math.random, peek?.edge));
+}
+
+/** The pointer came near, idle: a red bolt at it and a sly grin. */
+function zapCursor(): void {
+  if (!cursor) return;
+  const now = performance.now();
+  const at = () => ({ x: cursor![0], y: cursor![1] });
+  fx.bolt(() => body(), at, 380);
+  fx.crackle(() => ({ ...at(), r: 40 }), () => true, 500);
+  glitch.kick("change", now);
+  avatar.setEmotion("traviesa");
+  lastTalk = Math.max(lastTalk, now - LINGER_MS + 2500); // grins for a couple of seconds
 }
 
 /** A long while with nobody around: she comes apart and only her mask is left, eyes shut, where her head was. */
@@ -559,6 +645,10 @@ void listen<[number, number]>("cursor", (e) => {
   cursor = e.payload;
   cursorAt = performance.now();
   if (doze.phase === "mask" && nearMask(WAKE_NEAR)) wakeUp();
+  if (!busy() && linkStatus === "idle" && tx.hidden && inputRow.hidden && !reducedMotion.matches) {
+    const b = body();
+    if (mischief.zap(cursorAt, Math.hypot(cursor[0] - b.x, cursor[1] - b.y), true)) zapCursor();
+  }
 });
 mask.canvas.addEventListener("pointerdown", () => wakeUp());
 
@@ -589,6 +679,10 @@ setInputOpen(false);
 
 /** Her head center in page (CSS) px. */
 function headOnPage(): [number, number] {
+  if (peek) {
+    const b = body();
+    return [b.x, b.y];
+  }
   if (camera) {
     const c = cam.getBoundingClientRect();
     return [c.left + c.width / 2, c.top + c.height * 0.4];
@@ -613,6 +707,7 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 // edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
   if (doze.asleep) return wakeUp(); // the feed showing her mask
+  if (peek && !teleporting) return void hopPeek(null); // caught peeking: back to her spot
   if (e.button !== 0 || busy()) return;
   activeAt = performance.now();
   press = { x: e.clientX, y: e.clientY, dx: at.x - e.clientX, dy: at.y - e.clientY };
@@ -753,6 +848,12 @@ pet.app.ticker.add((ticker) => {
   if (doze.tick(now) === "awake" && was === "waking") back(now);
   if (!doze.asleep && linkStatus === "idle" && tx.hidden && inputRow.hidden && !confirming && !busy() &&
       sleepy(sleepAfter, now - Math.max(lastTalk, activeAt), pcIdle)) fallAsleep(now);
+  if (peek && !teleporting) {
+    // shy: the pointer close sends her to another edge (twice at most); time's up, or you need her: back
+    const needed = linkStatus !== "idle" || !inputRow.hidden || !tx.hidden || !!confirming;
+    if (needed || now > peek.until || (shy(peek, cursor) && peek.ducks >= 2)) void hopPeek(null);
+    else if (shy(peek, cursor)) void hopPeek(pickEdge(Math.random, peek.edge), peek.ducks + 1);
+  }
   if (now > nextWander) {
     nextWander = now + wanderGap();
     if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) void wander();
@@ -793,7 +894,11 @@ pet.app.ticker.add((ticker) => {
   drawMask(now);
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   if (!mask.canvas.hidden) boxes.push(mask.box());
-  const b = teleporting || doze.asleep || camera ? null : pet.bounds(); // while she's gone, nothing to click
+  const b = teleporting || doze.asleep || camera || peek ? null : pet.bounds(); // while she's gone, nothing to click
+  if (peek && !teleporting) {
+    const c = petCanvas.getBoundingClientRect();
+    boxes.push([c.left, c.top, c.width, c.height]);
+  }
   if (camera && !teleporting) {
     const c = cam.getBoundingClientRect();
     boxes.push([c.left, c.top, c.width, c.height]);

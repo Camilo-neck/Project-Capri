@@ -2,15 +2,18 @@
 
 Especificación para generar el arte definitivo de la mascota. Está ajustada a **PixelLab** (límites, tamaños y forma de pedir las animaciones). Al final hay un brief resumido por si prefieres encargarlo a un artista.
 
-Las imágenes de referencia ya están preparadas en `assets/inspo/pixellab/`, con fondo transparente y a la escala nativa de tu hoja:
+El diseño es una **fusión**: el formato de mascota chibi de tu hoja con el diseño original de Capri en la serie (ver "Dirección de arte"). Las referencias están en `assets/inspo/pixellab/`:
 
-| Archivo | Uso |
-|---|---|
-| `ref_de_pie.png` | Referencia principal del personaje (de pie, de frente) |
-| `ref_sentada.png` | Referencia de la pose sentada en el borde |
-| `ref_sentada_cruzada.png` | Referencia de las piernas cruzadas |
+| Archivo | Qué aporta | Uso en PixelLab |
+|---|---|---|
+| `ref_de_pie.png` | Proporciones chibi, escala, pose de pie (de tu hoja; fondo transparente, 96×96) | Referencia o imagen inicial del personaje base |
+| `ref_sentada.png` | Pose sentada en el borde (de tu hoja) | Referencia de `base_sentada` |
+| `ref_sentada_cruzada.png` | Piernas cruzadas (de tu hoja) | Referencia de `base_cruzada` |
+| `ref_serie_cara.png` | Máscara verde de dos paneles, ojos concéntricos con pliegues en estrella, boca en zigzag (serie) | Imagen de estilo para la cara; guía para la descripción |
+| `ref_serie_cuerpo.png` | Masa de pelo con brillo, mechones en rayo, cuerpo de esquirlas, borde violeta (serie) | Imagen de estilo para pelo y cuerpo |
+| `ref_serie_amenaza.png` | Ojos múltiples y sonrisa triangular (serie) | Referencia del estado `peligro` |
 
-Los archivos `@3x` son copias ampliadas para verlas cómodamente; **no los subas**.
+Los archivos `@3x` son copias ampliadas de los de tu hoja, para verlos cómodamente; **no los subas**. Las de la serie son ilustraciones, no pixel art: sirven como referencia de estilo, no como imagen inicial.
 
 ---
 
@@ -32,13 +35,30 @@ Los archivos `@3x` son copias ampliadas para verlas cómodamente; **no los subas
 
 **A. Lo genero yo por MCP (recomendado).** Tú solo creas la cuenta y me das acceso:
 1. Entra en pixellab.ai, crea la cuenta y copia tu *API token* (en la sección de API/MCP).
-2. En una terminal ejecuta, sustituyendo el token:
+2. En una terminal aparte (no en el chat, para que el token no quede en la conversación) ejecuta, sustituyendo el token:
    ```
-   claude mcp add pixellab https://api.pixellab.ai/mcp -t http -H "Authorization: Bearer TU_TOKEN"
+   claude mcp add pixellab https://api.pixellab.ai/mcp --transport http --scope user -H "Authorization: Bearer TU_TOKEN"
    ```
 3. Reinicia Claude Code y dime "genera el arte según docs/arte-pixellab.md". Yo genero, reviso fotograma a fotograma, repito lo que salga mal y lo integro.
 
 **B. Lo haces tú en PixelLab (web o Aseprite)** siguiendo los pasos 2 a 4 tal cual, con los prompts copiados de aquí, y me pasas los PNG con la estructura de la sección 6.
+
+---
+
+## Dirección de arte: fusión
+
+La silueta, el tamaño y la ternura de mascota vienen de tu hoja; el diseño, la paleta y los detalles, de la Capri de la serie. Si hay conflicto, **la cara y los colores mandan los de la serie, y las proporciones y poses, los de la hoja**.
+
+| Elemento | De la hoja (mascota) | De la serie (Capri original) | Resultado |
+|---|---|---|---|
+| Proporciones | Chibi: cabeza grande, cuerpo fino, unos 70 px | Figura larga y estilizada | Chibi, pero con piernas largas y finas acabadas en punta |
+| Pelo | Masa voluminosa con rizos y dos mechones en cuerno | Masa enorme de **esquirlas** rojo neón con **brillo blanco** fino, puntas en **rayo**, algún fragmento suelto | Masa voluminosa de mascota con bordes de esquirla dentada, rojo neón, puntitos blancos de brillo y 2–3 mechones en rayo que caen a los lados |
+| Cabeza y cara | Cara verde con flequillo negro en forma de antifaz | Cabeza negra con **máscara verde de dos paneles** con muesca en V; **ojos concéntricos** (anillo verde, iris azul, brillo blanco) con **pliegues negros en estrella** | Cabeza negra pequeña con la máscara verde de dos paneles ocupando la parte alta de la cara; ojos concéntricos grandes y expresivos |
+| Boca | Sonrisa blanca con dientes | **Zigzag** fino cuando está tranquila; **sonrisa triangular** blanca y dentada cuando se emociona | Igual que la serie |
+| Cuerpo | Maillot rojo y negro con paneles verdes | Cuerpo de **esquirlas** angulosas negras, rojas y verdes | Maillot hecho de esquirlas angulosas: negro de base con trozos rojo neón y verde ácido; guantes y botas negros |
+| Borde | Contorno negro | **Borde violeta** desplazado | Contorno negro de 1 px y, por fuera, **1 px violeta** en el lado inferior izquierdo de la silueta |
+| Rasgo especial | — | **Ojos múltiples** cuando se pone amenazante | Estado `peligro` con ojitos extra que se abren por la máscara |
+| Personalidad | Mascota tierna y juguetona | Glitch, intensa, algo inquietante | Juguetona y tierna, con un punto travieso o inquietante en `traviesa`, `molesta` y `peligro` |
 
 ---
 
@@ -51,33 +71,40 @@ Los archivos `@3x` son copias ampliadas para verlas cómodamente; **no los subas
 | Vista | *Side view* (cámara frontal), dirección **south** (mirando a la cámara) | Mascota de frente al usuario |
 | Línea de suelo | Pies en **y = 92** (4 px de margen). Sentada en el borde: asiento en y ≈ 78 y piernas colgando hasta y ≈ 95 | Yo alineo después, pero cuanto más fiel, mejor |
 | Fondo | **Transparente** (*Remove background* activado) | |
-| Contorno | Negro de 1 px, sin antialiasing, sombreado plano con un solo tono oscuro | Estilo de tu hoja |
+| Contorno | Negro de 1 px, sin antialiasing, sombreado plano con un solo tono oscuro, más **1 px violeta** por fuera en el lado inferior izquierdo | Hoja + borde desplazado de la serie |
 | En pantalla | ×3 sin suavizado (288 px) | |
-| Paleta objetivo | `#050402` contorno · `#a92855` pelo y traje · `#88324d` sombra pelo · `#5a1e31` sombra profunda · `#290911` casi negro rojizo · `#6fc47a` piel · `#3f8f53` sombra piel · `#ffffff` blanco (ojos, dientes) · `#2f7dff` iris | Muestreada de tu hoja, salvo `#3f8f53` (sombra de piel derivada del verde), el blanco y el iris. En PixelLab: *Color → Target palette* |
+| Paleta objetivo | `#050402` contorno · `#1a1220` negro del traje y la cabeza · `#ff2457` rojo neón (pelo, esquirlas) · `#b81d48` sombra del rojo · `#6e1030` sombra profunda · `#16f46c` verde ácido (máscara, piel, esquirlas) · `#0fa84a` sombra del verde · `#1e7bff` iris · `#ffffff` blancos y brillo del pelo · `#8b38ff` borde violeta | Colores de la serie (los mismos que la versión vectorial), con sombras derivadas. En PixelLab: *Color → Target palette* |
 | Fotogramas | Pares, de 4 a 16 (regla de PixelLab) | |
 | Fotograma 1 | En todas las animaciones, **boca cerrada y pose neutra de su familia** | Así puedo encadenar animaciones y sincronizar el habla |
 
-**No generes:** textos, "zZz", corazones flotantes, "?", "!", destellos ni lágrimas. Los pongo yo por código encima, a la misma escala de píxel, para poder combinarlos con cualquier pose. **Sí** forman parte del sprite el portátil y lo que la toque o sostenga.
+**No generes:** textos, "zZz", corazones flotantes, "?", "!", destellos, lágrimas ni efectos de glitch (separación de color, franjas desplazadas). Los pongo yo por código encima, a la misma escala de píxel, para poder combinarlos con cualquier pose. **Sí** forman parte del sprite el portátil, lo que la toque o sostenga, el brillo del pelo y los ojos extra de `peligro`.
 
 ---
 
 ## 3. Paso 1: personaje base
 
-**Herramienta:** *Create character* (o *Create character Pro* para más calidad), 96×96, *side view*, *south*, con `ref_de_pie.png` como referencia o imagen inicial.
+**Herramienta:** *Create character* (o *Create character Pro* para más calidad), 96×96, *side view*, *south*. Usa `ref_de_pie.png` como referencia de forma y proporciones, y `ref_serie_cara.png` y `ref_serie_cuerpo.png` como imágenes de estilo si la herramienta lo admite. Si solo admite una referencia, usa `ref_de_pie.png` y deja que el prompt aporte la serie.
 
 **Prompt:**
 ```
-Chibi pixel art girl, desktop pet mascot, front view facing the camera, standing, full body.
-Huge voluminous messy hair in deep magenta-crimson with flame-like curls, two curled horn-like
-tufts on top, hair reaching the shoulders. Green skin. A black jagged mask-like fringe across the
-upper face with one spike pointing down between the eyes. Big round eyes with blue iris and a white
-highlight. Wide white grin with small teeth. Slim body in an asymmetric crimson and black leotard
-with diagonal black panels; bare green shoulders and one green thigh; long black gloves; one black
-boot leg and one crimson leg with pointed feet. 1px black outline, flat shading with one darker
-tone, no anti-aliasing, transparent background. Playful, mischievous personality.
+Chibi pixel art desktop pet, a glitchy cyberpunk AI girl, front view facing the camera, standing,
+full body, cute but slightly eerie. Huge voluminous hair mass in neon red made of jagged angular
+shards, sprinkled with tiny white glitter dots, with two horn-like tufts on top and two or three
+lightning-bolt strands falling at the sides. Small black head with an acid-green angular mask of two
+panes meeting in a V notch, covering the upper face. Big concentric eyes on the mask: green ring,
+blue iris, white highlight, with thin black star-shaped creases around them. Thin white zigzag
+mouth. Slim body made of angular shards: black base with neon red and acid green fragments, black
+gloves and boots, long thin legs ending in sharp points. 1px black outline plus a 1px violet rim on
+the lower-left side of the silhouette, flat shading with one darker tone, no anti-aliasing,
+transparent background. Playful, mischievous personality.
 ```
 
-**Criterio para aceptarlo:** que se parezca a `ref_de_pie.png` en pelo, cara y colores. Genera varias semillas y quédate con la mejor; **todo lo demás parte de esta imagen**, así que vale la pena invertir aquí.
+**Criterio para aceptarlo:**
+- **Proporciones y ternura** de `ref_de_pie.png` (cabeza grande, cuerpo fino, unos 70 px).
+- **Rasgos de la serie** reconocibles: máscara verde de dos paneles, ojos concéntricos, pelo de esquirlas rojo neón con brillo y borde violeta.
+- **Fusión, no copia:** no debe parecer ni la mascota de la hoja con otros colores ni la Capri de la serie encogida.
+
+Genera varias semillas y quédate con la mejor; **todo lo demás parte de esta imagen**, así que vale la pena invertir aquí.
 
 ---
 
@@ -130,14 +157,14 @@ Las de pie parten de `base_de_pie`. En todas, el fotograma 1 lleva boca cerrada 
 |---|---|---|---|---|
 | `hablar` | neutral | 8 | 8 | `talking casually, mouth opening and closing, one hand gesturing while she speaks` |
 | `hablar_sentada` | neutral (si está sentada) | 8 | 8 | `talking while sitting, mouth opening and closing, small hand gestures` (base: base_sentada) |
-| `feliz` | feliz | 8 | 10 | `happy little hops in place, eyes closed in joy, big grin, arms swinging` |
+| `feliz` | feliz | 8 | 10 | `happy little hops in place, eyes closed in joy, big white triangular grin with jagged teeth, arms swinging` |
 | `enamorada` | feliz (variante) | 8 | 8 | `hands on her cheeks, heart-shaped eyes, blushing, swaying side to side happily` |
 | `emocionada` | emocionada | 8 | 12 | `jumping up and down with both arms raised, star-shaped sparkling eyes, open mouth` |
 | `traviesa` | traviesa | 8 | 10 | `giggling behind her hand, winking one eye, shoulders shaking with laughter, other hand on hip` |
 | `curiosa` | curiosa | 8 | 8 | `leaning forward curiously, head tilting side to side, finger on chin, wide eyes` |
 | `pensativa` | pensativa | 8 | 6 | `thinking with hand on chin, eyes looking up, slow sway` |
-| `sorprendida` | sorprendida | 8 | 12 | `startled: jumps back a little with hands up, eyes wide open, mouth open in an O, slight trembling` |
-| `molesta` | molesta | 8 | 10 | `annoyed with arms crossed, tapping one foot, frowning angry eyes, gritted teeth, head turned slightly away` |
+| `sorprendida` | sorprendida | 8 | 12 | `startled: jumps back a little with hands up, eyes wide open, mouth open in an O, hair shards bristling, slight trembling` |
+| `molesta` | molesta | 8 | 10 | `annoyed with arms crossed, tapping one foot, angry slanted eyes, jagged triangular grin showing teeth, hair shards bristling, head turned slightly away` |
 | `triste` | triste | 8 | 6 | `sad, hugging her knees, head down, droopy eyes, small sniffle movement` (base: base_rodillas) |
 | `seria` | seria | 4 | 4 | `serious, hands behind her back, steady gaze, small slow nod` |
 
@@ -149,7 +176,15 @@ Las de pie parten de `base_de_pie`. En todas, el fotograma 1 lleva boca cerrada 
 | `acariciada` | base_sentada | 8 | 8 | bucle | `being petted on the head: leans her head into the touch, eyes closed happily, blushing, content smile` |
 | `saludar` | base_de_pie | 8 | 10 | bucle ×2 | `waving hello with one hand raised high, cheerful grin` |
 
-### 5.5 Gestos cortos (de pie)
+### 5.5 Estado especial de la serie
+
+| Id | Base | Fot. | fps | Tipo | Prompt |
+|---|---|---|---|---|---|
+| `peligro` | base_de_pie | 8 | 10 | bucle | `menacing: leans forward with clawed hands raised, several extra small concentric eyes open one by one across the green mask, wide jagged triangular grin, hair shards flare up and bristle` (referencia: `ref_serie_amenaza.png`) |
+
+Se usa cuando va a hacer algo con efectos y pide confirmación (fase 5), y como variante intensa de `molesta`.
+
+### 5.6 Gestos cortos (de pie)
 
 | Id | Fot. | fps | Tipo | Prompt |
 |---|---|---|---|---|
@@ -160,7 +195,7 @@ Las de pie parten de `base_de_pie`. En todas, el fotograma 1 lleva boca cerrada 
 | `senalar` | 6 | 10 | una vez | `pointing to the side with her right arm, then lowering it` |
 | `cruzar_brazos` | 6 | 10 | una vez | `crossing her arms over her chest` |
 
-### 5.6 Transiciones entre familias (evitan saltos)
+### 5.7 Transiciones entre familias (evitan saltos)
 
 | Id | De → a | Fot. | fps | Prompt |
 |---|---|---|---|---|
@@ -169,7 +204,7 @@ Las de pie parten de `base_de_pie`. En todas, el fotograma 1 lleva boca cerrada 
 | `abrazar_rodillas` (⇄) | base_cruzada → base_rodillas | 6 | 8 | `pulling her knees up to her chest and hugging them` |
 | `abrir_portatil` (⇄ cerrarlo) | base_sentada → base_portatil | 6 | 10 | `taking out a small laptop and opening it on her lap` |
 
-**Total:** 5 poses base y unas 36 animaciones.
+**Total:** 5 poses base y unas 37 animaciones.
 
 ---
 
@@ -192,7 +227,8 @@ avatar/assets/pet/
 - [ ] Fotograma 1 en la pose base de su familia y con la boca cerrada.
 - [ ] Los pies (o el asiento) no "patinan": la base no se desplaza salvo que la acción lo pida.
 - [ ] Sin píxeles sueltos, sin halos, fondo totalmente transparente.
-- [ ] Contorno de 1 px y solo colores de la paleta.
+- [ ] Contorno negro de 1 px, borde violeta en el lado inferior izquierdo y solo colores de la paleta.
+- [ ] Rasgos de la serie presentes: máscara verde de dos paneles, ojos concéntricos, pelo de esquirlas con brillo.
 - [ ] Los bucles cierran: el último fotograma enlaza con el primero sin saltos.
 
 ## 8. Coste estimado
@@ -201,9 +237,9 @@ Con *Animate with text* a 96×96, 8 fotogramas cuestan 2 generaciones y 4–6 fo
 
 ## 9. Si lo encargas a un artista
 
-> Pixel art desktop pet, 96×96 px canvas per frame, character ~70 px tall, front view, transparent background, 1 px black outline, palette below. Style and character: see attached reference sheet (`pet_reference.png`) and crops. Deliver one Aseprite file with one tag per animation (names and frame counts in the attached table) plus PNG strips. Frame 1 of every animation = base pose with closed mouth; loops must close cleanly. No text or floating effects (hearts, zZz, ?, !): those are added in code.
+> Pixel art desktop pet, 96×96 px canvas per frame, character ~70 px tall, front view, transparent background, 1 px black outline plus a 1 px violet rim on the lower-left, palette below. The character is a fusion: chibi proportions and pet poses from the attached pet sheet (`pet_reference.png`), with the design of Capri from Cyberpunk: Edgerunners 2 (neon red shard hair with glitter, green two-pane mask, concentric eyes, shard body, extra eyes when menacing; see `ref_serie_*.png`). Read the "Dirección de arte" table. Deliver one Aseprite file with one tag per animation (names and frame counts in the attached table) plus PNG strips. Frame 1 of every animation = base pose with closed mouth; loops must close cleanly. No text or floating effects (hearts, zZz, ?, !): those are added in code.
 
-Adjunta las secciones 2, 4 y 5 de este documento y la hoja de referencia.
+Adjunta la tabla "Dirección de arte", las secciones 2, 4 y 5 de este documento, la hoja de referencia y los recortes `ref_serie_*.png`.
 
 ## 10. Cómo lo integro yo
 

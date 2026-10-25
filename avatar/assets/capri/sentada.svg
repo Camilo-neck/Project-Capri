@@ -1,0 +1,39 @@
+<!-- Sitting, calm (ref: tx3a, on the bed). Canvas 480x560. Same groups/anchors as de_pie.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 560">
+  <g id="hair" data-rough="8">
+    <!-- huge mass above her, wider than tall -->
+    <polygon fill="#ff2457" points="196,8 232,40 262,2 290,46 330,14 340,60 394,36 386,94 450,82 420,136 476,160 424,184 458,236 404,228 422,292 376,262 380,330 344,286 318,300 300,262 270,282 250,256 228,284 198,262 170,300 148,272 124,332 112,270 70,300 82,240 22,252 60,198 6,170 64,148 28,96 94,104 82,40 140,72 150,14" />
+    <!-- strands falling to the sides like lightning -->
+    <polygon fill="#ff2457" points="96,280 122,300 104,336 128,348 92,440 102,362 76,352 88,310" />
+    <polygon fill="#ff2457" points="390,286 416,300 398,340 422,352 396,452 402,370 378,360 388,318" />
+    <polygon fill="#ff2457" points="140,300 154,318 144,352 158,362 138,412 140,366 126,358 134,326" />
+    <!-- green shards on the left, like her arm trailing glitches -->
+    <polygon fill="#16f46c" data-rough="0" points="52,300 70,336 58,372 82,420 70,500 62,424 40,378 50,336" />
+    <polygon fill="#16f46c" data-rough="0" points="86,380 98,404 90,430 104,470 94,520 88,470 76,432 82,404" />
+    <polygon fill="#ff2457" data-rough="0" points="24,330 44,304 42,348" />
+    <polygon fill="#ff2457" data-rough="0" points="452,320 474,292 468,340" />
+  </g>
+  <g id="hair-front">
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="150,120 196,140 170,186 128,160" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="330,110 372,150 340,180 314,140" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="250,40 270,62 246,74" />
+  </g>
+  <g id="body">
+    <!-- torso, small and upright -->
+    <polygon fill="#07050c" points="240,284 262,284 264,302 238,302" />
+    <polygon fill="#ff2457" points="226,300 276,300 286,340 274,392 230,392 220,340" />
+    <polygon fill="#07050c" points="238,308 262,308 256,344 248,372 242,344" />
+    <polygon fill="#16f46c" points="222,304 236,306 228,330 218,326" />
+    <!-- left leg stretched out to the side -->
+    <polygon fill="#07050c" points="236,382 254,398 150,410 84,402 40,396 84,390 150,388" />
+    <polygon fill="#16f46c" points="178,386 210,388 200,404 170,406" />
+    <!-- right leg bent, shin dropping to the floor -->
+    <polygon fill="#ff2457" points="250,382 292,376 352,402 334,414 296,404" />
+    <polygon fill="#ff2457" points="330,398 354,404 326,478 296,556 304,476" />
+    <polygon fill="#07050c" points="318,430 334,434 316,476" />
+    <!-- arms resting on the lap -->
+    <polygon fill="#07050c" points="226,306 214,316 206,360 222,388 260,394 224,374 218,350" />
+    <polygon fill="#07050c" points="276,306 288,316 296,358 284,388 252,394 280,372 284,350" />
+  </g>
+  <circle id="head" cx="251" cy="236" r="8" data-rot="-4" fill="none" />
+</svg>

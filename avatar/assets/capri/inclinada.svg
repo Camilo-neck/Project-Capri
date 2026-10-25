@@ -1,0 +1,39 @@
+<!-- Leaning in toward the viewer, face close (refs: xpfu, cOINJ). Canvas 480x560. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 560">
+  <g id="hair" data-rough="8">
+    <polygon fill="#ff2457" points="230,0 262,30 300,-4 318,44 368,14 368,72 430,52 410,112 478,118 436,166 480,214 420,220 456,278 398,272 410,340 360,300 330,330 300,300 250,320 200,300 160,334 136,292 84,330 90,266 26,280 58,222 0,200 52,160 6,110 74,108 50,46 120,72 128,10 180,46 196,0" />
+    <polygon fill="#ff2457" points="58,300 86,322 66,360 92,374 52,470 64,384 36,372 50,326" />
+    <polygon fill="#ff2457" points="424,300 450,326 430,364 456,380 422,476 430,390 404,376 416,330" />
+    <!-- green streaks cutting across, as in the close-ups -->
+    <polygon fill="#16f46c" data-rough="0" points="0,92 140,150 196,176 136,166 0,112" />
+    <polygon fill="#16f46c" data-rough="0" points="480,96 340,170 320,186 352,180 480,122" />
+    <polygon fill="#ff2457" data-rough="0" points="18,380 40,352 38,398" />
+    <polygon fill="#ff2457" data-rough="0" points="458,404 478,380 474,424" />
+  </g>
+  <g id="hair-front">
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="92,150 150,178 120,230 72,200" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="372,142 420,186 380,222 352,176" />
+  </g>
+  <g id="body">
+    <!-- shoulders hunched forward, broad and shard-like -->
+    <polygon fill="#07050c" points="150,300 230,284 330,292 372,330 344,372 268,388 196,378 136,344" />
+    <polygon fill="#16f46c" points="160,312 214,300 196,348 150,338" />
+    <polygon fill="#ff2457" points="290,306 350,322 336,352 286,346" />
+    <polygon fill="#ffffff" points="214,330 250,322 240,360 210,364" />
+    <!-- torso folding down -->
+    <polygon fill="#ff2457" points="206,374 290,378 300,430 258,452 214,440" />
+    <polygon fill="#07050c" points="236,384 266,384 256,432 246,440" />
+    <!-- crouched legs: knees forward, shins tucked -->
+    <polygon fill="#07050c" points="200,432 244,448 192,500 132,520 168,488" />
+    <polygon fill="#07050c" points="132,520 192,500 186,556 168,526" />
+    <polygon fill="#ff2457" points="262,448 304,430 352,488 330,500 300,470" />
+    <polygon fill="#ff2457" points="330,488 354,494 342,556 322,530" />
+  </g>
+  <g id="arms-rest">
+    <!-- one clawed hand reaching toward the viewer -->
+    <polygon fill="#07050c" points="152,320 120,360 84,420 60,452 30,470 52,446 22,446 56,432 30,418 66,420 96,384 134,336" />
+    <polygon fill="#16f46c" points="118,368 92,410 86,404 112,364" />
+    <polygon fill="#07050c" points="350,330 388,352 420,400 438,440 420,420 414,446 404,416 380,372 340,352" />
+  </g>
+  <circle id="head" cx="240" cy="196" r="13.5" data-rot="-7" fill="none" />
+</svg>

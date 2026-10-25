@@ -1,6 +1,6 @@
 import { defaultFilterVert, Filter, GlProgram } from "pixi.js";
 
-function make(name: string, fragment: string, uniforms: Record<string, { value: number; type: "f32" }>): Filter {
+function make(name: string, fragment: string, uniforms: Record<string, { value: number | number[]; type: string }>): Filter {
   return new Filter({
     glProgram: GlProgram.from({ vertex: defaultFilterVert, fragment, name }),
     resources: { u: uniforms },

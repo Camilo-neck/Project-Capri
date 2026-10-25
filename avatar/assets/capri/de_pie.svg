@@ -1,0 +1,56 @@
+<!-- Standing, arms open (ref: r1fiai). Canvas 480x560.
+     Groups: hair (behind), body, arms-rest | arms-point | arms-cross (one visible at a time).
+     Polygons: fill, optional data-rough (torn edges) and data-rim="none" (no purple edge).
+     Anchor: circle#head, cx/cy = head center, r = scale x 10, data-rot = degrees. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 560">
+  <g id="hair" data-rough="7">
+    <polygon fill="#ff2457" points="250,6 268,40 300,0 310,52 352,20 350,70 404,44 390,98 452,92 418,130 474,150 424,170 466,212 414,206 440,262 392,240 404,300 366,268 360,330 330,270 300,250 240,262 180,250 150,272 120,330 112,268 74,300 84,240 36,262 62,206 10,196 58,168 14,128 70,118 40,66 100,84 96,30 146,62 156,10 196,52 214,0" />
+    <!-- lightning strands hanging beside the body -->
+    <polygon fill="#ff2457" points="70,280 96,300 80,338 102,350 68,430 78,362 54,352 66,306" />
+    <polygon fill="#ff2457" points="410,270 434,300 414,330 438,346 412,436 418,362 394,350 406,310" />
+    <polygon fill="#16f46c" data-rough="0" points="34,296 50,330 40,362 60,404 48,478 44,404 26,366 36,330" />
+    <polygon fill="#16f46c" data-rough="0" points="452,330 462,352 454,374 466,410 458,452 452,410 440,378 448,352" />
+    <!-- floating fragments -->
+    <polygon fill="#ff2457" data-rough="0" points="20,330 44,302 40,346" />
+    <polygon fill="#ff2457" data-rough="0" points="456,300 478,272 470,318" />
+    <polygon fill="#ff2457" data-rough="0" points="92,392 104,376 104,404" />
+    <polygon fill="#ff2457" data-rough="0" points="380,400 394,384 392,414" />
+  </g>
+  <g id="hair-front">
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="112,134 164,152 140,200 98,176" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="356,118 398,158 362,192 336,150" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="300,40 320,64 296,78" />
+  </g>
+  <g id="body">
+    <polygon fill="#07050c" points="228,194 252,194 256,222 224,222" />
+    <!-- torso: narrow and jagged -->
+    <polygon fill="#07050c" points="204,218 276,218 292,250 272,300 264,336 216,336 208,300 188,250" />
+    <polygon fill="#16f46c" points="208,226 240,232 228,262 216,292 200,252" />
+    <polygon fill="#ff2457" points="250,236 284,242 268,292 256,272" />
+    <polygon fill="#ff2457" points="234,300 248,300 244,336 238,336" />
+    <!-- hips -->
+    <polygon fill="#ff2457" points="212,330 268,330 294,374 262,362 240,386 218,362 186,374" />
+    <!-- legs: very long and pointed -->
+    <polygon fill="#07050c" points="208,366 234,376 222,462 206,558 198,462" />
+    <polygon fill="#16f46c" points="212,384 224,388 210,452" />
+    <polygon fill="#ff2457" points="248,376 276,366 290,462 282,558 266,462" />
+    <polygon fill="#07050c" points="268,420 286,428 278,470" />
+  </g>
+  <g id="arms-rest">
+    <polygon fill="#07050c" points="206,222 200,240 152,294 100,318 60,332 90,314 48,314 92,302 56,292 98,292 144,276" />
+    <polygon fill="#16f46c" points="150,282 110,302 106,296 146,278" />
+    <polygon fill="#07050c" points="274,222 280,240 328,294 380,318 420,332 390,314 432,314 388,302 424,292 382,292 336,276" />
+    <polygon fill="#ff2457" points="330,282 370,302 374,296 334,278" />
+  </g>
+  <g id="arms-point">
+    <polygon fill="#07050c" points="206,222 198,240 166,300 150,352 140,366 156,350 176,298" />
+    <polygon fill="#07050c" points="274,222 286,242 372,206 444,166 474,150 450,172 470,176 440,184 380,222" />
+    <polygon fill="#16f46c" points="324,220 372,200 400,194 372,210" />
+  </g>
+  <g id="arms-cross">
+    <polygon fill="#07050c" points="200,226 186,258 298,252 292,226" />
+    <polygon fill="#07050c" points="182,254 304,236 306,264 188,280" />
+    <polygon fill="#ff2457" points="214,258 266,250 262,262 212,268" />
+  </g>
+  <circle id="head" cx="240" cy="148" r="10" data-rot="0" fill="none" />
+</svg>

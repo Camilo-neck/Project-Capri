@@ -15,8 +15,8 @@
       {
         "label": "main",
         "title": "Capri",
-        "width": 420,
-        "height": 640,
+        "width": 480,
+        "height": 900,
         "resizable": false,
         "transparent": true,
         "decorations": false,

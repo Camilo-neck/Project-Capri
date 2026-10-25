@@ -1,0 +1,34 @@
+<!-- Leaning to one side, low energy (ref: bpiy, draped over a shoulder). Canvas 480x560. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 560">
+  <g id="hair" data-rough="8">
+    <!-- mass swept to the right, as if drooping -->
+    <polygon fill="#ff2457" points="260,30 290,62 324,16 344,74 396,44 396,104 462,96 430,150 478,186 424,200 456,256 400,248 418,310 368,284 370,350 330,300 300,330 282,286 250,296 230,262 196,282 186,232 150,252 168,196 120,190 164,150 128,108 190,120 182,62 230,92 236,36" />
+    <polygon fill="#ff2457" points="370,320 394,344 374,382 398,396 362,500 374,410 348,398 362,354" />
+    <polygon fill="#ff2457" points="420,300 442,330 424,364 446,380 418,470 424,390 400,378 412,340" />
+    <polygon fill="#16f46c" data-rough="0" points="458,330 470,360 460,392 474,436 462,500 456,438 444,396 452,362" />
+    <polygon fill="#ff2457" data-rough="0" points="130,250 150,226 146,268" />
+  </g>
+  <g id="hair-front">
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="356,130 400,168 366,200 340,160" />
+    <polygon fill="#07050c" data-rough="0" data-rim="none" points="300,50 322,76 296,88" />
+  </g>
+  <g id="body">
+    <!-- torso tilted, sagging toward the left -->
+    <polygon fill="#07050c" points="226,236 252,244 250,268 220,262" />
+    <polygon fill="#07050c" points="196,262 262,270 266,316 236,370 196,360 180,312" />
+    <polygon fill="#16f46c" points="206,272 236,276 222,322 194,312" />
+    <polygon fill="#ff2457" points="244,284 262,290 248,334 236,322" />
+    <polygon fill="#ff2457" points="196,354 240,362 236,404 186,396" />
+    <!-- long legs, one crossed over the other -->
+    <polygon fill="#07050c" points="190,392 218,398 230,476 252,558 214,480" />
+    <polygon fill="#16f46c" points="200,410 214,414 222,462" />
+    <polygon fill="#ff2457" points="214,394 240,400 214,480 170,556 196,474" />
+  </g>
+  <g id="arms-rest">
+    <!-- one arm hanging limp to the front, the other tucked -->
+    <polygon fill="#07050c" points="200,270 186,282 150,340 120,404 104,444 96,470 112,450 108,476 120,450 130,470 132,440 144,404 172,340 204,290" />
+    <polygon fill="#16f46c" points="150,348 132,392 126,388 144,344" />
+    <polygon fill="#ff2457" points="258,280 270,292 276,336 252,370 236,368 258,334" />
+  </g>
+  <circle id="head" cx="232" cy="186" r="10" data-rot="22" fill="none" />
+</svg>

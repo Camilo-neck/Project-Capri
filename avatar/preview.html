@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Capri preview</title>
+    <style>
+      body { margin: 0; background: #34313f; color: #ddd; font: 12px monospace; }
+      #grid { display: grid; grid-template-columns: repeat(var(--cols, 4), auto); gap: 4px; padding: 4px; width: max-content; }
+      figure { margin: 0; background: #23212c; }
+      figcaption { padding: 2px 4px; }
+    </style>
+    <script type="module" src="/src/preview.ts"></script>
+  </head>
+  <body><div id="grid"></div></body>
+</html>

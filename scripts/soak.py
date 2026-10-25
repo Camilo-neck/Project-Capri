@@ -28,7 +28,7 @@ MESSAGES = [
     "cuéntame un dato curioso sobre el espacio",
     "busca archivos que se llamen PLAN",
     "¿qué tengo hoy en el calendario?",
-    "dime algo para animarme, porfa",
+    "cuéntame un chiste corto",  # nothing that could start music (media keys reach the real PC)
 ]
 LIMIT_MB_PER_H = 30  # growth per hour above this is reported as a likely leak
 

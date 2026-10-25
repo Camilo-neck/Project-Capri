@@ -28,7 +28,7 @@ export const GLITCH_MS: Record<GlitchKind, number> = {
   change: 150,
   poke: 200,
   hurt: 500,
-  vanish: 1500, // safety net: back even if "arrive" never comes
+  vanish: 3000, // safety net (longer than a possession): back even if "arrive" never comes
   arrive: ARRIVE_IN_MS + 2 * POSE_MS,
 };
 

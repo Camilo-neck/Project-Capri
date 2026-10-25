@@ -11,6 +11,83 @@ const SHARD_COLORS = [RED, RED, VIOLET, GREEN, WHITE];
 
 const snap = (v: number) => Math.round(v / PX) * PX;
 
+export type Rect = { x: number; y: number; w: number; h: number };
+
+const EYE_RING = "#36ff7a";
+const EYE_IRIS = "#3a5bff";
+const INK = "#140f1c";
+
+/** Small deterministic random sequence, so a frame's glitch can be redrawn the same. */
+function mulberry(seed: number): () => number {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Two big eyes in the middle, smaller ones scattered around them. */
+function eyeLayout(r: Rect): { x: number; y: number; r: number }[] {
+  const big = Math.max(12, Math.min(r.w, r.h) * 0.09);
+  const cx = r.x + r.w / 2, cy = r.y + r.h * 0.42;
+  const eyes = [{ x: cx - big * 1.5, y: cy, r: big }, { x: cx + big * 1.5, y: cy, r: big }];
+  const rand = mulberry(Math.round(r.w * 7 + r.h));
+  for (let i = 0, tries = 0; i < 7 && tries < 80; tries++) {
+    const e = { x: r.x + r.w * (0.1 + rand() * 0.8), y: r.y + r.h * (0.12 + rand() * 0.76), r: big * (0.35 + rand() * 0.3) };
+    if (eyes.some((o) => Math.hypot(o.x - e.x, o.y - e.y) < (o.r + e.r) * 1.4)) continue;
+    eyes.push(e);
+    i++;
+  }
+  return eyes;
+}
+
+/** A pixel disc of radius `rad`, squashed vertically by `open` (0 shut .. 1 open). */
+function disc(g: CanvasRenderingContext2D, x: number, y: number, rad: number, open: number, color: string): void {
+  g.fillStyle = color;
+  const cell = PX;
+  for (let dy = -rad; dy <= rad; dy += cell) {
+    const half = Math.sqrt(Math.max(0, rad * rad - dy * dy));
+    g.fillRect(snap(x - half), snap(y + dy * open), snap(2 * half), cell);
+  }
+}
+
+/** One of her eyes: green ring, blue almond iris, black pupil on the pointer, white glint. */
+function eye(g: CanvasRenderingContext2D, x: number, y: number, r: number, open: number, at: [number, number] | null): void {
+  disc(g, x, y, r + PX, open, INK);
+  disc(g, x, y, r, open, EYE_RING);
+  disc(g, x, y, r * 0.72, open, EYE_IRIS);
+  let px = x, py = y;
+  if (at) {
+    const d = Math.hypot(at[0] - x, at[1] - y) || 1;
+    const k = Math.min(1, d / 200) * r * 0.35;
+    px += ((at[0] - x) / d) * k;
+    py += ((at[1] - y) / d) * k * open;
+  }
+  disc(g, px, py, r * 0.3, open, INK);
+  if (open > 0.6) {
+    g.fillStyle = WHITE;
+    g.fillRect(snap(px - r * 0.3), snap(py - r * 0.35), snap(r * 0.2) + PX, snap(r * 0.2) + PX);
+  }
+}
+
+/** Her zigzag grin: a white sawtooth with an ink outline. */
+function grin(g: CanvasRenderingContext2D, cx: number, y: number, w: number): void {
+  const teeth = 4, tw = w / teeth, th = tw * 0.6;
+  for (const [color, pad] of [[INK, PX], [WHITE, 0]] as const) {
+    g.fillStyle = color;
+    for (let i = 0; i < teeth * 2; i++) {
+      // each half tooth as a staircase of pixel rows
+      const x0 = cx - w / 2 + (i * tw) / 2;
+      for (let s = 0; s <= th; s += PX) {
+        const k = s / th;
+        const xx = i % 2 === 0 ? x0 + (k * tw) / 2 : x0 + ((1 - k) * tw) / 2;
+        g.fillRect(snap(xx - pad), snap(y + s - pad), 3 * PX + 2 * pad, 2 * PX + 2 * pad);
+      }
+    }
+  }
+}
+
 interface Item {
   born: number;
   life: number;
@@ -92,6 +169,50 @@ export class Fx {
         g.fillStyle = WHITE;
         g.fillRect(cx - PX, y, 2 * PX, seg);
       }
+    });
+  }
+
+  /**
+   * She's inside a window: its frame crackles, slices of it glitch, and it looks at you with her
+   * eyes (all on the pointer) and her zigzag grin. Only drawn over it, never reads it; the parts of it
+   * under windows in front (`covers`) are left alone.
+   */
+  possess(r: Rect, covers: () => Rect[], look: () => [number, number] | null, life = 2000): void {
+    const eyes = eyeLayout(r);
+    this.add(life, (g, t) => {
+      const ms = t * life;
+      const open = Math.min(1, ms / 300) * Math.min(1, (life - ms) / 250); // eyes open, then shut
+      // glitch slices, a new set every 100 ms
+      const slices = mulberry(Math.floor(ms / 100) + 1);
+      for (let i = 0; i < 6; i++) {
+        g.globalAlpha = 0.55;
+        g.fillStyle = [RED, VIOLET, GREEN][i % 3];
+        const y = r.y + slices() * r.h;
+        const w = r.w * (0.2 + slices() * 0.5);
+        g.fillRect(snap(r.x + slices() * (r.w - w)), snap(y), snap(w), PX * (1 + Math.floor(slices() * 3)));
+      }
+      g.globalAlpha = 1;
+      // crackling frame
+      const jag = mulberry(Math.floor(ms / 60) + 7);
+      for (const [color, off] of [[VIOLET, 2 * PX], [RED, 0]] as const) {
+        g.fillStyle = color;
+        for (let x = r.x; x < r.x + r.w; x += 4 * PX) {
+          g.fillRect(snap(x), snap(r.y + off + (jag() - 0.5) * 3 * PX), 4 * PX, PX);
+          g.fillRect(snap(x), snap(r.y + r.h - off + (jag() - 0.5) * 3 * PX), 4 * PX, PX);
+        }
+        for (let y = r.y; y < r.y + r.h; y += 4 * PX) {
+          g.fillRect(snap(r.x + off + (jag() - 0.5) * 3 * PX), snap(y), PX, 4 * PX);
+          g.fillRect(snap(r.x + r.w - off + (jag() - 0.5) * 3 * PX), snap(y), PX, 4 * PX);
+        }
+      }
+      // her eyes, opening one after another, and the grin under the big two
+      const at = look();
+      eyes.forEach((e, i) => {
+        const o = Math.max(0, Math.min(1, open * 1.6 - i * 0.08));
+        if (o > 0) eye(g, e.x, e.y, e.r, o, at);
+      });
+      if (open > 0.5) grin(g, r.x + r.w / 2, eyes[0].y + eyes[0].r * 1.7, eyes[0].r * 4.5);
+      for (const c of covers()) g.clearRect(c.x, c.y, c.w, c.h);
     });
   }
 

@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewWindow};
+mod win_watch;
+
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[derive(Clone, Serialize)]
@@ -128,7 +130,8 @@ pub fn run() {
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .manage(Mouse::default())
-        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive])
+        .manage(win_watch::Latest::default())
+        .invoke_handler(tauri::generate_handler![config, set_hitbox, set_interactive, win_watch::windows])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -155,6 +158,8 @@ pub fn run() {
             fit(&app.get_webview_window("main").unwrap())?;
             let handle = app.handle().clone();
             std::thread::spawn(move || watch_mouse(handle));
+            let handle = app.handle().clone();
+            std::thread::spawn(move || win_watch::watch(handle));
             Ok(())
         })
         .build(tauri::generate_context!())

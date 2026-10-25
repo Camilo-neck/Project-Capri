@@ -25,7 +25,7 @@ body {
   display: none !important;
 }
 
-/* The window covers the screen; the HUD is a column on the taskbar that main.ts slides along it. */
+/* The window covers the screen; the HUD is a column main.ts moves so her feet sit on a ledge or the taskbar. */
 .fx {
   position: fixed;
   inset: 0;
@@ -37,7 +37,7 @@ body {
 .hud {
   position: absolute;
   left: 0;
-  bottom: 0;
+  top: 0;
   width: 360px;
   height: 560px;
   display: flex;

@@ -7,18 +7,26 @@ import type { ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame } from "./pet/clips.ts";
-import { solve } from "./pet/rig.ts";
-import { Fx } from "./render/fx.ts";
+import { GROUND, H, solve } from "./pet/rig.ts";
+import { Fx, type Rect } from "./render/fx.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS } from "./state/glitch.ts";
+import { pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
 const NUM_CTX = 8192;
 const LOOK_RANGE = 140; // px from her head at which the gaze reaches its limit
 const LOOK_IDLE_MS = 4000; // gaze returns to you when the mouse rests this long
-const WANDER_MS = [3 * 60_000, 6 * 60_000]; // idle, she teleports elsewhere on the taskbar this often
+const WANDER_MS = [3 * 60_000, 6 * 60_000]; // idle, she moves (or possesses a window) this often
+const BELOW = (H - GROUND) * SCALE; // HUD px under her feet: her legs dangle over the ledge
+const EDGE = 16; // px kept free at the screen sides
+const GRAVITY = 0.0028; // px/ms², falling off a ledge
+const POSSESS_MS = 2000;
+// Possessing windows can be turned off with localStorage "capri.possess" = "0".
+// ponytail: localStorage until phase 8 brings a settings file.
+const possessAllowed = () => localStorage.getItem("capri.possess") !== "0";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const hud = document.querySelector<HTMLElement>(".hud")!;
@@ -45,7 +53,7 @@ const director = new Director();
 const clips = new ClipPlayer();
 const glitch = new GlitchFx(performance.now());
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch, teleport } }); // inspection from devtools
+if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch, teleport, possess, fall, wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
 let sentAt = 0;
@@ -64,23 +72,40 @@ let greetAt = -Infinity;
 let cursor: [number, number] | null = null;
 let cursorAt = -Infinity;
 const latencies: number[] = [];
-let spot = 1; // where she is along the taskbar, 0..1 from left to right
 let teleporting = false;
+let possessing: { since: number } | null = null; // the "peligro" eyes, before she dives in
+let falling: { vy: number } | null = null;
 let nextWander = performance.now() + wanderGap();
+let wins: Windows = { fg: 0, wins: [] };
+let perch: Perch | null = null; // the window she sits on; null = the taskbar
+let at: Point = { x: 0, y: 0 }; // her feet, page px
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+const busy = () => teleporting || !!possessing || !!falling;
+const floor = () => innerHeight - BELOW;
+/** Room a ledge needs above it: her and the transmission, which stack above her feet. */
+const room = () => hud.offsetHeight - BELOW;
+const limits = () => ({ room: room(), width: innerWidth, margin: hud.offsetWidth / 2 + EDGE });
 
-/** Slides the HUD column (transmission, input and Capri) to `spot` along the taskbar. */
-function placeHud(): void {
-  const edge = 16;
-  hud.style.transform = `translateX(${Math.round(edge + spot * (innerWidth - hud.offsetWidth - 2 * edge))}px)`;
+/** A spot on the taskbar, `frac` 0..1 from left to right. */
+function onTaskbar(frac: number): Point {
+  return { x: EDGE + hud.offsetWidth / 2 + frac * (innerWidth - hud.offsetWidth - 2 * EDGE), y: floor() };
 }
+
+/** Moves the HUD column (transmission, input and Capri) so her feet are at `at`. */
+function placeHud(): void {
+  hud.style.transform = `translate(${Math.round(at.x - hud.offsetWidth / 2)}px, ${Math.round(at.y - room())}px)`;
+}
+at = onTaskbar(1);
 placeHud();
-addEventListener("resize", placeHud);
+addEventListener("resize", () => {
+  if (!perch) at.y = floor();
+  placeHud();
+});
 
 /** Her body on the page: center, feet line, and rough size, for the screen effects. */
 function body(): { x: number; y: number; ground: number; size: number } {
@@ -89,33 +114,89 @@ function body(): { x: number; y: number; ground: number; size: number } {
   return { x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2, ground: r.top + b.y + b.h, size: Math.max(b.w, b.h) };
 }
 
-/** Collapses, leaves a column of light, streaks to another spot (at least a third of the taskbar away) and lands. */
-async function teleport(): Promise<void> {
-  if (teleporting) return;
+/** Somewhere on the taskbar at least a third of it away from here. */
+function farOnTaskbar(): Point {
+  const spot = (at.x - EDGE - hud.offsetWidth / 2) / (innerWidth - hud.offsetWidth - 2 * EDGE);
+  return onTaskbar(spot > 0.5 ? Math.random() * Math.max(0, spot - 0.35) : Math.min(1, spot + 0.35 + Math.random() * (0.65 - spot)));
+}
+
+/** Collapses, leaves a column of light, streaks to `to` (a window ledge, or null: the taskbar) and lands. */
+async function teleport(to: Perch | null = null, { dive = false } = {}): Promise<void> {
+  if (teleporting || falling) return;
   teleporting = true;
-  const to = spot > 0.5 ? Math.random() * (spot - 0.35) : spot + 0.35 + Math.random() * (0.65 - spot);
   const from = body();
-  if (!reducedMotion.matches) {
+  if (!reducedMotion.matches && !dive) {
     glitch.kick("vanish", performance.now());
     fx.burst(from.x, from.y, from.size, false);
     await sleep(VANISH_OUT_MS);
     fx.beam(from.x, from.ground);
   }
-  spot = to;
+  const seat = to && seatOf(wins, to, limits());
+  perch = seat ? to : null;
+  at = seat || farOnTaskbar();
   placeHud();
   if (!reducedMotion.matches) {
-    const at = body();
-    fx.streak(from.x, from.y, at.x, at.y);
+    const there = body();
+    if (!dive) fx.streak(from.x, from.y, there.x, there.y);
     await sleep(60);
-    fx.beam(at.x, at.ground, true);
+    fx.beam(there.x, there.ground, true);
     glitch.kick("arrive", performance.now());
-    fx.burst(at.x, at.y, at.size, true);
+    fx.burst(there.x, there.y, there.size, true);
   }
   teleporting = false;
 }
 
+/** Her ledge is gone: she drops to the taskbar. */
+function fall(): void {
+  perch = null;
+  if (reducedMotion.matches) {
+    at.y = floor();
+    placeHud();
+    return;
+  }
+  falling = { vy: 0 };
+}
+
+/** On a ledge: all her eyes open, she dives into the window and takes it over for a moment, then comes out elsewhere. */
+async function possess(): Promise<void> {
+  const win = perch && wins.wins.find((w) => w.id === perch!.id);
+  if (!win || busy() || reducedMotion.matches) return;
+  possessing = { since: performance.now() };
+  await sleep(900); // the "peligro" clip: her eyes open
+  possessing = null;
+  teleporting = true;
+  const from = body();
+  glitch.kick("vanish", performance.now());
+  fx.burst(from.x, from.y, from.size * 0.6, false);
+  await sleep(VANISH_OUT_MS);
+  const id = win.id;
+  // drawn over the window as it is now, minus the windows in front of it
+  const covers = (): Rect[] => {
+    const i = wins.wins.findIndex((w) => w.id === id);
+    return i < 0 ? [] : wins.wins.slice(0, i);
+  };
+  fx.possess(win, covers, () => cursor, POSSESS_MS);
+  await sleep(POSSESS_MS);
+  teleporting = false;
+  await teleport(pickSeat(wins, limits(), Math.random, { except: id }), { dive: true });
+}
+
+/** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then. */
+function wander(): void {
+  if (perch && possessAllowed() && Math.random() < 0.3) {
+    void possess();
+    return;
+  }
+  void teleport(Math.random() < 0.6 ? pickSeat(wins, limits(), Math.random, { except: perch?.id }) : null);
+}
+
 function setStatus(s: Status): void {
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
+  if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
+    // while she works, she sits on the window in front if she can
+    const seat = pickSeat(wins, limits(), Math.random, { frontOnly: true });
+    if (seat && seat.id !== perch?.id) void teleport(seat);
+  }
   linkStatus = s;
   status.dataset.state = s;
   statusLabel.textContent = STATUS[s];
@@ -181,7 +262,18 @@ function setInputOpen(open: boolean): void {
 }
 
 void listen("open-input", () => setInputOpen(true));
-void listen("teleport", () => void teleport());
+void listen("teleport", () => void teleport(pickSeat(wins, limits(), Math.random, { except: perch?.id })));
+void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
+void listen<Windows>("windows", (e) => {
+  wins = e.payload;
+  if (!perch || teleporting) return;
+  const seat = seatOf(wins, perch, limits());
+  if (!seat) fall();
+  else if (seat.x !== at.x || seat.y !== at.y) {
+    at = seat; // rides along with the window
+    placeHud();
+  }
+});
 void listen<[number, number]>("cursor", (e) => {
   cursor = e.payload;
   cursorAt = performance.now();
@@ -255,9 +347,21 @@ pet.app.ticker.add((ticker) => {
   }
   if (!ended || typewriter.pending) lastTalk = now;
   petEnergy = Math.max(0, petEnergy - ticker.deltaMS * 0.08);
+  if (falling) {
+    falling.vy += GRAVITY * ticker.deltaMS;
+    at.y += falling.vy * ticker.deltaMS;
+    if (at.y >= floor()) {
+      at.y = floor();
+      falling = null;
+      glitch.kick("change", now);
+      const b = body();
+      fx.burst(b.x, b.ground, b.size * 0.5, false);
+    }
+    placeHud();
+  }
   if (now > nextWander) {
     nextWander = now + wanderGap();
-    if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS) void teleport();
+    if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) wander();
   }
 
   const frame = Math.floor(now / POSE_MS);
@@ -279,13 +383,14 @@ pet.app.ticker.add((ticker) => {
   // Behaviors with PixelLab sprite clips show those; the rest use the code-drawn pet.
   clips.update(name, t);
   const base = clips.frame(t);
-  const clipFrame = gestureFrame(s.gesto, s.gestureT, base, name) ?? base;
+  const eyes = possessing && { clip: "peligro", index: Math.min(8, Math.floor((now - possessing.since) / 100)) };
+  const clipFrame = eyes || (gestureFrame(s.gesto, s.gestureT, base, name) ?? base);
   pet.showClip(clipFrame);
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
 
-  const b = pet.bounds();
+  const b = teleporting ? { x: -1e4, y: -1e4, w: 0, h: 0 } : pet.bounds(); // while she's gone, nothing to click
   if (b) {
     const r = stage.getBoundingClientRect();
     const box = [r.left + b.x, r.top + b.y, b.w, b.h].map(Math.round);

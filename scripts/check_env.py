@@ -11,7 +11,7 @@ import sys
 import urllib.request
 
 OLLAMA = "http://127.0.0.1:11434"
-MODEL = "qwen3-vl:8b"
+MODEL = "qwen3-vl:8b-instruct"
 NUM_CTX = 8192
 VRAM_BUDGET_MB = 15 * 1024
 

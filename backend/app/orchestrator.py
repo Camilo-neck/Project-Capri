@@ -14,9 +14,11 @@ class Orchestrator:
     async def turn(self, text: str, send: Send) -> None:
         self.history.append({"role": "user", "content": text})
         await send(State(value="thinking"))
-        started = False
+        started, ctx = False, None
         async for event in reply(self.history, generate=self.generate):
             match event:
+                case ("ctx", n):
+                    ctx = n
                 case ("start", emocion, gesto):
                     started = True
                     await send(State(value="speaking"))
@@ -33,5 +35,5 @@ class Orchestrator:
                         await send(UtteranceStart(emocion=r.emocion, gesto=r.gesto))
                         await send(TextDelta(text=r.texto))
                     self.history.append({"role": "assistant", "content": r.model_dump_json()})
-        await send(UtteranceEnd())
+        await send(UtteranceEnd(ctx=ctx))
         await send(State(value="idle"))

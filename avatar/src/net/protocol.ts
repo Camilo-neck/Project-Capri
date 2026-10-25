@@ -25,6 +25,7 @@ export interface TextDelta {
 
 export interface UtteranceEnd {
   type: "utterance_end";
+  ctx: number | null;
 }
 
 export interface ConfirmRequest {

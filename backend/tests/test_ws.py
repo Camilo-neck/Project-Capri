@@ -42,7 +42,7 @@ def test_demo_turns_arrive_in_order(client):
             ]
             assert {m["type"] for m in msgs[3:-2]} == {"text_delta"}
             assert "".join(m["text"] for m in msgs[3:-2]) == expected.texto
-            assert msgs[-2:] == [{"type": "utterance_end"}, {"type": "state", "value": "idle"}]
+            assert msgs[-2:] == [{"type": "utterance_end", "ctx": None}, {"type": "state", "value": "idle"}]
     assert {r.emocion for r in DEMO} == set(get_args(Emocion))
     assert {r.gesto for r in DEMO} == set(get_args(Gesto))
 
@@ -80,6 +80,17 @@ def test_fallback_without_text_still_sends_utterance(client):
     types = [m["type"] for m in msgs]
     assert types == ["state", "state", "utterance_start", "text_delta", "utterance_end", "state"]
     assert msgs[2]["emocion"] == "neutral"
+
+
+def test_utterance_end_reports_context_tokens():
+    async def with_usage(messages):
+        yield DEMO[0].model_dump_json()
+        yield 1234
+
+    app = create_app(TOKEN, Orchestrator(with_usage))
+    with TestClient(app).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        assert receive_turn(ws)[-2] == {"type": "utterance_end", "ctx": 1234}
 
 
 def ts_union(name: str) -> set[str]:

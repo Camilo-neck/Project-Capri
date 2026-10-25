@@ -7,6 +7,8 @@ import argparse
 import logging
 import os
 import secrets
+import sys
+import threading
 
 import uvicorn
 
@@ -20,8 +22,12 @@ HOST, PORT = "127.0.0.1", 8765
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--demo", action="store_true", help="scripted replies instead of the LLM")
+    parser.add_argument("--exit-with-stdin", action="store_true", help="exit when the parent closes our stdin")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    if args.exit_with_stdin:
+        # The launcher holds our stdin; EOF means it exited or crashed, so don't outlive it.
+        threading.Thread(target=lambda: (sys.stdin.read(), os._exit(0)), daemon=True).start()
 
     token = os.environ.get("CAPRI_TOKEN") or secrets.token_urlsafe(32)
     orchestrator = Orchestrator(demo_generate_factory()) if args.demo else Orchestrator()

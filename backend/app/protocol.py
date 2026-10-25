@@ -26,6 +26,7 @@ class TextDelta(BaseModel):
 
 class UtteranceEnd(BaseModel):
     type: Literal["utterance_end"] = "utterance_end"
+    ctx: int | None = None  # context tokens used, as reported by Ollama
 
 
 class ConfirmRequest(BaseModel):

@@ -13,9 +13,16 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "Capri",
-        "width": 800,
-        "height": 600
+        "width": 420,
+        "height": 640,
+        "resizable": false,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

@@ -1,6 +1,246 @@
+:root {
+  --bg: rgb(11 9 22 / 0.88);
+  --fg: #ece9f6;
+  --accent: #a24bff;
+  --accent-2: #b6ff3b;
+  --warn: #ffb020;
+  --dim: #7a7696;
+  --cut: 14px;
+  --font-head: "Chakra Petch", sans-serif;
+  --font-body: "JetBrains Mono", monospace;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
-  background: #0b0b12;
+  background: transparent; /* the window itself is transparent */
+  overflow: hidden;
+  color: var(--fg);
+  font: 13px/1.45 var(--font-body);
+  user-select: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.hud {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 10px 8px;
+  box-sizing: border-box;
+}
+
+/* Transmission */
+.tx {
+  margin-bottom: 6px;
+  animation: tx-in 160ms steps(4) both;
+}
+
+.tx-tab {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font: 600 12px var(--font-head);
+  letter-spacing: 0.08em;
+}
+
+.tx-title {
+  background: var(--accent);
+  color: #0b0916;
+  padding: 1px 10px 0 6px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 100%, 0 100%);
+}
+
+.tx-meta {
+  color: var(--dim);
+  font: 11px var(--font-body);
+  letter-spacing: 0;
+}
+
+/* 1px accent border that follows the cut corner: outer is the border, inner the panel */
+.tx-frame {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  padding: 1px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%);
+}
+
+.tx-body {
+  position: relative;
+  background: var(--bg);
+  padding: 8px 12px 14px;
+  min-height: 2.9em;
+  max-height: 260px;
+  overflow: hidden;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut) + 1px), calc(100% - var(--cut) + 1px) 100%, 0 100%);
+}
+
+.tx-body::after {
+  /* scanlines */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(255 255 255 / 0.05) 0 1px, transparent 1px 3px);
+}
+
+.tx-user {
+  margin: 0 0 4px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-user:empty {
+  display: none;
+}
+
+.tx-text {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.tx-chev {
+  position: absolute;
+  right: calc(var(--cut) + 4px);
+  bottom: 2px;
+  color: var(--accent-2);
+  font-size: 11px;
+  letter-spacing: -0.1em;
+  visibility: hidden;
+}
+
+.tx.typing .tx-chev {
+  visibility: visible;
+  animation: chev 600ms steps(4) infinite;
+}
+
+/* Status bar */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.12em;
+  color: var(--accent-2);
+}
+
+.status[data-state="down"] {
+  color: var(--dim);
+}
+
+.status-mark {
+  color: var(--accent);
+}
+
+.segs {
+  display: flex;
+  gap: 2px;
+}
+
+.segs i {
+  width: 6px;
+  height: 8px;
+  background: currentColor;
+  opacity: 0.25;
+  animation: seg 1.6s steps(1) infinite;
+}
+
+.segs i:nth-child(n + 8) {
+  opacity: 0.8;
+}
+
+.status[data-state="thinking"] .segs i,
+.status[data-state="speaking"] .segs i {
+  animation-duration: 0.5s;
+}
+
+.segs i:nth-child(2n) {
+  animation-delay: 0.2s;
+}
+
+.segs i:nth-child(3n) {
+  animation-delay: 0.45s;
+}
+
+.stage {
+  height: 340px;
+}
+
+.stage canvas {
+  display: block;
+}
+
+/* Input */
+.input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  padding: 6px 8px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+
+.prompt {
+  color: var(--accent-2);
+}
+
+.input input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  caret-shape: block;
+  caret-color: var(--accent-2);
+}
+
+.input input::placeholder {
+  color: var(--dim);
+}
+
+@keyframes tx-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-6px);
+    clip-path: inset(40% 0 40% 0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(4px);
+    clip-path: inset(0 0 60% 0);
+  }
+  100% {
+    transform: none;
+    clip-path: inset(0);
+  }
+}
+
+@keyframes chev {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes seg {
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx,
+  .tx.typing .tx-chev,
+  .segs i {
+    animation: none;
+  }
 }

@@ -7,5 +7,31 @@
     <title>Capri</title>
     <script type="module" src="/src/main.ts"></script>
   </head>
-  <body></body>
+  <body>
+    <main class="hud">
+      <section id="tx" class="tx" hidden>
+        <header class="tx-tab">
+          <span class="tx-title">▸ CAPRI ─ TX <span id="tx-n">0000</span></span>
+          <span id="tx-meta" class="tx-meta"></span>
+        </header>
+        <div class="tx-frame">
+          <div class="tx-body">
+            <p id="tx-user" class="tx-user"></p>
+            <p id="tx-text" class="tx-text" aria-live="polite"></p>
+            <span class="tx-chev" aria-hidden="true">&gt;&gt;&gt;&gt;</span>
+          </div>
+        </div>
+      </section>
+      <div id="status" class="status" data-state="down">
+        <span class="status-mark">◢</span>
+        <span id="status-label">SIN ENLACE</span>
+        <span class="segs" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div id="stage" class="stage"></div>
+      <form id="input-row" class="input" hidden>
+        <label for="input" class="prompt">›_</label>
+        <input id="input" autocomplete="off" spellcheck="false" placeholder="escribe aquí" />
+      </form>
+    </main>
+  </body>
 </html>

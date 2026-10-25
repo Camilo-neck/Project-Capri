@@ -4,6 +4,7 @@ Events yielded by `reply`:
   ("start", emocion, gesto)  as soon as both are known, before any text
   ("delta", str)             new chunk of `texto`
   ("retry",)                 first attempt failed validation; discard shown text
+  ("ctx", int)               context tokens used (prompt + reply), when the backend reports it
   ("end", Reply)             validated reply (or the neutral fallback)
 """
 
@@ -26,12 +27,13 @@ SYSTEM_PROMPT = (Path(__file__).parent.parent / "persona" / "system_prompt.md").
 SCHEMA = Reply.model_json_schema()
 DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
-Generate = Callable[[list[dict]], AsyncIterator[str]]
+# Yields JSON text chunks, then optionally an int: context tokens used by the call.
+Generate = Callable[[list[dict]], AsyncIterator[str | int]]
 
 _client = AsyncClient(host=config.OLLAMA_HOST)
 
 
-async def ollama_generate(messages: list[dict]) -> AsyncIterator[str]:
+async def ollama_generate(messages: list[dict]) -> AsyncIterator[str | int]:
     stream = await _client.chat(
         model=config.MODEL,
         messages=messages,
@@ -43,6 +45,8 @@ async def ollama_generate(messages: list[dict]) -> AsyncIterator[str]:
     )
     async for part in stream:
         yield part.message.content or ""
+        if part.done:
+            yield (part.prompt_eval_count or 0) + (part.eval_count or 0)  # context tokens used
 
 
 def build_messages(history: list[dict], now: datetime | None = None) -> list[dict]:
@@ -52,10 +56,13 @@ def build_messages(history: list[dict], now: datetime | None = None) -> list[dic
     return [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "system", "content": context}]
 
 
-async def stream_reply(chunks: AsyncIterator[str]) -> AsyncIterator[tuple]:
+async def stream_reply(chunks: AsyncIterator[str | int]) -> AsyncIterator[tuple]:
     """Yield start/delta events from raw JSON chunks; the last event is ("raw", full_json)."""
     buf, sent, started = "", 0, False
     async for chunk in chunks:
+        if isinstance(chunk, int):
+            yield ("ctx", chunk)
+            continue
         buf += chunk
         # ponytail: reparses the whole buffer per chunk (O(n^2)); fine for ~300-token replies.
         try:

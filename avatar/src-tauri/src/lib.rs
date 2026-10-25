@@ -1,7 +1,6 @@
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -18,12 +17,11 @@ struct Config {
 
 struct Backend(Mutex<Option<Child>>);
 
-/// Where the window should take the mouse: over Capri (hitbox, logical px in the window) or
-/// everywhere while the UI needs it (input open). Elsewhere clicks go through to the desktop.
+/// Where the window takes the mouse: over the boxes the frontend reports (Capri, and the input bar
+/// or a confirmation while they're up; logical px in the window). Elsewhere clicks go through.
 #[derive(Default)]
 struct Mouse {
-    hitbox: Mutex<Option<[f64; 4]>>,
-    forced: AtomicBool,
+    hitboxes: Mutex<Vec<[f64; 4]>>,
 }
 
 /// Logical px between her ground line (the taskbar's top edge) and the bottom of the overlay:
@@ -36,13 +34,8 @@ fn config(cfg: tauri::State<Config>) -> Config {
 }
 
 #[tauri::command]
-fn set_hitbox(x: f64, y: f64, w: f64, h: f64, mouse: tauri::State<Mouse>) {
-    *mouse.hitbox.lock().unwrap() = Some([x, y, w, h]);
-}
-
-#[tauri::command]
-fn set_interactive(on: bool, mouse: tauri::State<Mouse>) {
-    mouse.forced.store(on, Ordering::Relaxed);
+fn set_hitboxes(boxes: Vec<[f64; 4]>, mouse: tauri::State<Mouse>) {
+    *mouse.hitboxes.lock().unwrap() = boxes;
 }
 
 /// The overlay: the primary monitor's work area plus BELOW_GROUND over the taskbar. Not the whole
@@ -78,11 +71,12 @@ fn watch_mouse(app: tauri::AppHandle) {
         }
         let mouse = app.state::<Mouse>();
         let inside = mouse
-            .hitbox
+            .hitboxes
             .lock()
             .unwrap()
-            .is_some_and(|[bx, by, bw, bh]| x >= bx && y >= by && x <= bx + bw && y <= by + bh);
-        let ignore = !(inside || mouse.forced.load(Ordering::Relaxed));
+            .iter()
+            .any(|&[bx, by, bw, bh]| x >= bx && y >= by && x <= bx + bw && y <= by + bh);
+        let ignore = !inside;
         if last_ignore != Some(ignore) && w.set_ignore_cursor_events(ignore).is_ok() {
             last_ignore = Some(ignore);
         }
@@ -134,8 +128,7 @@ pub fn run() {
         .manage(win_watch::Latest::default())
         .invoke_handler(tauri::generate_handler![
             config,
-            set_hitbox,
-            set_interactive,
+            set_hitboxes,
             win_watch::windows,
             win_watch::look_target,
             win_watch::capture_guard
@@ -153,9 +146,8 @@ pub fn run() {
                         let _ = app.emit("look", ());
                     }
                     if shortcut == &open_input {
-                        app.state::<Mouse>().forced.store(true, Ordering::Relaxed);
+                        // Keyboard focus only: the bar becomes clickable once the frontend reports its box.
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.set_ignore_cursor_events(false);
                             let _ = w.set_focus();
                         }
                         let _ = app.emit("open-input", ());

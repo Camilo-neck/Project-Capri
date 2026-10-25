@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from app.tools import ToolName
+
 Emocion = Literal[
     "neutral", "feliz", "emocionada", "traviesa", "curiosa",
     "pensativa", "sorprendida", "molesta", "triste", "seria",
@@ -10,7 +12,7 @@ Gesto = Literal["ninguno", "asentir", "ladear_cabeza", "guino", "saltar", "senal
 
 
 class Accion(BaseModel):
-    nombre: str
+    nombre: ToolName  # a closed list, so Ollama's grammar can't invent tools
     args: dict[str, Any]
 
 

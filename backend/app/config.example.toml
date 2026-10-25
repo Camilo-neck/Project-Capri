@@ -1,0 +1,22 @@
+# Configuración de Capri. Se crea sola la primera vez en %APPDATA%\Capri\config.toml;
+# edítala con cualquier editor. Los cambios valen desde la siguiente vez que Capri la use.
+
+# Apps que Capri puede abrir (siempre te pide confirmación antes). nombre = "programa o ruta"
+[apps]
+"bloc de notas" = "notepad.exe"
+calculadora = "calc.exe"
+
+# Carpetas donde puede buscar archivos (solo mira nombres, nunca el contenido).
+[rutas]
+buscar = ["~/Documents"]
+
+# Scripts que puede ejecutar por su nombre (siempre con confirmación, sin argumentos).
+# nombre = "ruta al .ps1, .bat, .cmd, .py o .exe"
+[scripts]
+
+[calendario]
+# Dirección secreta en formato iCal de tu Google Calendar. Si está vacía, pídele a Capri
+# que te ayude a configurarla.
+url = ""
+# Cuántos minutos antes de cada evento te avisa.
+aviso_minutos = 10

@@ -63,6 +63,7 @@ body {
 }
 
 .tx-title {
+  white-space: nowrap;
   background: var(--accent);
   color: #0b0916;
   padding: 1px 10px 0 6px;
@@ -118,6 +119,46 @@ body {
   font-size: 14px;
   white-space: pre-wrap;
   user-select: text;
+}
+
+/* Dialogue choices: confirmations for actions with effects. Neither is preselected. */
+.choices {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.choices button {
+  all: unset;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+  cursor: pointer;
+  border-left: 2px solid var(--dim);
+}
+
+.choices button.warn {
+  border-left-color: var(--warn);
+}
+
+.choices button.warn .mark {
+  color: var(--warn);
+}
+
+.choices button:hover,
+.choices button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.tx-body:has(.choices:not([hidden])) {
+  max-height: none;
 }
 
 .tx-chev {

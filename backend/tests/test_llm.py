@@ -43,10 +43,10 @@ def test_stream_rebuilds_texto_from_any_chunking():
 
 
 def test_reply_valid_with_accion():
-    raw = json.dumps({"emocion": "feliz", "gesto": "ninguno", "accion": {"nombre": "abrir", "args": {"app": "x"}}, "texto": "Va"})
+    raw = json.dumps({"emocion": "feliz", "gesto": "ninguno", "accion": {"nombre": "abrir_app", "args": {"nombre": "x"}}, "texto": "Va"})
     events = collect(reply([], generate=lambda m: chunked(raw, [3] * 50)))
     r = events[-1][1]
-    assert r.accion.nombre == "abrir" and r.texto == "Va"
+    assert r.accion.nombre == "abrir_app" and r.texto == "Va"
 
 
 def test_reply_retries_once_then_succeeds():

@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import secrets
+from collections.abc import Coroutine
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
@@ -13,7 +15,7 @@ log = logging.getLogger(__name__)
 ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri://localhost", "http://localhost:1420"}
 
 
-def create_app(token: str, orchestrator: Orchestrator) -> FastAPI:
+def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -> FastAPI:
     app = FastAPI()
 
     @app.websocket("/ws")
@@ -30,6 +32,21 @@ def create_app(token: str, orchestrator: Orchestrator) -> FastAPI:
         async def send(msg: ServerMessage) -> None:
             await ws.send_text(msg.model_dump_json())
 
+        # Turns run as tasks, one at a time, so this loop keeps reading: a turn waiting on a
+        # confirmation needs the confirm_response that arrives while it waits.
+        tasks: set[asyncio.Task] = set()
+
+        def spawn(coro: Coroutine) -> None:
+            async def locked() -> None:
+                async with orchestrator.lock:
+                    await coro
+
+            task = asyncio.create_task(locked())
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+
+        if reminders:
+            tasks.add(asyncio.create_task(orchestrator.reminders(send)))
         try:
             while True:
                 raw = await ws.receive_text()
@@ -39,16 +56,19 @@ def create_app(token: str, orchestrator: Orchestrator) -> FastAPI:
                     log.warning("invalid client message: %s", e)
                     continue
                 match msg:
-                    # ponytail: turns run inline, so input received mid-turn waits; add a task queue if barge-in matters.
                     case TextInput(text=text):
-                        await orchestrator.turn(text, send)
+                        spawn(orchestrator.turn(text, send))
                     case Look(text=text, rect=rect):
-                        await orchestrator.look(text, rect, send)
-                    case ConfirmResponse():
-                        log.info("confirm_response %s (no pending actions until phase 5)", msg.id)
+                        spawn(orchestrator.look(text, rect, send))
+                    case ConfirmResponse(id=id, ok=ok):
+                        orchestrator.confirm(id, ok)
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
         except WebSocketDisconnect:
             pass
+        finally:
+            orchestrator.cancel_pending()
+            for task in tasks:
+                task.cancel()
 
     return app

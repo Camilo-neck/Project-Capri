@@ -35,6 +35,7 @@ const txN = $("tx-n");
 const txMeta = $("tx-meta");
 const txUser = $("tx-user");
 const txText = $("tx-text");
+const choices = $<HTMLOListElement>("choices");
 const status = $("status");
 const statusLabel = $("status-label");
 const inputRow = $<HTMLFormElement>("input-row");
@@ -62,6 +63,8 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 if (import.meta.env.DEV) Object.assign(window, { __capri: { director, clips, glitch, teleport, possess, fall, wins: () => wins, perch: () => perch, at: () => at } }); // inspection from devtools
 
 let turn = 0;
+let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
+let confirming: string | null = null; // id of the confirmation on screen
 let sentAt = 0;
 let latency: number | null = null;
 let ctx: number | null = null;
@@ -199,6 +202,8 @@ function wander(): void {
 function setStatus(s: Status): void {
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
   if (s === "looking") fx.scan();
+  if (s === "thinking" && linkStatus === "idle" && !awaiting) startTurn(""); // she speaks up on her own
+  if (s === "idle") awaiting = false;
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
   if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
     // while she works, she sits on the window in front if she can
@@ -232,6 +237,7 @@ const link = connect(
         setStatus(msg.value);
         break;
       case "utterance_start":
+        if (confirming) hideChoices(); // the confirmation timed out: the turn moved on
         // Also covers a retry: the new utterance replaces the text shown so far.
         if (avatar.setEmotion(msg.emocion) && !teleporting) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
         avatar.playGesture(msg.gesto, now);
@@ -251,18 +257,59 @@ const link = connect(
         updateMeta();
         break;
       case "confirm_request":
-        break; // phase 5
+        showChoices(msg.id, msg.texto);
+        break;
     }
   },
-  (up) => setStatus(up ? "idle" : "down"),
+  (up) => {
+    if (!up) hideChoices(); // the backend treats a lost connection as "no"
+    setStatus(up ? "idle" : "down");
+  },
 );
 
-// The window lets clicks through except over Capri herself (Rust polls the cursor against this
-// hitbox) or while the input bar is open (and, from phase 5, while a confirmation is pending).
+/** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected. */
+function showChoices(id: string, what: string): void {
+  confirming = id;
+  const option = (n: 1 | 2, label: string) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = n === 1 ? "warn" : "";
+    b.innerHTML = `<span class="mark">[${n}]${n === 1 ? " ⚠" : ""}</span> `;
+    b.append(label);
+    b.addEventListener("click", () => answer(n === 1));
+    li.append(b);
+    return li;
+  };
+  choices.replaceChildren(option(1, what), option(2, "Ahora no"));
+  choices.hidden = false;
+  showTx();
+}
+
+function hideChoices(): void {
+  confirming = null;
+  choices.hidden = true;
+  choices.replaceChildren();
+}
+
+function answer(ok: boolean): void {
+  if (!confirming) return;
+  link.send({ type: "confirm_response", id: confirming, ok });
+  hideChoices();
+}
+
+// Keys 1 / 2 answer too, unless they're being typed into the input.
+addEventListener("keydown", (e) => {
+  if (!confirming || (e.key !== "1" && e.key !== "2") || (document.activeElement === input && input.value)) return;
+  e.preventDefault();
+  answer(e.key === "1");
+});
+
+// The window lets clicks through except over the boxes reported to Rust each frame: Capri, the
+// input bar and transmission while the bar is open, and the transmission while a choice waits.
 function setInputOpen(open: boolean): void {
   inputRow.hidden = !open;
   hud.classList.toggle("input-open", open);
-  void invoke("set_interactive", { on: open });
   if (open) {
     input.focus();
     if (txText.textContent) showTx();
@@ -279,10 +326,12 @@ function guardOff(): void {
 /** Bookkeeping for a message just sent: turn number, latency clock, the transmission header. */
 function startTurn(shown: string): void {
   turn += 1;
-  sentAt = performance.now();
+  awaiting = shown !== "";
+  sentAt = awaiting ? performance.now() : 0; // her own turns have no latency to measure
   latency = null;
   txN.textContent = String(turn).padStart(4, "0");
-  txUser.textContent = `› ${shown}`;
+  txUser.textContent = awaiting ? `› ${shown}` : "";
+  typewriter.clear(); // leftovers of the previous reply would reveal at once and fake the latency
   txText.textContent = "";
   updateMeta();
   showTx();
@@ -381,7 +430,9 @@ pet.app.ticker.add((ticker) => {
     avatar.mouth = ended ? null : "closed";
     if (ended && tx.classList.contains("typing")) {
       tx.classList.remove("typing");
-      if (inputRow.hidden) hideTimer = window.setTimeout(() => (tx.hidden = true), HIDE_AFTER_MS);
+      if (inputRow.hidden) hideTimer = window.setTimeout(() => {
+          if (!confirming) tx.hidden = true; // a pending choice stays up
+        }, HIDE_AFTER_MS);
     }
   }
   if (!ended || typewriter.pending) lastTalk = now;
@@ -429,14 +480,21 @@ pet.app.ticker.add((ticker) => {
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
   pet.glitch(reducedMotion.matches ? OFF : g, frame % 997);
 
-  const b = teleporting ? { x: -1e4, y: -1e4, w: 0, h: 0 } : pet.bounds(); // while she's gone, nothing to click
+  const boxes: number[][] = [];
+  const b = teleporting ? null : pet.bounds(); // while she's gone, nothing to click
   if (b) {
     const r = stage.getBoundingClientRect();
-    const box = [r.left + b.x, r.top + b.y, b.w, b.h].map(Math.round);
-    const key = box.map((v) => Math.round(v / 4)).join();
-    if (key !== lastHitbox) {
-      lastHitbox = key;
-      void invoke("set_hitbox", { x: box[0], y: box[1], w: box[2], h: box[3] });
-    }
+    boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
+  }
+  const ui = [...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming ? [] : [tx])];
+  for (const el of ui) {
+    const r = el.getBoundingClientRect();
+    if (r.width) boxes.push([r.left, r.top, r.width, r.height]);
+  }
+  const rounded = boxes.map((box) => box.map(Math.round));
+  const key = rounded.map((box) => box.map((v) => Math.round(v / 4)).join()).join("|");
+  if (key !== lastHitbox) {
+    lastHitbox = key;
+    void invoke("set_hitboxes", { boxes: rounded });
   }
 });

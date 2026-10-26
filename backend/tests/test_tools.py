@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from app import calendar_ics, settings, tools
+from app import calendar_ics, power, settings, tools
 from app.orchestrator import MAX_ACTIONS, Orchestrator
 from app.ws import create_app
 
@@ -111,13 +111,11 @@ def test_disconnecting_with_a_pending_confirmation_runs_nothing(opened):
     assert opened == [] and orch.pending == {}
 
 
-def test_safe_tools_run_without_asking(tmp_path, isolated_config):
-    docs = tmp_path / "docs"
-    (docs / "sub").mkdir(parents=True)
-    (docs / "sub" / "Factura marzo.pdf").write_text("x")
-    settings.load()
-    isolated_config.write_text(isolated_config.read_text(encoding="utf-8").replace(
-        'buscar = ["~/Documents"]', f"buscar = [{json.dumps(str(docs))}]"), encoding="utf-8")
+def test_safe_tools_run_without_asking(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / "docs" / "sub").mkdir(parents=True)
+    (home / "docs" / "sub" / "Factura marzo.pdf").write_text("x")
+    monkeypatch.setattr(power, "HOME", home.resolve())
     search = {"nombre": "buscar_archivos", "args": {"texto": "factura"}}
     generate, calls = scripted(say("Busco.", search), say("Encontré una."))
     with connect(Orchestrator(generate)) as ws:
@@ -127,20 +125,21 @@ def test_safe_tools_run_without_asking(tmp_path, isolated_config):
     assert "Factura marzo.pdf" in results(calls)[0]
 
 
-def test_bad_args_and_unlisted_apps_are_reported_not_run(opened):
+def test_bad_args_are_reported_and_any_app_asks_for_a_click(opened):
     generate, calls = scripted(
         say("Abro.", {"nombre": "abrir_app", "args": {}}),
         say("Abro.", {"nombre": "abrir_app", "args": {"nombre": "regedit"}}),
-        say("No pude."),
+        say("Listo."),
     )
     with connect(Orchestrator(generate)) as ws:
         ws.send_json({"type": "text_input", "text": "abre cosas"})
-        ask = until(ws, "confirm_request")[-1]  # only the valid-looking one asks
+        ask = until(ws, "confirm_request")[-1]  # only the valid one asks; an app that isn't listed still can
+        assert ask["texto"] == "Abrir regedit" and ask["riesgo"] == "normal"
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
         until_idle(ws)
     first, second = results(calls)
-    assert "Argumentos no válidos" in first and "no está en la lista" in second
-    assert opened == []
+    assert "Argumentos no válidos" in first and "Abrí regedit" in second
+    assert opened == ["regedit"]
 
 
 def test_actions_per_turn_are_capped():

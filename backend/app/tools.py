@@ -1,6 +1,7 @@
-"""Tools Capri can ask for through `accion`. Each has a pydantic model for its args and is either
-safe (runs at once) or has effects (runs only after the user confirms with a click in the UI).
-Everything they touch is allowlisted in the user's config (app/settings.py)."""
+"""Tools Capri can ask for through `accion`. Each has a pydantic model for its args and a risk: "libre"
+(runs at once), "normal" (waits for a click that shows exactly what it will do) or "alto" (the same,
+in red). A tool with effects is "normal" unless its `risk` says otherwise; one without is "libre".
+What each may touch (files, commands, web) is decided in app/power.py."""
 
 import ctypes
 import json
@@ -8,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -19,12 +21,14 @@ import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, settings, spotify
+from app import calendar_ics, power, settings, spotify
+from app.power import ToolError
 from app.settings import Settings
 
 MAX_RESULTS = 20
-MAX_SCANNED = 20_000  # files looked at per search
-MAX_TEXT = 1500  # chars of tool output handed to the model
+MAX_SCANNED = 300_000  # files looked at per search
+SEARCH_S = 10  # seconds a file search may take
+MAX_TEXT = 4000  # chars of tool output handed to the model
 
 SETUP_STEPS = (
     "El calendario no está configurado. Pasos para el usuario: en calendar.google.com, Configuración (rueda "
@@ -43,6 +47,29 @@ class AppArgs(BaseModel):
 
 class SearchArgs(BaseModel):
     texto: str = Field(min_length=2)
+    carpeta: str = ""  # where to look; empty = the user's whole folder
+
+
+class PathArgs(BaseModel):
+    ruta: str = Field(min_length=1)
+
+
+class WriteArgs(BaseModel):
+    ruta: str = Field(min_length=1)
+    texto: str = Field(max_length=100_000)
+    modo: Literal["crear", "añadir", "reemplazar"] = "crear"
+
+
+class CommandArgs(BaseModel):
+    comando: str = Field(min_length=1, max_length=2000)  # PowerShell
+
+
+class PageArgs(BaseModel):
+    url: str
+
+
+class QueryArgs(BaseModel):
+    consulta: str = Field(min_length=2, max_length=200)
 
 
 class TextArgs(BaseModel):
@@ -97,37 +124,70 @@ class Tool:
     args: type[BaseModel]
     effect: bool
     run: Callable[[BaseModel, Settings], str] | None  # None: the orchestrator runs it (memory tools)
-    describe: Callable[[BaseModel], str] = lambda a: ""  # what the confirmation asks (effects only)
+    describe: Callable[[BaseModel], str] = lambda a: ""  # what the confirmation asks
+    risk: Callable[[BaseModel, Settings], str] | None = None  # "libre" | "normal" | "alto" for these args; may refuse
+    log: bool = False  # also leave a line in the audit log when it runs without asking
+
+    def level(self, args: BaseModel, s: Settings) -> str:
+        return self.risk(args, s) if self.risk else ("normal" if self.effect else "libre")
 
 
-class ToolError(Exception):
-    """A refusal or failure to tell the model about (not a crash)."""
+RUNNABLE = {".exe", ".bat", ".cmd", ".ps1", ".msi", ".vbs", ".js", ".scr", ".com", ".lnk"}
+
+
+def app_target(a: AppArgs, s: Settings) -> str:
+    return s.apps.get(a.nombre.lower(), a.nombre.strip())  # a name in the user's list, or whatever was asked
+
+
+def app_risk(a: AppArgs, s: Settings) -> str:
+    """A program by name or one from the list is a plain click; a file path that runs code is red."""
+    t = app_target(a, s)
+    pathlike = "\\" in t or "/" in t or t.startswith("~")
+    return "alto" if a.nombre.lower() not in s.apps and pathlike and Path(t).suffix.lower() in RUNNABLE else "normal"
 
 
 def open_app(a: AppArgs, s: Settings) -> str:
-    target = s.apps.get(a.nombre.lower())
-    if not target:
-        raise ToolError(f"'{a.nombre}' no está en la lista de apps permitidas: {', '.join(s.apps) or 'ninguna'}")
-    os.startfile(target)  # noqa: S606  (allowlisted)
+    try:
+        os.startfile(app_target(a, s))  # noqa: S606  (the user confirmed this exact name)
+    except OSError as e:
+        raise ToolError(f"no pude abrir «{a.nombre}» ({e.strerror or e}); con su ruta completa sí podría") from e
     return f"Abrí {a.nombre}."
 
 
+SKIP_DIRS = {"node_modules", "appdata", "$recycle.bin", "windows", "site-packages", "target", "__pycache__"}
+
+
 def search_files(a: SearchArgs, s: Settings) -> str:
-    if not s.search_roots:
-        raise ToolError("no hay carpetas de búsqueda configuradas")
-    needle, found, scanned = a.texto.lower(), [], 0
-    for root in s.search_roots:
-        for folder, dirs, files in os.walk(root):
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
-            for f in files:
-                scanned += 1
-                if needle in f.lower():
-                    found.append(str(Path(folder) / f))
-                if len(found) >= MAX_RESULTS or scanned >= MAX_SCANNED:
-                    break
-            if len(found) >= MAX_RESULTS or scanned >= MAX_SCANNED:
-                break
-    return "\n".join(found) if found else f"Ningún archivo con '{a.texto}' en {', '.join(map(str, s.search_roots))}."
+    """File names containing the text, in the user's folder (or the one asked, if allowed). Never contents."""
+    root = power.guard(a.carpeta)[0] if a.carpeta else power.HOME
+    needle, found, scanned, deadline = a.texto.lower(), [], 0, time.monotonic() + SEARCH_S
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d.lower() not in SKIP_DIRS]
+        for f in files:
+            scanned += 1
+            if needle in f.lower() and not power.SENSITIVE.search(Path(folder, f).as_posix()):
+                found.append(str(Path(folder) / f))
+        if len(found) >= MAX_RESULTS or scanned >= MAX_SCANNED or time.monotonic() > deadline:
+            break
+    return "\n".join(found[:MAX_RESULTS]) if found else f"Ningún archivo con '{a.texto}' en {root}."
+
+
+def files_risk(a: PathArgs, s: Settings) -> str:
+    return power.guard(a.ruta)[1]
+
+
+def write_risk(a: WriteArgs, s: Settings) -> str:
+    p, level = power.guard(a.ruta)
+    return "alto" if level == "alto" or (a.modo == "reemplazar" and p.exists()) else "normal"
+
+
+def command_risk(a: CommandArgs, s: Settings) -> str:
+    return power.command_risk(a.comando)
+
+
+def describe_write(a: WriteArgs) -> str:
+    verb = {"crear": "Crear", "añadir": "Añadir texto a", "reemplazar": "Reemplazar el contenido de"}[a.modo]
+    return f"{verb} {a.ruta} ({len(a.texto)} caracteres: «{a.texto[:60]}{'…' if len(a.texto) > 60 else ''}»)"
 
 
 def read_clipboard(a: NoArgs, s: Settings) -> str:
@@ -137,6 +197,36 @@ def read_clipboard(a: NoArgs, s: Settings) -> str:
 def copy_text(a: TextArgs, s: Settings) -> str:
     pyperclip.copy(a.texto)
     return "Copiado al portapapeles."
+
+
+def read_file(a: PathArgs, s: Settings) -> str:
+    return power.read_file(a.ruta)
+
+
+def list_folder(a: PathArgs, s: Settings) -> str:
+    return power.list_dir(a.ruta)
+
+
+def write_file(a: WriteArgs, s: Settings) -> str:
+    return power.write_file(a.ruta, a.texto, a.modo)
+
+
+def run_command(a: CommandArgs, s: Settings) -> str:
+    return power.run_command(a.comando)
+
+
+def read_page(a: PageArgs, s: Settings) -> str:
+    try:
+        return power.get(a.url)
+    except httpx.HTTPError as e:
+        raise ToolError(f"no pude abrir la página: {e}") from e
+
+
+def web_results(a: QueryArgs, s: Settings) -> str:
+    try:
+        return power.search(a.consulta)
+    except httpx.HTTPError as e:
+        raise ToolError(f"no pude buscar en la web: {e}") from e
 
 
 def run_script(a: ScriptArgs, s: Settings) -> str:
@@ -249,8 +339,16 @@ def connect_spotify(a: NoArgs, s: Settings) -> str:
 
 
 TOOLS: dict[str, Tool] = {
-    "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}"),
-    "buscar_archivos": Tool(SearchArgs, False, search_files),
+    "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}", app_risk),
+    "buscar_archivos": Tool(SearchArgs, False, search_files, log=True),
+    # Her hands on the PC. Reading inside the user's folder is free; writing, commands and anything
+    # outside it wait for a click that shows exactly what happens (see power.py for the tiers).
+    "leer_archivo": Tool(PathArgs, False, read_file, lambda a: f"Leer {a.ruta} (fuera de tu carpeta)", files_risk, log=True),
+    "listar_carpeta": Tool(PathArgs, False, list_folder, lambda a: f"Ver la carpeta {a.ruta} (fuera de tu carpeta)", files_risk, log=True),
+    "escribir_archivo": Tool(WriteArgs, True, write_file, describe_write, write_risk),
+    "ejecutar_comando": Tool(CommandArgs, True, run_command, lambda a: f"Ejecutar en PowerShell: {a.comando}", command_risk, log=True),
+    "leer_web": Tool(PageArgs, False, read_page, log=True),
+    "buscar_web": Tool(QueryArgs, False, web_results, log=True),
     "leer_portapapeles": Tool(NoArgs, False, read_clipboard),
     "copiar_al_portapapeles": Tool(TextArgs, True, copy_text,
                                    lambda a: f"Copiar al portapapeles: «{a.texto[:80]}{'…' if len(a.texto) > 80 else ''}»"),
@@ -278,8 +376,10 @@ def audit(entry: dict) -> None:
     """Every action with effects: what was asked, what the user answered, what happened."""
     p = settings.path().parent / "audit.jsonl"
     p.parent.mkdir(parents=True, exist_ok=True)
+    args = {k: v[:300] if isinstance(v, str) else v for k, v in entry.get("args", {}).items()}  # not whole files
+    line = {"at": datetime.now().isoformat(timespec="seconds"), **entry, **({"args": args} if args else {})}
     with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), **entry}, ensure_ascii=False) + "\n")
+        f.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 
 def clip(text: str) -> str:

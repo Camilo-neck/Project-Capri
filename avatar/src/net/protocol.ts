@@ -44,6 +44,7 @@ export interface ConfirmRequest {
   type: "confirm_request";
   id: string;
   texto: string;
+  riesgo: "normal" | "alto";
 }
 
 // Avatar -> backend

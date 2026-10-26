@@ -20,7 +20,6 @@ GOOGLE_ICAL = re.compile(r"^https://calendar\.google\.com/calendar/ical/[^\s\"']
 @dataclass
 class Settings:
     apps: dict[str, str] = field(default_factory=dict)  # name -> program or path
-    search_roots: list[Path] = field(default_factory=list)
     scripts: dict[str, str] = field(default_factory=dict)  # name -> path
     calendar_url: str = ""
     remind_minutes: int = 10
@@ -60,7 +59,6 @@ def load() -> Settings:
     pro = data.get("proactividad", {})
     return Settings(
         apps={k.lower(): v for k, v in data.get("apps", {}).items()},
-        search_roots=[Path(r).expanduser() for r in data.get("rutas", {}).get("buscar", [])],
         scripts={k.lower(): v for k, v in data.get("scripts", {}).items()},
         calendar_url=cal.get("url", ""),
         remind_minutes=int(cal.get("aviso_minutos", 10)),

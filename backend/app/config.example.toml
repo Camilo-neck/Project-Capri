@@ -1,16 +1,14 @@
 # Configuración de Capri. Se crea sola la primera vez en %APPDATA%\Capri\config.toml;
 # edítala con cualquier editor. Los cambios valen desde la siguiente vez que Capri la use.
 
-# Apps que Capri puede abrir (siempre te pide confirmación antes). nombre = "programa o ruta"
+# Nombres cortos para abrir apps (siempre te pide confirmación antes). nombre = "programa o ruta".
+# Capri también puede abrir cualquier otro programa por su nombre o ruta, con la misma confirmación.
 [apps]
 "bloc de notas" = "notepad.exe"
 calculadora = "calc.exe"
 
-# Carpetas donde puede buscar archivos (solo mira nombres, nunca el contenido).
-[rutas]
-buscar = ["~/Documents"]
-
 # Scripts que puede ejecutar por su nombre (siempre con confirmación, sin argumentos).
+# (Los archivos y comandos ya no necesitan lista: ver "niveles" en CLAUDE.md.)
 # nombre = "ruta al .ps1, .bat, .cmd, .py o .exe"
 [scripts]
 

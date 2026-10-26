@@ -47,6 +47,7 @@ class ConfirmRequest(BaseModel):
     type: Literal["confirm_request"] = "confirm_request"
     id: str
     texto: str
+    riesgo: Literal["normal", "alto"] = "normal"  # "alto": the avatar shows it in red and takes no key, only a click
 
 
 # Avatar -> backend

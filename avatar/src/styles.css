@@ -163,6 +163,7 @@ body {
   color: var(--fg);
   cursor: pointer;
   border-left: 2px solid var(--dim);
+  overflow-wrap: anywhere; /* a long command or path wraps instead of running out of the box */
 }
 
 .choices button.warn {
@@ -171,6 +172,16 @@ body {
 
 .choices button.warn .mark {
   color: var(--warn);
+}
+
+.choices button.danger {
+  border-left-color: #ff3b3b;
+  background: color-mix(in srgb, #ff3b3b 14%, transparent);
+}
+
+.choices button.danger .mark {
+  color: #ff3b3b;
+  font-weight: bold;
 }
 
 .choices button:hover,

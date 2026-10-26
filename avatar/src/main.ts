@@ -101,6 +101,7 @@ if (import.meta.env.DEV) Object.assign(window, { __capri: { director, doze, mask
 let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
 let confirming: string | null = null; // id of the confirmation on screen
+let confirmingRed = false; // a red one takes only a click, never a key
 let sentAt = 0;
 let latency: number | null = null;
 let ctx: number | null = null;
@@ -505,7 +506,7 @@ const link = connect(
         updateMeta();
         break;
       case "confirm_request":
-        showChoices(msg.id, msg.texto);
+        showChoices(msg.id, msg.texto, msg.riesgo === "alto");
         break;
       case "mode":
         dnd = msg.no_molestar;
@@ -588,15 +589,17 @@ async function victory(): Promise<void> {
   fx.cutin(x, Math.max(90, b.y - 140), still, dir);
 }
 
-/** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected. */
-function showChoices(id: string, what: string): void {
+/** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected.
+ *  A red one (deleting, installing, outside her folder, after reading outside content) shows as danger. */
+function showChoices(id: string, what: string, red = false): void {
   confirming = id;
+  confirmingRed = red;
   const option = (n: 1 | 2, label: string) => {
     const li = document.createElement("li");
     const b = document.createElement("button");
     b.type = "button";
-    b.className = n === 1 ? "warn" : "";
-    b.innerHTML = `<span class="mark">[${n}]${n === 1 ? " ⚠" : ""}</span> `;
+    b.className = n === 1 ? (red ? "danger" : "warn") : "";
+    b.innerHTML = `<span class="mark">[${n}]${n === 1 ? (red ? " ⚠⚠ PELIGROSO" : " ⚠") : ""}</span> `;
     b.append(label);
     b.addEventListener("click", () => answer(n === 1));
     li.append(b);
@@ -609,6 +612,7 @@ function showChoices(id: string, what: string): void {
 
 function hideChoices(): void {
   confirming = null;
+  confirmingRed = false;
   choices.hidden = true;
   choices.replaceChildren();
 }
@@ -622,6 +626,7 @@ function answer(ok: boolean): void {
 // Keys 1 / 2 answer too, unless they're being typed into the input.
 addEventListener("keydown", (e) => {
   if (!confirming || (e.key !== "1" && e.key !== "2") || (document.activeElement === input && input.value)) return;
+  if (confirmingRed && e.key === "1") return; // the red one: only a click
   e.preventDefault();
   answer(e.key === "1");
 });

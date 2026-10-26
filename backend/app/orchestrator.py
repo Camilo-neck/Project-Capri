@@ -177,8 +177,7 @@ class Orchestrator:
     async def claude_command(self, arg: str, send: Send) -> None:
         """/claude on|off, or /claude <question>: asks the latest Claude Code session (read-only, after a click)."""
         if arg.lower() in ("on", "off"):
-            on = self.claude.toggle(arg.lower() == "on")
-            await send(ClaudeEvent(session="", project="", estado="inicio" if on else "fin"))
+            on = await self.toggle_claude(send, arg.lower() == "on")
             await self.speak("Vale, vuelvo a vigilar a Claude." if on else "Vale, dejo de mirar a Claude hasta que escribas /claude on.", send)
             return
         session = self.claude.latest()
@@ -323,9 +322,19 @@ class Orchestrator:
 
     # ---- modes ----
 
+    def mode(self) -> Mode:
+        return Mode(no_molestar=self.dnd, claude=self.claude.enabled)
+
     async def toggle_dnd(self, send: Send) -> None:
         self.dnd = not self.dnd
-        await send(Mode(no_molestar=self.dnd))
+        await send(self.mode())
+
+    async def toggle_claude(self, send: Send, on: bool | None = None) -> bool:
+        on = self.claude.toggle(on)
+        await send(self.mode())
+        if not on:
+            await send(ClaudeEvent(session="", project="", estado="fin"))  # clears her ticker
+        return on
 
     def set_away(self, fullscreen: bool) -> None:
         """A fullscreen app came or went. Back from it, reminders that came due meanwhile still get said."""

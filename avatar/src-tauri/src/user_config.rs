@@ -86,7 +86,7 @@ fn set_in(text: &str, key: &str, value: toml_edit::Item) -> Result<String, Strin
     Ok(doc.to_string())
 }
 
-fn save(key: &str, value: toml_edit::Item) -> Result<(), String> {
+pub fn save(key: &str, value: toml_edit::Item) -> Result<(), String> {
     let p = path();
     let text = std::fs::read_to_string(&p).unwrap_or_default();
     if let Some(dir) = p.parent() {

@@ -38,6 +38,7 @@ export interface Remembered {
 export interface Mode {
   type: "mode";
   no_molestar: boolean;
+  claude: boolean;
 }
 
 export interface ConfirmRequest {

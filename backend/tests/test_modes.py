@@ -112,10 +112,22 @@ def test_nomolestes_and_its_shortcut_toggle_and_show_the_mode(tmp_path):
         msgs = []
         while msgs[-1:] != [{"type": "state", "value": "idle"}]:
             msgs.append(ws.receive_json())
-        assert {"type": "mode", "no_molestar": True} in msgs and orch.dnd
+        assert {"type": "mode", "no_molestar": True, "claude": True} in msgs and orch.dnd
         ws.send_json({"type": "hotkey", "name": "no_molestar"})
-        assert ws.receive_json() == {"type": "mode", "no_molestar": False}
+        assert ws.receive_json() == {"type": "mode", "no_molestar": False, "claude": True}
     assert calls == []  # never reached the model
+
+
+def test_claude_mode_shortcut_toggles_and_shows_the_mode(tmp_path):
+    orch, calls = orchestrator(tmp_path)
+    with TestClient(create_app(TOKEN, orch, reminders=False)).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "hotkey", "name": "claude"})
+        assert ws.receive_json() == {"type": "mode", "no_molestar": False, "claude": False}
+        assert ws.receive_json()["estado"] == "fin"  # her ticker clears
+        assert not orch.claude.enabled
+        ws.send_json({"type": "hotkey", "name": "claude"})
+        assert ws.receive_json() == {"type": "mode", "no_molestar": False, "claude": True}
+    assert calls == []
 
 
 def test_reminders_hush_in_dnd_and_wait_out_a_fullscreen_app(tmp_path, monkeypatch):

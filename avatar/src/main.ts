@@ -407,8 +407,13 @@ function drawHide(now: number): void {
 }
 hideMask.canvas.addEventListener("pointerdown", () => unhide());
 
-/** /cierra: she vanishes, and Capri closes, stopping Ollama too (it holds her model in VRAM). */
-async function quit(): Promise<void> {
+/** Keeps a tick in the tray menu in step with the state it shows. */
+function trayCheck(name: string, on: boolean): void {
+  void invoke("tray_check", { name, on }).catch((e) => console.warn("tray_check", e));
+}
+
+/** /cierra: she vanishes, and Capri closes, stopping Ollama too (it holds her model in VRAM). The tray can leave Ollama running. */
+async function quit(stopOllama = true): Promise<void> {
   setInputOpen(false);
   if (!reducedMotion.matches) {
     glitch.kick("vanish", performance.now());
@@ -416,7 +421,7 @@ async function quit(): Promise<void> {
     fx.burst(b.x, b.y, b.size, false);
     await sleep(VANISH_OUT_MS + 150);
   }
-  await invoke("quit", { stopOllama: true });
+  await invoke("quit", { stopOllama });
 }
 
 /** A long while with nobody around: she comes apart and only her mask is left, eyes shut, where her head was. */
@@ -524,6 +529,8 @@ const link = connect(
         break;
       case "mode":
         dnd = msg.no_molestar;
+        trayCheck("dnd", dnd);
+        trayCheck("claude", msg.claude);
         status.dataset.dnd = dnd ? "1" : "";
         setStatus(linkStatus);
         break;
@@ -803,6 +810,10 @@ void listen("look", () => {
   void look("");
 });
 void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
+// Tray menu: the items with no shortcut. Its ticks follow the real state through trayCheck.
+void listen("claude", () => link.send({ type: "hotkey", name: "claude" }));
+void listen("hide", () => (hiding ? unhide() : hide()));
+void listen<boolean>("quit", (e) => void quit(e.payload));
 // A game or video fullscreen in front: hide, stop rendering (no GPU while you play), keep quiet.
 void listen<boolean>("fullscreen", (e) => {
   if (e.payload === fullscreen) return;
@@ -825,12 +836,14 @@ void listen("style", async () => {
   clips = new ClipPlayer(style);
   glitch.kick("change", performance.now());
   void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
+  trayCheck("style", style === "pixel");
 });
 // Ctrl+Alt+Shift+C: camera mode on/off, saved in config.toml for next time.
 void listen("camera", async () => {
   await setCamera(!camera);
   glitch.kick("change", performance.now());
   void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
+  trayCheck("camera", camera);
 });
 void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded

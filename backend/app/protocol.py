@@ -37,10 +37,11 @@ class Remembered(BaseModel):
 
 
 class Mode(BaseModel):
-    """Do-not-disturb state, so the avatar can show it."""
+    """Do-not-disturb and Claude-mode state, so the avatar (and its tray menu) can show them."""
 
     type: Literal["mode"] = "mode"
     no_molestar: bool
+    claude: bool = True
 
 
 class ConfirmRequest(BaseModel):

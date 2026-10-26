@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewWindow};
 mod ollama;
+mod tray;
 mod user_config;
 mod win_watch;
 
@@ -157,7 +158,8 @@ pub fn run() {
             user_config::avatar_settings,
             user_config::save_style,
             user_config::save_camera,
-            ollama::quit
+            ollama::quit,
+            tray::tray_check
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -167,12 +169,10 @@ pub fn run() {
                     }
                     let Some(&(_, name)) = shortcuts.iter().find(|(s, _)| s == shortcut) else { return };
                     if name == "open-input" {
-                        // Keyboard focus only: the bar becomes clickable once the frontend reports its box.
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.set_focus();
-                        }
+                        tray::focus_input(app);
+                    } else {
+                        let _ = app.emit(name, ());
                     }
-                    let _ = app.emit(name, ());
                 })
                 .build(),
         )
@@ -184,6 +184,7 @@ pub fn run() {
                 }
             }
             fit(&app.get_webview_window("main").unwrap())?;
+            tray::build(app.handle())?;
             let handle = app.handle().clone();
             std::thread::spawn(move || watch_mouse(handle));
             let handle = app.handle().clone();

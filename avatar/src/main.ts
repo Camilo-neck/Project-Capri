@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
-import type { Action, ClaudeEvent, ServerMessage } from "./net/protocol.ts";
+import type { Action, ClaudeEvent, Emocion, ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -20,6 +20,7 @@ import { bigJob, panelFor, reaction, SPARK_GAP_MS, sparkFor, Tracker, type Panel
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
+import { ResumeWatch, resumeLine, TICK_MS } from "./state/resume.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget, type Zap } from "./state/zap.ts";
@@ -461,6 +462,42 @@ setInterval(async () => {
   pcIdle = await invoke<number>("idle_ms");
   sleepAfter = (await invoke<AvatarSettings>("avatar_settings")).dormir_min * 60_000;
 }, 10_000);
+
+// Back from sleep: the window is fitted and raised again, the drawing is checked, and she says so.
+const resumeWatch = new ResumeWatch(Date.now());
+setInterval(() => {
+  const gap = resumeWatch.tick(Date.now());
+  if (gap) void onResume(gap);
+}, TICK_MS);
+
+async function onResume(gap: number): Promise<void> {
+  await invoke("refit").catch((e) => console.warn("refit", e));
+  const now = performance.now();
+  activeAt = now; // whoever woke the PC is at it: no instant nap
+  pcIdle = 0;
+  wakeUp();
+  if (hiding || dnd || busy() || linkStatus === "down") return;
+  glitch.kick("arrive", now);
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size, true);
+  }
+  greetAt = now;
+  sayLocal(resumeLine(gap));
+}
+
+/** A line of hers that no model wrote: shown and typed like a reply. */
+function sayLocal({ texto, emocion }: { texto: string; emocion: Emocion }): void {
+  avatar.setEmotion(emocion);
+  variant = Math.floor(Math.random() * 1000);
+  typewriter.clear();
+  txUser.textContent = "";
+  txText.textContent = "";
+  ended = true;
+  tx.classList.add("typing");
+  showTx();
+  typewriter.push(texto);
+}
 
 function setStatus(s: Status): void {
   if (s === "thinking" || s === "speaking" || s === "looking") {

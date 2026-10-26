@@ -56,6 +56,16 @@ pub(crate) fn fit(w: &WebviewWindow) -> tauri::Result<()> {
     w.set_size(LogicalSize::new(work.width, height))
 }
 
+/// After sleep Windows may have moved the screen or dropped her place on top: fit and raise her again.
+#[tauri::command]
+fn refit(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = fit(&w);
+        let _ = w.set_always_on_top(false);
+        let _ = w.set_always_on_top(true);
+    }
+}
+
 /// ~30 Hz: forwards the cursor (for her gaze) and toggles click-through by hit-testing her.
 fn watch_mouse(app: tauri::AppHandle) {
     let mut last_cursor = (f64::NAN, f64::NAN);
@@ -151,6 +161,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config,
             set_hitboxes,
+            refit,
             win_watch::windows,
             win_watch::idle_ms,
             win_watch::look_target,

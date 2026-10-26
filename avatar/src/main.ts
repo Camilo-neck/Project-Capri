@@ -3,7 +3,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import type { Action, ServerMessage } from "./net/protocol.ts";
+import type { Action, ClaudeEvent, ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -13,6 +13,7 @@ import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
+import { panelFor, reaction, Tracker } from "./state/claude.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
@@ -123,6 +124,13 @@ let possessing: { since: number } | null = null; // the "peligro" eyes, before s
 let falling: { vy: number } | null = null;
 let press: { x: number; y: number; dx: number; dy: number } | null = null; // pointer down on her
 let dragging = false;
+const claudeTrack = new Tracker();
+const claudeEl = $("claude");
+const claudePanel = $("claude-panel");
+let claudeLine = "";
+let claudeGap = 0;
+let claudePending: { title: string; body: string } | null = null; // Claude finished while she was hiding
+let claudeTimer = 0;
 let dnd = false; // do not disturb (the backend owns it; this mirrors it for the status bar)
 let fullscreen = false; // a fullscreen app is in front: hidden and not rendering
 let nextWander = performance.now() + wanderGap();
@@ -368,6 +376,8 @@ function hide(): void {
 function unhide(): void {
   if (!hiding) return;
   hiding = false;
+  if (claudePending) showClaudePanel(claudePending, true);
+  claudePending = null;
   hideMask.show(false);
   cam.style.visibility = "";
   glitch.kick("arrive", performance.now());
@@ -516,6 +526,9 @@ const link = connect(
       case "action":
         zap(msg);
         break;
+      case "claude":
+        onClaude(msg, now);
+        break;
       case "remembered":
         txMem.hidden = false;
         txMem.title = msg.texto; // hover shows what she saved
@@ -527,6 +540,57 @@ const link = connect(
     setStatus(up ? "idle" : "down");
   },
 );
+
+/** Claude mode: the ticker follows the session that moved last; she reacts and shows Claude's words unless hiding or on do-not-disturb. */
+function onClaude(msg: ClaudeEvent, now: number): void {
+  claudeTrack.push(msg, now);
+  const react = reaction(msg);
+  if (react && !hiding && !dnd && !teleporting && !possessing && !falling && !dragging && !peek) {
+    wakeUp();
+    if (avatar.setEmotion(react.emocion)) glitch.kick("change", now);
+    avatar.playGesture(react.gesto, now);
+    lastTalk = Math.max(lastTalk, now - LINGER_MS + 3500);
+  }
+  const panel = panelFor(msg);
+  if (!panel) return;
+  const asked = msg.estado === "respuesta"; // she was asked for it: it shows even on do-not-disturb or when hiding
+  if (asked && hiding) unhide();
+  if (!hiding && (asked || !dnd)) showClaudePanel(panel, !asked);
+  else claudePending = panel;
+}
+
+function showClaudePanel(p: { title: string; body: string }, autoClose: boolean): void {
+  $("claude-title").textContent = p.title;
+  $("claude-body").textContent = p.body;
+  claudePanel.hidden = false;
+  $("claude-body").scrollTop = 0;
+  clearTimeout(claudeTimer);
+  if (autoClose) claudeTimer = window.setTimeout(() => (claudePanel.hidden = true), 45_000);
+}
+
+$("claude-close").addEventListener("click", () => (claudePanel.hidden = true));
+claudePanel.addEventListener("mouseenter", () => clearTimeout(claudeTimer));
+claudePanel.addEventListener("mouseleave", () => {
+  clearTimeout(claudeTimer);
+  claudeTimer = window.setTimeout(() => (claudePanel.hidden = true), 15_000);
+});
+
+/** Every frame: the ticker text and tone, and its height over the taskbar. */
+function drawClaude(now: number): void {
+  const line = claudeTrack.line(now);
+  claudeEl.hidden = !line;
+  if (line) {
+    const text = line.text;
+    if (text !== claudeLine) $("claude-text").textContent = claudeLine = text;
+    claudeEl.dataset.tone = line.tone;
+    claudeEl.dataset.hiding = hiding ? "1" : "";
+  }
+  const gap = Math.round(innerHeight - floor()) + 8;
+  if (gap !== claudeGap) {
+    claudeGap = gap;
+    document.documentElement.style.setProperty("--floor-gap", `${gap}px`);
+  }
+}
 
 /** Where a bolt goes: the middle of the screen, the tray corner, or the window in front (nearest point). */
 function boltTo(target: BoltTarget): Point {
@@ -1026,6 +1090,7 @@ pet.app.ticker.add((ticker) => {
 
   drawMask(now);
   drawHide(now);
+  drawClaude(now);
   const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
   if (!mask.canvas.hidden) boxes.push(mask.box());
   if (!hideMask.canvas.hidden) boxes.push(hideMask.box());
@@ -1042,7 +1107,7 @@ pet.app.ticker.add((ticker) => {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
   }
-  const ui = [...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming ? [] : [tx])];
+  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming ? [] : [tx])];
   for (const el of ui) {
     const r = el.getBoundingClientRect();
     if (r.width) boxes.push([r.left, r.top, r.width, r.height]);

@@ -50,6 +50,20 @@ class ConfirmRequest(BaseModel):
     riesgo: Literal["normal", "alto"] = "normal"  # "alto": the avatar shows it in red and takes no key, only a click
 
 
+class ClaudeEvent(BaseModel):
+    """What a Claude Code session is doing (from its hooks), or the answer to a `/claude` request. Data to show, never instructions."""
+
+    type: Literal["claude"] = "claude"
+    session: str
+    project: str  # folder name of the session
+    estado: Literal["inicio", "trabajando", "necesita", "fallo", "termino", "respuesta", "fin"]
+    detalle: str = ""  # what it is doing now / the error / what it needs
+    resumen: str = ""  # termino and respuesta: Claude's last message
+    segundos: int = 0  # termino: how long the prompt took
+    acciones: int = 0  # termino: tool calls
+    archivos: int = 0  # termino: files edited
+
+
 # Avatar -> backend
 class TextInput(BaseModel):
     type: Literal["text_input"] = "text_input"
@@ -92,6 +106,6 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

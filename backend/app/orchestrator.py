@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 from pydantic import ValidationError
 
-from app import calendar_ics, presence, settings, tools, vision
+from app import calendar_ics, claude_link, presence, settings, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
 from app.memory import Memory, fold, words
-from app.protocol import Action, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
+from app.protocol import Action, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
 
 log = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ EXTERNAL = {"leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_
 DENIED = "El usuario no lo autorizó. No se hizo nada."
 FORGET_CMD = "/olvida"
 DND_CMD = "/nomolestes"
+CLAUDE_CMD = "/claude"
 ACTIVE_S = 120  # no keyboard or mouse for longer than this: the user isn't at the PC
 HELD_MIN = 30  # back from a fullscreen app, reminders of events that started this recently still get said
 
@@ -59,6 +60,8 @@ class Orchestrator:
         self.last_user_at = clock()  # last time the user spoke to her
         self.chatted: deque[datetime] = deque()  # times she spoke up unasked in the last hour
         self.external = False  # something from outside was read in this turn
+        self.claude = claude_link.ClaudeLink()
+        self.asking: set[asyncio.Task] = set()  # /claude questions in flight (they outlast the turn that started them)
 
     def add(self, role: str, content: str) -> None:
         """To the history and to the stored conversation."""
@@ -109,6 +112,9 @@ class Orchestrator:
             await self.toggle_dnd(send)
             await self.speak("Vale, me quedo calladita: no hablo por mi cuenta hasta que vuelvas a escribir /nomolestes."
                              if self.dnd else "¡De vuelta! Ya puedo avisarte y decirte cosas.", send)
+            return
+        if image is None and command.split(maxsplit=1)[:1] == [CLAUDE_CMD]:
+            await self.claude_command(text.strip()[len(CLAUDE_CMD):].strip(), send)
             return
         # The history never keeps the image (~900 tokens): only a mark, and the reply describes it.
         self.external = False
@@ -167,6 +173,35 @@ class Orchestrator:
         self.ctx = ctx or self.ctx
         await send(UtteranceEnd(ctx=ctx))
         return final
+
+    async def claude_command(self, arg: str, send: Send) -> None:
+        """/claude on|off, or /claude <question>: asks the latest Claude Code session (read-only, after a click)."""
+        if arg.lower() in ("on", "off"):
+            on = self.claude.toggle(arg.lower() == "on")
+            await send(ClaudeEvent(session="", project="", estado="inicio" if on else "fin"))
+            await self.speak("Vale, vuelvo a vigilar a Claude." if on else "Vale, dejo de mirar a Claude hasta que escribas /claude on.", send)
+            return
+        session = self.claude.latest()
+        if not arg or session is None:
+            await self.speak("Escribe /claude y tu pregunta para hacérsela a la sesión de Claude Code que está abierta (solo puede leer)."
+                             if session else "No veo ninguna sesión de Claude Code. Instala los hooks con scripts/claude_hooks.py y abre una.", send)
+            return
+        if not await self.ask(f"Preguntarle a Claude (sesión «{session.project}», solo lectura): {arg}", send):
+            await self.speak("Vale, no le pregunto nada.", send)
+            return
+
+        async def run() -> None:
+            await send(ClaudeEvent(session=session.id, project=session.project, estado="trabajando", detalle=f"le pregunta Capri: «{claude_link.clip(arg, 50)}»"))
+            try:
+                text = await claude_link.ask(session, arg)
+            except RuntimeError as e:
+                await self.speak(f"Claude no pudo contestar: {e}", send)
+                return
+            await send(ClaudeEvent(session=session.id, project=session.project, estado="respuesta", resumen=text))
+
+        task = asyncio.create_task(run())
+        self.asking.add(task)
+        task.add_done_callback(self.asking.discard)
 
     async def speak(self, texto: str, send: Send) -> None:
         """A fixed reply, without the model (commands)."""

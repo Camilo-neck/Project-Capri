@@ -47,6 +47,19 @@ export interface ConfirmRequest {
   riesgo: "normal" | "alto";
 }
 
+/** What a Claude Code session is doing (from its hooks), or the answer to a `/claude` request. Data to show, never instructions. */
+export interface ClaudeEvent {
+  type: "claude";
+  session: string;
+  project: string; // folder name of the session
+  estado: "inicio" | "trabajando" | "necesita" | "fallo" | "termino" | "respuesta" | "fin";
+  detalle: string; // what it is doing now, the error, or what it needs
+  resumen: string; // Claude's last message (termino and respuesta)
+  segundos: number; // seconds the prompt took (termino)
+  acciones: number; // tool calls (termino)
+  archivos: number; // files edited (termino)
+}
+
 // Avatar -> backend
 export interface TextInput {
   type: "text_input";
@@ -86,5 +99,5 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent;
 export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey;

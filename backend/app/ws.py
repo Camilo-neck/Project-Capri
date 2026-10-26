@@ -3,7 +3,7 @@ import logging
 import secrets
 from collections.abc import Coroutine
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator
@@ -18,6 +18,24 @@ ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri:/
 def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -> FastAPI:
     """`reminders`: run the background loops (calendar reminders, speaking up unasked); off in tests."""
     app = FastAPI()
+    clients: set = set()  # the `send` of each connected avatar, for what arrives from outside the socket
+
+    @app.post("/claude/event")
+    async def claude_event(request: Request) -> Response:
+        """A Claude Code hook (scripts/claude_hook.py). Browsers can't forge the token header or drop their Origin."""
+        given = request.headers.get("x-capri-token", "")
+        if request.headers.get("origin") or not secrets.compare_digest(given.encode(), token.encode()):
+            return Response(status_code=403)
+        if int(request.headers.get("content-length") or 0) > 100_000:
+            return Response(status_code=413)
+        try:
+            payload = await request.json()
+        except ValueError:
+            return Response(status_code=400)
+        event = orchestrator.claude.ingest(payload) if isinstance(payload, dict) else None
+        if event:
+            await asyncio.gather(*(send(event) for send in list(clients)), return_exceptions=True)
+        return Response(status_code=204)
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
@@ -46,6 +64,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
             tasks.add(task)
             task.add_done_callback(tasks.discard)
 
+        clients.add(send)
         if orchestrator.dnd:  # the avatar starts assuming it's off
             await send(Mode(no_molestar=True))
         spawn(orchestrator.catch_up())  # summaries of sessions that ended with the app closed
@@ -76,6 +95,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
         except WebSocketDisconnect:
             pass
         finally:
+            clients.discard(send)
             orchestrator.cancel_pending()
             for task in tasks:
                 task.cancel()

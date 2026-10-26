@@ -751,12 +751,44 @@ function nearMask(pad: number): boolean {
   const [x, y, w, h] = camera ? [c.left, c.top, c.width, c.height] : mask.box();
   return cursor[0] >= x - pad && cursor[0] <= x + w + pad && cursor[1] >= y - pad && cursor[1] <= y + h + pad;
 }
+/** What she was sent from the bar, oldest first, kept between launches; ↑/↓ walk it like a shell. */
+const HISTORY_MAX = 100;
+const history: string[] = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("capri.history") ?? "[]");
+  } catch {
+    return [];
+  }
+})();
+let historyAt = history.length; // history.length = the line being typed
+let draft = "";
+
+function remember(text: string) {
+  if (text && history[history.length - 1] !== text) history.push(text);
+  history.splice(0, history.length - HISTORY_MAX);
+  historyAt = history.length;
+  draft = "";
+  try {
+    localStorage.setItem("capri.history", JSON.stringify(history));
+  } catch {
+    /* private mode: the history just lasts this session */
+  }
+}
+
 input.addEventListener("keydown", (e) => {
   if (e.key === "Escape") setInputOpen(false);
+  if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.shiftKey || e.altKey || e.ctrlKey) return;
+  e.preventDefault();
+  if (e.key === "ArrowUp" ? historyAt === 0 : historyAt === history.length) return;
+  if (historyAt === history.length) draft = input.value; // leaving the line being typed: keep it
+  historyAt += e.key === "ArrowUp" ? -1 : 1;
+  input.value = history[historyAt] ?? draft;
+  input.setSelectionRange(input.value.length, input.value.length);
 });
 inputRow.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value.trim();
+  if (text) remember(text);
   // her own commands, handled here (the backend has /olvida and /nomolestes)
   const command = { "/escondete": () => (hiding ? unhide() : hide()), "/vuelve": unhide, "/cierra": () => void quit() }[text.toLowerCase()];
   if (command) {

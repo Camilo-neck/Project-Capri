@@ -50,12 +50,12 @@ export class Tracker {
   }
 }
 
-/** "3 acciones · 2 archivos · 2 min 10 s" */
+/** "4 acciones · 2 archivos modificados · 2 min 10 s" */
 export function summary(e: ClaudeEvent): string {
   const t = e.segundos >= 60 ? `${Math.floor(e.segundos / 60)} min ${e.segundos % 60} s` : `${e.segundos} s`;
-  const parts = [t, `${e.acciones} ${e.acciones === 1 ? "acción" : "acciones"}`];
-  if (e.archivos) parts.push(`${e.archivos} ${e.archivos === 1 ? "archivo" : "archivos"}`);
-  return parts.join(" · ");
+  const parts = [`${e.acciones} ${e.acciones === 1 ? "acción" : "acciones"}`];
+  if (e.archivos) parts.push(`${e.archivos} ${e.archivos === 1 ? "archivo modificado" : "archivos modificados"}`);
+  return [...parts, t].join(" · ");
 }
 
 /** How she reacts to an event, for when she is out and about (not hiding, not on do-not-disturb). */
@@ -72,9 +72,27 @@ export function reaction(e: ClaudeEvent): { emocion: Emocion; gesto: Gesto } | n
   }
 }
 
-/** The panel's content for an event that carries Claude's words, or null. */
-export function panelFor(e: ClaudeEvent): { title: string; body: string } | null {
-  if (e.estado === "termino" && e.resumen) return { title: `${e.project} · ${summary(e)}`, body: e.resumen };
-  if (e.estado === "respuesta" && e.resumen) return { title: `${e.project} · respuesta a Capri`, body: e.resumen };
+export type Face = "grin" | "look";
+export interface Panel {
+  project: string;
+  badge: string; // the tag in the corner
+  title: string; // her line
+  body: string; // Claude's words
+  stats: string; // termino: actions, files and time
+  face: Face;
+  tone: "done" | "answer";
+}
+
+const DONE_LINES = ["Misión cumplida, choom.", "Listo. Claude ya acabó.", "Terminado, y sin romper nada… creo.", "Trabajo hecho. ¿Lo miras?"];
+
+/** The bubble for an end (always) or an answer to `/claude` with words, or null. */
+export function panelFor(e: ClaudeEvent, pick = Math.random): Panel | null {
+  if (e.estado === "termino") {
+    const title = DONE_LINES[Math.floor(pick() * DONE_LINES.length)];
+    return { project: e.project, badge: "TERMINADO", title, body: e.resumen, stats: summary(e), face: "grin", tone: "done" };
+  }
+  if (e.estado === "respuesta" && e.resumen) {
+    return { project: e.project, badge: "RESPUESTA", title: "Esto me dijo Claude:", body: e.resumen, stats: "", face: "look", tone: "answer" };
+  }
   return null;
 }

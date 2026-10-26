@@ -24,7 +24,7 @@ test("needing you stays until something else happens; a failure and an end are f
   assert.equal(t.line(1000)?.tone, "fail");
   assert.equal(t.line(7000), null);
   t.push(ev("termino", { segundos: 130, acciones: 4, archivos: 2 }), 0);
-  assert.equal(t.line(1000)?.text, "capri › terminó · 2 min 10 s · 4 acciones · 2 archivos");
+  assert.equal(t.line(1000)?.text, "capri › terminó · 4 acciones · 2 archivos modificados · 2 min 10 s");
   assert.equal(t.line(13_000), null);
   t.push(ev("trabajando", { detalle: "x" }), 0);
   t.push(ev("fin"), 5);
@@ -32,8 +32,8 @@ test("needing you stays until something else happens; a failure and an end are f
 });
 
 test("summary uses the singular and skips files when none were edited", () => {
-  assert.equal(summary(ev("termino", { segundos: 9, acciones: 1 })), "9 s · 1 acción");
-  assert.equal(summary(ev("termino", { segundos: 60, acciones: 3, archivos: 1 })), "1 min 0 s · 3 acciones · 1 archivo");
+  assert.equal(summary(ev("termino", { segundos: 9, acciones: 1 })), "1 acción · 9 s");
+  assert.equal(summary(ev("termino", { segundos: 60, acciones: 3, archivos: 1 })), "3 acciones · 1 archivo modificado · 1 min 0 s");
 });
 
 test("she reacts to the end, a failure and a request, not to routine work", () => {
@@ -43,9 +43,11 @@ test("she reacts to the end, a failure and a request, not to routine work", () =
   assert.equal(reaction(ev("trabajando")), null);
 });
 
-test("only an end or an answer with words opens the panel", () => {
-  assert.equal(panelFor(ev("termino")), null);
+test("an end always opens the bubble with its numbers; an answer only with words", () => {
+  const done = panelFor(ev("termino", { acciones: 4, archivos: 2, segundos: 2 }), () => 0)!;
+  assert.deepEqual([done.badge, done.title, done.body, done.stats], ["TERMINADO", "Misión cumplida, choom.", "", "4 acciones · 2 archivos modificados · 2 s"]);
   assert.equal(panelFor(ev("termino", { resumen: "Hecho." }))?.body, "Hecho.");
-  assert.match(panelFor(ev("respuesta", { resumen: "Sí." }))!.title, /respuesta a Capri/);
+  assert.equal(panelFor(ev("respuesta")), null);
+  assert.equal(panelFor(ev("respuesta", { resumen: "Sí." }))?.badge, "RESPUESTA");
   assert.equal(panelFor(ev("trabajando", { resumen: "x" })), null);
 });

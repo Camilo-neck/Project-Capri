@@ -3,6 +3,9 @@ import "@fontsource/jetbrains-mono/400.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import grinFace from "../assets/faces/grin.png";
+import lookFace from "../assets/faces/look.png";
+
 import type { Action, ClaudeEvent, ServerMessage } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
@@ -13,7 +16,7 @@ import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
-import { panelFor, reaction, Tracker } from "./state/claude.ts";
+import { panelFor, reaction, Tracker, type Panel } from "./state/claude.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
@@ -129,7 +132,7 @@ const claudeEl = $("claude");
 const claudePanel = $("claude-panel");
 let claudeLine = "";
 let claudeGap = 0;
-let claudePending: { title: string; body: string } | null = null; // Claude finished while she was hiding
+let claudePending: Panel | null = null; // Claude finished while she was hiding
 let claudeTimer = 0;
 let dnd = false; // do not disturb (the backend owns it; this mirrors it for the status bar)
 let fullscreen = false; // a fullscreen app is in front: hidden and not rendering
@@ -559,16 +562,27 @@ function onClaude(msg: ClaudeEvent, now: number): void {
   else claudePending = panel;
 }
 
-function showClaudePanel(p: { title: string; body: string }, autoClose: boolean): void {
+function showClaudePanel(p: Panel, autoClose: boolean): void {
+  ($("claude-face") as HTMLImageElement).src = p.face === "grin" ? grinFace : lookFace;
+  $("claude-project").textContent = p.project;
+  $("claude-badge").textContent = p.badge;
   $("claude-title").textContent = p.title;
-  $("claude-body").textContent = p.body;
+  const body = $("claude-body");
+  body.textContent = p.body;
+  body.hidden = !p.body;
+  body.scrollTop = 0;
+  $("claude-stats").textContent = p.stats;
+  $("claude-stats").hidden = !p.stats;
+  claudePanel.dataset.tone = p.tone;
   claudePanel.hidden = false;
-  $("claude-body").scrollTop = 0;
   clearTimeout(claudeTimer);
   if (autoClose) claudeTimer = window.setTimeout(() => (claudePanel.hidden = true), 45_000);
 }
 
-$("claude-close").addEventListener("click", () => (claudePanel.hidden = true));
+// A click closes the bubble, unless it was to select Claude's words.
+claudePanel.addEventListener("click", () => {
+  if (!getSelection()?.toString()) claudePanel.hidden = true;
+});
 claudePanel.addEventListener("mouseenter", () => clearTimeout(claudeTimer));
 claudePanel.addEventListener("mouseleave", () => {
   clearTimeout(claudeTimer);

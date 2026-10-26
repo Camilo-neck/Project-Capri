@@ -523,43 +523,125 @@ body {
   50% { opacity: 0.35; }
 }
 
-.claude-panel {
-  position: fixed;
-  left: 84px;
-  bottom: calc(var(--floor-gap, 52px) + 30px);
-  width: 360px;
-  background: var(--bg);
-  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  animation: tx-in 160ms steps(4) both;
-}
-
-.claude-panel header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 4px 2px 10px;
-  background: var(--accent);
-  color: #0b0916;
-  font: 600 12px var(--font-head);
-  letter-spacing: 0.06em;
-}
-
-.claude-panel button {
-  background: none;
-  border: 0;
-  color: inherit;
-  font: 700 16px var(--font-head);
+/* Claude's bubble over her head: her face, the project, a tag, her line, Claude's words and the numbers.
+   Chamfered plate with a violet misregistered copy (like mochiiwuff/capri-desktop's panel); the tail points at her. */
+.cpanel {
+  --tone: var(--accent-2);
+  position: relative;
+  margin-bottom: 20px;
+  filter: drop-shadow(5px 5px 0 var(--accent));
   cursor: pointer;
+  animation: cpanel-in 210ms steps(3, jump-end) both;
 }
 
-.claude-panel pre {
+.cpanel[data-tone="answer"] {
+  --tone: var(--accent);
+}
+
+.cpanel::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 1px);
+  width: 28px;
+  height: 20px;
+  margin-left: -14px;
+  background: rgb(11 9 22);
+  clip-path: polygon(0 0, 100% 0, 62% 100%, 50% 48%, 30% 72%);
+}
+
+.cpanel-plate {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 12px;
+  padding: 12px 14px 14px 12px;
+  background: rgb(11 9 22);
+  clip-path: polygon(0 var(--cut), var(--cut) 0, 61% 0, 63% 6px, 65% 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+}
+
+.cpanel-face {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+  box-sizing: border-box;
+  clip-path: polygon(14% 0, 100% 0, 100% 80%, 84% 100%, 0 100%, 0 16%);
+}
+
+.cpanel-main {
+  min-width: 0;
+}
+
+.cpanel-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+.cpanel-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+
+.cpanel-project::before {
+  content: "/ ";
+  color: var(--accent);
+}
+
+.cpanel-badge {
+  margin-left: auto;
+  padding: 1px 6px 0;
+  background: var(--tone);
+  color: #0b0916;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.cpanel-line {
   margin: 0;
-  padding: 8px 12px;
-  max-height: 220px;
+  font: 600 16px/1.22 var(--font-head);
+  overflow-wrap: anywhere;
+}
+
+.cpanel-quote {
+  margin: 8px 0 0;
+  padding-left: 9px;
+  max-height: 160px;
   overflow-y: auto;
+  border-left: 2px solid var(--accent);
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
+  font: 12px/1.5 var(--font-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 13px/1.45 var(--font-body);
   user-select: text;
+  cursor: text;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+
+.cpanel-stats {
+  margin: 8px 0 0;
+  color: var(--tone);
+  font: 600 12px var(--font-body);
+}
+
+.cpanel-stats::before {
+  content: "◆ ";
+}
+
+@keyframes cpanel-in {
+  0% { clip-path: inset(49% 50% 49% 50%); }
+  40% { clip-path: inset(49% -20px 49% -20px); }
+  100% { clip-path: inset(-20px -20px -40px -20px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cpanel {
+    animation: none;
+  }
 }

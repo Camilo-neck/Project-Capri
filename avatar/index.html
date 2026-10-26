@@ -12,10 +12,6 @@
     <canvas id="mask" class="mask" hidden></canvas>
     <canvas id="hide" class="mask hide" hidden></canvas>
     <div id="claude" class="claude" hidden><b>◢ CLAUDE</b> <span id="claude-text"></span></div>
-    <section id="claude-panel" class="claude-panel" hidden>
-      <header><span id="claude-title"></span><button id="claude-close" type="button" aria-label="Cerrar">×</button></header>
-      <pre id="claude-body"></pre>
-    </section>
     <main class="hud">
       <section id="tx" class="tx" hidden>
         <header class="tx-tab">
@@ -32,6 +28,19 @@
           </div>
         </div>
       </section>
+      <aside id="claude-panel" class="cpanel" hidden aria-live="polite" title="Clic para cerrar">
+        <div class="cpanel-plate">
+          <img id="claude-face" class="cpanel-face" alt="" />
+          <div class="cpanel-main">
+            <header class="cpanel-meta">
+              <b>CAPRI</b><span id="claude-project" class="cpanel-project"></span><span id="claude-badge" class="cpanel-badge"></span>
+            </header>
+            <p id="claude-title" class="cpanel-line"></p>
+            <pre id="claude-body" class="cpanel-quote"></pre>
+            <p id="claude-stats" class="cpanel-stats"></p>
+          </div>
+        </div>
+      </aside>
       <div id="status" class="status" data-state="down">
         <span class="status-mark">◢</span>
         <span id="status-label">SIN ENLACE</span>

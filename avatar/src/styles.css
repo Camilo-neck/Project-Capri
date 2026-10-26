@@ -404,8 +404,20 @@ body {
 
 /* Quiet by default: the status bar only shows while the input is open. */
 /* ...except while she captures the screen or in do-not-disturb: those always show. */
-.hud:not(.input-open) .status:not([data-state="looking"]):not([data-dnd="1"]) {
+.hud:not(.input-open) .status:not([data-state="looking"]):not([data-dnd="1"]):not([data-mic]) {
   display: none;
+}
+
+.status[data-mic] {
+  color: #ff5d73; /* the microphone is open */
+}
+
+.status[data-mic][data-voice="loading"] {
+  color: var(--warn);
+}
+
+.status[data-mic][data-voice="idle"] .segs i {
+  animation: none;
 }
 
 .status[data-dnd="1"][data-state="idle"] {

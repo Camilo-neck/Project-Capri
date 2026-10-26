@@ -40,6 +40,7 @@ pub struct Shortcuts {
     pub no_molestar: String,
     pub estilo: String,
     pub camara: String,
+    pub escuchar: String,
 }
 
 impl Default for Shortcuts {
@@ -51,6 +52,7 @@ impl Default for Shortcuts {
             no_molestar: "Ctrl+Alt+Shift+D".into(),
             estilo: "Ctrl+Alt+Shift+P".into(),
             camara: "Ctrl+Alt+Shift+C".into(),
+            escuchar: "Ctrl+Alt+V".into(),
         }
     }
 }

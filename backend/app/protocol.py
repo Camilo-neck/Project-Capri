@@ -51,6 +51,22 @@ class ConfirmRequest(BaseModel):
     riesgo: Literal["normal", "alto"] = "normal"  # "alto": the avatar shows it in red and takes no key, only a click
 
 
+class Voice(BaseModel):
+    """The microphone: off, loading the model, idle (waiting for "hey Capri"), hearing someone, listening (the next sentence is for her) or reading what was said."""
+
+    type: Literal["voice"] = "voice"
+    estado: Literal["off", "loading", "idle", "hearing", "listening", "thinking"]
+
+
+class Heard(BaseModel):
+    """What was said to her. The avatar handles `texto` as if it had been typed (slash commands included)."""
+
+    type: Literal["heard"] = "heard"
+    texto: str
+    original: str = ""  # the transcript, before a spoken command became its slash command
+    idioma: str = ""
+
+
 class ClaudeEvent(BaseModel):
     """What a Claude Code session is doing (from its hooks), or the answer to a `/claude` request. Data to show, never instructions."""
 
@@ -108,6 +124,6 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey, Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

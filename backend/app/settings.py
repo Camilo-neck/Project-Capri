@@ -29,6 +29,11 @@ class Settings:
     quiet: tuple[time, time] | None = (time(23), time(8))  # no chatter from..to (may wrap midnight)
     spotify_client_id: str = ""
     spotify_redirect: str = SPOTIFY_REDIRECT
+    voice_on: bool = False  # the microphone opens at start
+    voice_model: str = "turbo"  # faster-whisper model
+    voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
+    voice_silence_ms: int = 600  # silence that ends a sentence
+    voice_wake: bool = True  # only what starts with "hey Capri" counts
 
     def quiet_now(self, now: datetime) -> bool:
         if not self.quiet:
@@ -68,6 +73,11 @@ def load() -> Settings:
         quiet=parse_quiet(pro.get("silencio", "23:00-08:00")),
         spotify_client_id=data.get("spotify", {}).get("client_id", ""),
         spotify_redirect=data.get("spotify", {}).get("redirect_uri", SPOTIFY_REDIRECT),
+        voice_on=bool(data.get("voz", {}).get("activa", False)),
+        voice_model=data.get("voz", {}).get("modelo", "turbo"),
+        voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),
+        voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 600)),
+        voice_wake=bool(data.get("voz", {}).get("llamada", True)),
     )
 
 

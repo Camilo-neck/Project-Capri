@@ -141,6 +141,7 @@ pub fn run() {
         (keys.no_molestar, "dnd"),
         (keys.estilo, "style"),
         (keys.camara, "camera"),
+        (keys.escuchar, "listen"),
     ]
     .into_iter()
     .filter_map(|(text, event)| match text.parse::<Shortcut>() {

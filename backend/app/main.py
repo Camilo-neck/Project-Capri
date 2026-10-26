@@ -18,6 +18,7 @@ from app import settings
 from app.demo import demo_generate_factory
 from app.memory import Memory
 from app.orchestrator import Orchestrator
+from app.voice import Voice
 from app.ws import create_app
 
 HOST, PORT = "127.0.0.1", 8765
@@ -47,7 +48,9 @@ def main() -> None:
     link_file.parent.mkdir(parents=True, exist_ok=True)
     link_file.write_text(json.dumps({"port": PORT, "token": token}), encoding="utf-8")
     print(f"ws://{HOST}:{PORT}/ws?token={token}", flush=True)
-    uvicorn.Server(uvicorn.Config(create_app(token, orchestrator), log_level="warning")).run(sockets=[sock])
+    cfg = settings.load()
+    voice = None if args.demo else Voice(cfg.voice_model, cfg.voice_dir, cfg.voice_silence_ms, cfg.voice_wake, cfg.voice_on)
+    uvicorn.Server(uvicorn.Config(create_app(token, orchestrator, voice=voice), log_level="warning")).run(sockets=[sock])
 
 
 if __name__ == "__main__":

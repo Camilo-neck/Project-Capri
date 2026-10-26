@@ -41,6 +41,21 @@ export interface Mode {
   claude: boolean;
 }
 
+/** The microphone: idle waits for "hey Capri"; listening means the next sentence is for her. */
+export type VoiceState = "off" | "loading" | "idle" | "hearing" | "listening" | "thinking";
+export interface Voice {
+  type: "voice";
+  estado: VoiceState;
+}
+
+/** What was said to her; handled as if it had been typed (slash commands included). */
+export interface Heard {
+  type: "heard";
+  texto: string;
+  original: string;
+  idioma: string;
+}
+
 export interface ConfirmRequest {
   type: "confirm_request";
   id: string;
@@ -101,5 +116,5 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard;
 export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey;

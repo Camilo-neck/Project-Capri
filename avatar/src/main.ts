@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
-import type { Action, ClaudeEvent, Emocion, ServerMessage } from "./net/protocol.ts";
+import type { Action, ClaudeEvent, Emocion, ServerMessage, VoiceState } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -516,7 +516,32 @@ function setStatus(s: Status): void {
   }
   linkStatus = s;
   status.dataset.state = s;
-  statusLabel.textContent = s === "idle" && dnd ? "NO MOLESTAR" : STATUS[s];
+  renderStatus();
+}
+
+const VOICE_LABEL: Record<VoiceState, string> = {
+  off: "",
+  loading: "CARGANDO VOZ",
+  idle: "ESCUCHANDO · «HEY CAPRI»",
+  hearing: "OYÉNDOTE",
+  listening: "TE ESCUCHO",
+  thinking: "ENTENDIENDO",
+};
+let voice: VoiceState = "off";
+
+/** The status bar; while the microphone is open it always shows, with what it is doing. */
+function renderStatus(): void {
+  const mic = voice !== "off" && (linkStatus === "idle" || linkStatus === "down");
+  status.toggleAttribute("data-mic", voice !== "off");
+  status.dataset.voice = voice;
+  statusLabel.textContent = mic ? VOICE_LABEL[voice] : linkStatus === "idle" && dnd ? "NO MOLESTAR" : STATUS[linkStatus];
+}
+
+function setVoice(v: VoiceState): void {
+  voice = v;
+  trayCheck("voz", v !== "off");
+  if (v === "hearing" || v === "listening") wakeUp();
+  renderStatus();
 }
 
 function updateMeta(): void {
@@ -576,6 +601,13 @@ const link = connect(
         break;
       case "claude":
         onClaude(msg, now);
+        break;
+      case "voice":
+        setVoice(msg.estado);
+        break;
+      case "heard":
+        wakeUp();
+        submit(msg.texto, msg.original);
         break;
       case "remembered":
         txMem.hidden = false;
@@ -849,6 +881,8 @@ void listen("look", () => {
 void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
 // Tray menu: the items with no shortcut. Its ticks follow the real state through trayCheck.
 void listen("claude", () => link.send({ type: "hotkey", name: "claude" }));
+void listen("voz", () => link.send({ type: "hotkey", name: "voz" }));
+void listen("listen", () => link.send({ type: "hotkey", name: "escuchar" }));
 void listen("hide", () => (hiding ? unhide() : hide()));
 void listen<boolean>("quit", (e) => void quit(e.payload));
 // A game or video fullscreen in front: hide, stop rendering (no GPU while you play), keep quiet.
@@ -950,24 +984,37 @@ inputRow.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value.trim();
   if (text) remember(text);
-  // her own commands, handled here (the backend has /olvida and /nomolestes)
-  const command = { "/escondete": () => (hiding ? unhide() : hide()), "/vuelve": unhide, "/cierra": () => void quit() }[text.toLowerCase()];
-  if (command) {
-    input.value = "";
-    if (text.toLowerCase() !== "/cierra") setInputOpen(false);
-    command();
-    return;
-  }
-  const mira = text.match(/^\/mira(?:\s+|$)(.*)$/s);
-  if (mira) {
-    input.value = "";
-    void look(mira[1]);
-    return;
-  }
-  if (!text || !link.send({ type: "text_input", text })) return;
-  input.value = "";
-  startTurn(text);
+  if (submit(text)) input.value = "";
 });
+
+// her own commands, handled here (the backend has /olvida, /nomolestes and /claude); the English names work too
+const OWN: Record<string, () => void> = {
+  "/escondete": () => (hiding ? unhide() : hide()),
+  "/hide": () => (hiding ? unhide() : hide()),
+  "/vuelve": unhide,
+  "/show": unhide,
+  "/back": unhide,
+  "/cierra": () => void quit(),
+  "/quit": () => void quit(),
+};
+
+/** What was typed or said, as a message or one of her own commands; `shown` is what to display for a spoken command. Returns whether it was taken. */
+function submit(text: string, shown = ""): boolean {
+  const command = OWN[text.toLowerCase()];
+  if (command) {
+    if (!/^\/(cierra|quit)$/i.test(text)) setInputOpen(false);
+    command();
+    return true;
+  }
+  const mira = text.match(/^\/(?:mira|look)(?:\s+|$)(.*)$/s);
+  if (mira) {
+    void look(mira[1]);
+    return true;
+  }
+  if (!text || !link.send({ type: "text_input", text })) return false;
+  startTurn(shown || text);
+  return true;
+}
 setInputOpen(false);
 
 /** Her head center in page (CSS) px. */

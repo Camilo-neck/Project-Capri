@@ -7,7 +7,8 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator
-from app.protocol import ConfirmResponse, Hotkey, Look, Presence, ServerMessage, TextInput, client_message
+from app.protocol import ConfirmResponse, Hotkey, Look, Presence, ServerMessage, TextInput, Voice as VoiceState, client_message
+from app.voice import Voice
 
 log = logging.getLogger(__name__)
 
@@ -15,10 +16,20 @@ log = logging.getLogger(__name__)
 ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri://localhost", "http://localhost:1420"}
 
 
-def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -> FastAPI:
+def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, voice: Voice | None = None) -> FastAPI:
     """`reminders`: run the background loops (calendar reminders, speaking up unasked); off in tests."""
     app = FastAPI()
     clients: set = set()  # the `send` of each connected avatar, for what arrives from outside the socket
+
+    async def broadcast(msg: ServerMessage) -> None:
+        await asyncio.gather(*(send(msg) for send in list(clients)), return_exceptions=True)
+
+    @app.on_event("startup")
+    async def start_voice() -> None:
+        if voice:
+            voice.attach(asyncio.get_running_loop(), broadcast)
+            if voice.autostart:
+                voice.start()
 
     @app.post("/claude/event")
     async def claude_event(request: Request) -> Response:
@@ -34,7 +45,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
             return Response(status_code=400)
         event = orchestrator.claude.ingest(payload) if isinstance(payload, dict) else None
         if event:
-            await asyncio.gather(*(send(event) for send in list(clients)), return_exceptions=True)
+            await broadcast(event)
         return Response(status_code=204)
 
     @app.websocket("/ws")
@@ -67,6 +78,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
         clients.add(send)
         if orchestrator.dnd or not orchestrator.claude.enabled:  # the avatar starts assuming dnd is off and Claude mode on
             await send(orchestrator.mode())
+        if voice and voice.state != "off":
+            await send(VoiceState(estado=voice.state))
         spawn(orchestrator.catch_up())  # summaries of sessions that ended with the app closed
         if reminders:
             tasks.add(asyncio.create_task(orchestrator.reminders(send)))
@@ -92,6 +105,10 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True) -
                         await orchestrator.toggle_dnd(send)
                     case Hotkey(name="claude"):
                         await orchestrator.toggle_claude(send)
+                    case Hotkey(name="voz") if voice:
+                        voice.toggle()
+                    case Hotkey(name="escuchar") if voice:
+                        voice.listen_now()
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
         except WebSocketDisconnect:

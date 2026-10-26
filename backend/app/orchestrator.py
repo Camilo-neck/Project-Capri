@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from pydantic import ValidationError
 
-from app import calendar_ics, claude_link, presence, settings, tools, vision
+from app import calendar_ics, claude_link, presence, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
 from app.memory import Memory, fold, words
 from app.protocol import Action, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
@@ -103,6 +103,7 @@ class Orchestrator:
         """A user message (or, with `own`, something she brings up herself: a reminder, a greeting)."""
         if not own:
             self.last_user_at = self.clock()
+        text = spoken.alias(text)  # /forget, /dnd...
         command = text.strip().lower()
         if image is None and command.startswith(FORGET_CMD):
             await self.forget_command(text.strip()[len(FORGET_CMD):].strip(), send)

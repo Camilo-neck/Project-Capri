@@ -170,7 +170,9 @@ pub fn run() {
             user_config::save_style,
             user_config::save_camera,
             ollama::quit,
-            tray::tray_check
+            tray::tray_check,
+            tray::tray_states,
+            tray::tray_action
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

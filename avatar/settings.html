@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Capri · ajustes</title>
+    <script type="module" src="/src/settings.ts"></script>
+  </head>
+  <body>
+    <main class="panel">
+      <header>
+        <img id="face" alt="" />
+        <div>
+          <h1>Capri</h1>
+          <p>en línea</p>
+        </div>
+        <button class="x" data-act="close" title="Cerrar (Esc)">×</button>
+      </header>
+
+      <div class="quick">
+        <button data-act="open-input"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>Escribirle</button>
+        <button data-act="hide"><svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6zM4 4l16 16" /></svg>Esconderse</button>
+      </div>
+
+      <section>
+        <h2>Modos</h2>
+        <label class="row" data-id="claude">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z" /></svg></span>
+          <span class="txt"><b>Modo Claude</b><small>Reacciona a lo que hace Claude Code</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+        <label class="row" data-id="dnd">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z" /></svg></span>
+          <span class="txt"><b>No molestar</b><small>No habla ni interrumpe por su cuenta</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+        <label class="row" data-id="camera">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 7h12v10H3zM15 11l6-3v8l-6-3" /></svg></span>
+          <span class="txt"><b>Modo cámara</b><small>Primeros planos de la serie</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+      </section>
+
+      <section>
+        <h2>Apariencia</h2>
+        <div class="seg" id="style">
+          <button data-style="original">Original</button>
+          <button data-style="pixel">Pixel art</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Comportamiento</h2>
+        <label class="row" data-id="deambular">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20l4-8 3 3 4-9 3 14" /></svg></span>
+          <span class="txt"><b>Deambular</b><small>Pasea por la pantalla</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+        <label class="row" data-id="poseer_ventanas">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 9h16" /></svg></span>
+          <span class="txt"><b>Poseer ventanas</b><small>Se mete en tus ventanas por un rato</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+      </section>
+
+      <footer>
+        <button class="danger" data-act="quit">Cerrar Capri</button>
+        <button class="danger ghost" data-act="quit-ollama">Cerrar y apagar Ollama</button>
+      </footer>
+    </main>
+  </body>
+</html>

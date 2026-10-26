@@ -9,6 +9,7 @@ Events yielded by `reply`:
 """
 
 import logging
+import random
 import re
 import time
 from collections.abc import AsyncIterator, Callable
@@ -77,12 +78,38 @@ SCREEN_NOTE = (
 )
 
 
+# Her Night City words. The 8B model overuses any it can see (12 of 20 replies had "choom", even when
+# consoling) and misuses the harder ones, so they live only in the last message of the turns that may
+# use them, about one in four, and only the ones it handles: "choom" as a nickname, "preem" / "nova"
+# as a cheer. In the other turns it doesn't know them. Never on sad or serious messages, or on automatic ones.
+SLANG_CHANCE = 0.25
+SLANG_ON = (
+    "En esta respuesta usa una sola palabra de Night City, en una frase en español y sin explicarla: o «choom» "
+    "para dirigirte a él, como un apodo más («dime, choom»), o «preem» o «nova» como exclamación de algo bueno "
+    "(«¡preem!», «eso quedó nova»)."
+)
+SERIOUS = re.compile(
+    r"muri|falleci|funeral|hospital|enferm|cáncer|cancer|triste|llor|deprim|ansied|suicid|duelo|perd[ií]|"
+    r"accidente|problema grave|mal d[ií]a|me siento mal|extra[ñn]o a",
+    re.IGNORECASE,
+)
+
+
+def slang_allowed(history: list[dict]) -> bool:
+    """Her words are for light moments in a conversation with the user, never for something heavy or automatic."""
+    last = history[-1]["content"] if history else ""
+    return isinstance(last, str) and not last.startswith("[") and not SERIOUS.search(last)
+
+
 def build_messages(
-    history: list[dict], now: datetime | None = None, image: bytes | None = None, memory: str = ""
+    history: list[dict], now: datetime | None = None, image: bytes | None = None, memory: str = "",
+    slang: bool = False,
 ) -> list[dict]:
     # Stable prefix first so Ollama reuses the KV cache; variable context (time, memory) goes last.
     now = now or datetime.now()
     context = f"Contexto actual: {DAYS[now.weekday()]} {now:%d/%m/%Y, %H:%M}."
+    if slang:
+        context += f"\n{SLANG_ON}"
     if memory:
         context += f"\n{MEMORY_NOTE}\n{memory}"
     turns = list(history)
@@ -131,9 +158,11 @@ async def stream_reply(chunks: AsyncIterator[str | int]) -> AsyncIterator[tuple]
 
 
 async def reply(
-    history: list[dict], generate: Generate = ollama_generate, image: bytes | None = None, memory: str = ""
+    history: list[dict], generate: Generate = ollama_generate, image: bytes | None = None, memory: str = "",
+    slang: bool | None = None,
 ) -> AsyncIterator[tuple]:
-    messages = build_messages(history, image=image, memory=memory)
+    slang = (random.random() < SLANG_CHANCE and slang_allowed(history)) if slang is None else slang
+    messages = build_messages(history, image=image, memory=memory, slang=slang)
     last_text = ""
     for attempt in range(2):
         if attempt:

@@ -181,3 +181,15 @@ def test_the_result_with_the_most_words_of_the_query_wins():
 
     sp = spotify.Spotify(http=httpx.Client(transport=httpx.MockTransport(fake)), open_url=lambda u: None)
     assert sp.find("Nalguisima de topboy", "cancion")["uri"] == "spotify:track:2"
+
+
+def test_youtube_opens_the_first_video_of_the_search(opened, monkeypatch):
+    page = ('..."videoRenderer":{"videoId":"Cn_ydrQcB88","thumbnail":{},"title":{"runs":[{"text":"Topboy \u0026 co - NALGUISIMA"}]}...'
+            '"videoRenderer":{"videoId":"zzzzzzzzzzz","title":{"runs":[{"text":"otro"}]}')
+    monkeypatch.setattr(tools.httpx, "get", lambda *a, **k: httpx.Response(200, text=page, request=httpx.Request("GET", "https://x")))
+    assert not tools.TOOLS["youtube"].effect
+    msg = tools.play_youtube(tools.YoutubeArgs(consulta="nalguisima topboy"), settings.Settings())
+    assert opened == ["https://www.youtube.com/watch?v=Cn_ydrQcB88"] and msg == "Abrí en YouTube: Topboy & co - NALGUISIMA."
+    monkeypatch.setattr(tools.httpx, "get", lambda *a, **k: httpx.Response(200, text="nada", request=httpx.Request("GET", "https://x")))
+    with pytest.raises(tools.ToolError):
+        tools.play_youtube(tools.YoutubeArgs(consulta="x"), settings.Settings())

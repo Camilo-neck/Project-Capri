@@ -5,6 +5,7 @@ Everything they touch is allowlisted in the user's config (app/settings.py)."""
 import ctypes
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urlparse
 
+import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
@@ -74,6 +76,10 @@ class UrlArgs(BaseModel):
 
 class WebSearchArgs(BaseModel):
     sitio: Literal["youtube", "google", "spotify"]
+    consulta: str = Field(min_length=1, max_length=200)
+
+
+class YoutubeArgs(BaseModel):
     consulta: str = Field(min_length=1, max_length=200)
 
 
@@ -192,6 +198,26 @@ def web_search(a: WebSearchArgs, s: Settings) -> str:
     return f"Abrí la búsqueda de «{a.consulta}» en {a.sitio}."
 
 
+FIRST_VIDEO = re.compile(r'"videoRenderer":\{"videoId":"([\w-]{11})".{0,1500}?"title":\{"runs":\[\{"text":"(.*?)"\}', re.S)
+
+
+def play_youtube(a: YoutubeArgs, s: Settings) -> str:
+    """Opens the first video of a YouTube search (the page opens and starts playing). One request to
+    youtube.com's results page, the same one the browser would load; no API key."""
+    try:
+        r = httpx.get("https://www.youtube.com/results", params={"search_query": a.consulta}, timeout=10,
+                      headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36",
+                               "Accept-Language": "es-CO,es;q=0.9"}, cookies={"CONSENT": "YES+1"}, follow_redirects=True)
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        raise ToolError(f"no pude consultar YouTube: {e}") from e
+    m = FIRST_VIDEO.search(r.text)
+    if not m:
+        raise ToolError(f"no encontré ningún video para «{a.consulta}»")
+    os.startfile(f"https://www.youtube.com/watch?v={m.group(1)}")  # noqa: S606  (a video id of the fixed site)
+    return f"Abrí en YouTube: {json.loads(f'\"{m.group(2)}\"')}."
+
+
 # Windows media keys: they drive whatever is playing (Spotify, YouTube in the browser, ...).
 MEDIA_KEYS = {"play_pausa": 0xB3, "siguiente": 0xB0, "anterior": 0xB1,
               "subir_volumen": 0xAF, "bajar_volumen": 0xAE, "silencio": 0xAD}
@@ -239,6 +265,7 @@ TOOLS: dict[str, Tool] = {
     # keys and playing music change nothing that matters, so they don't.
     "abrir_web": Tool(UrlArgs, True, open_url, lambda a: f"Abrir {urlparse(a.url).hostname or a.url} en el navegador"),
     "buscar": Tool(WebSearchArgs, False, web_search),
+    "youtube": Tool(YoutubeArgs, False, play_youtube),
     "musica": Tool(MediaArgs, False, media),
     "spotify": Tool(SpotifyArgs, False, play_spotify),
     "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)"),

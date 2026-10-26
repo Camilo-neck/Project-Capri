@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import secrets
+import socket
 import sys
 import threading
 
@@ -40,12 +41,13 @@ def main() -> None:
         orchestrator = Orchestrator(demo_generate_factory(), memory=Memory(":memory:"), summarize=demo_summary)
     else:
         orchestrator = Orchestrator()
+    sock = socket.create_server((HOST, PORT))  # fails here if another Capri has the port, before touching its link file
     # where the Claude Code hooks find us (they run in other processes and can't know the per-start token)
     link_file = settings.path().parent / "claude_link.json"
     link_file.parent.mkdir(parents=True, exist_ok=True)
     link_file.write_text(json.dumps({"port": PORT, "token": token}), encoding="utf-8")
     print(f"ws://{HOST}:{PORT}/ws?token={token}", flush=True)
-    uvicorn.run(create_app(token, orchestrator), host=HOST, port=PORT, log_level="warning")
+    uvicorn.Server(uvicorn.Config(create_app(token, orchestrator), log_level="warning")).run(sockets=[sock])
 
 
 if __name__ == "__main__":

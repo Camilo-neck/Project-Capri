@@ -16,13 +16,13 @@ import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
-import { panelFor, reaction, Tracker, type Panel } from "./state/claude.ts";
+import { bigJob, panelFor, reaction, SPARK_GAP_MS, sparkFor, Tracker, type Panel } from "./state/claude.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
 import { Doze, sleepy } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
 import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
-import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget } from "./state/zap.ts";
+import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget, type Zap } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
 const HIDE_AFTER_MS = 6000;
@@ -131,6 +131,7 @@ const claudeTrack = new Tracker();
 const claudeEl = $("claude");
 const claudePanel = $("claude-panel");
 let claudeLine = "";
+let claudeSpark = 0; // when Claude's last spark went off
 let claudeGap = 0;
 let claudePending: Panel | null = null; // Claude finished while she was hiding
 let claudeTimer = 0;
@@ -548,11 +549,25 @@ const link = connect(
 function onClaude(msg: ClaudeEvent, now: number): void {
   claudeTrack.push(msg, now);
   const react = reaction(msg);
-  if (react && !hiding && !dnd && !teleporting && !possessing && !falling && !dragging && !peek) {
+  const free = !hiding && !dnd && !teleporting && !possessing && !falling && !dragging && !peek;
+  if (react && free) {
     wakeUp();
     if (avatar.setEmotion(react.emocion)) glitch.kick("change", now);
     avatar.playGesture(react.gesto, now);
     lastTalk = Math.max(lastTalk, now - LINGER_MS + 3500);
+  }
+  // her lightning follows what Claude does
+  const z = sparkFor(msg);
+  if (free && !reducedMotion.matches) {
+    if (z && now - claudeSpark >= SPARK_GAP_MS) {
+      claudeSpark = now;
+      spark(z, () => performance.now() - now < 1200, 1200);
+    } else if (msg.estado === "fallo") {
+      glitch.kick("hurt", now);
+      fx.impact(body().x, body().y);
+    } else if (bigJob(msg)) {
+      void victory();
+    }
   }
   const panel = panelFor(msg);
   if (!panel) return;
@@ -589,15 +604,27 @@ claudePanel.addEventListener("mouseleave", () => {
   claudeTimer = window.setTimeout(() => (claudePanel.hidden = true), 15_000);
 });
 
-/** Every frame: the ticker text and tone, and its height over the taskbar. */
+/** Every frame: the ticker's words and tone, where it sits (over her head, or her corner while she hides), and its height over the taskbar. */
 function drawClaude(now: number): void {
   const line = claudeTrack.line(now);
-  claudeEl.hidden = !line;
-  if (line) {
-    const text = line.text;
-    if (text !== claudeLine) $("claude-text").textContent = claudeLine = text;
+  claudeEl.hidden = !line || (!hiding && !claudePanel.hidden); // the bubble says it better
+  if (line && !claudeEl.hidden) {
+    $("claude-target").textContent = line.target;
+    const key = line.tone === "think" ? "think" : `${line.verb}|${line.target}|${line.project}`; // the seconds tick without a flash
+    if (key !== claudeLine) {
+      claudeLine = key;
+      $("claude-verb").textContent = line.verb;
+      $("claude-where").textContent = line.project;
+      claudeEl.classList.remove("flash");
+      void claudeEl.offsetWidth; // restart the animation
+      claudeEl.classList.add("flash");
+    }
     claudeEl.dataset.tone = line.tone;
+  }
+  if (claudeEl.dataset.hiding !== (hiding ? "1" : "")) {
     claudeEl.dataset.hiding = hiding ? "1" : "";
+    if (hiding) document.body.append(claudeEl);
+    else hud.insertBefore(claudeEl, status);
   }
   const gap = Math.round(innerHeight - floor()) + 8;
   if (gap !== claudeGap) {
@@ -621,24 +648,12 @@ function boltTo(target: BoltTarget): Point {
 function zap(a: Action): void {
   if (reducedMotion.matches) return;
   const now = performance.now();
-  const aura = () => {
-    const b = body();
-    return { x: b.x, y: b.y, r: b.size * 0.6 };
-  };
   if (a.fase === "inicio") {
     const z = zapStart(a.nombre);
     if (!z) return;
-    wakeUp();
     const run = {};
     acting = run;
-    fx.crackle(aura, () => acting === run, AURA_MAX_MS);
-    glitch.kick("change", now);
-    if (z.bolt) {
-      const to = boltTo(z.bolt);
-      fx.bolt(() => body(), () => to);
-    }
-    const front = wins.wins.find((w) => w.id === wins.fg && !w.max);
-    if (z.frame && front) fx.surge(front);
+    spark(z, () => acting === run, AURA_MAX_MS);
     return;
   }
   acting = null;
@@ -652,6 +667,24 @@ function zap(a: Action): void {
   } else if (end === "victoria") {
     void victory();
   }
+}
+
+/** Sparks crawl over her while `alive`, and a bolt leaps to where the tool acts. */
+function spark(z: Zap, alive: () => boolean, life: number): void {
+  wakeUp();
+  fx.crackle(aura, alive, life);
+  glitch.kick("change", performance.now());
+  if (z.bolt) {
+    const to = boltTo(z.bolt);
+    fx.bolt(() => body(), () => to);
+  }
+  const front = wins.wins.find((w) => w.id === wins.fg && !w.max);
+  if (z.frame && front) fx.surge(front);
+}
+
+function aura(): { x: number; y: number; r: number } {
+  const b = body();
+  return { x: b.x, y: b.y, r: b.size * 0.6 };
 }
 
 /** Done with something big: speed lines and a shockwave, and an anime cut-in of her laughing or grinning. */

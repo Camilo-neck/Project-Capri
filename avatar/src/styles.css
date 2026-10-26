@@ -488,39 +488,113 @@ body {
   }
 }
 
-/* Claude mode: a ticker over the taskbar's left corner (beside her hiding spot) and a panel with Claude's words */
+/* Claude mode ticker: over her head while she's out (main.ts moves it into the HUD column), in the
+   taskbar's left corner beside her mask while she hides. Chamfered plate with the violet offset copy,
+   a blinking square, the verb in caps, a stripe sweeping under it while Claude works. */
 .claude {
+  --tone: var(--accent-2);
+  position: relative;
+  align-self: center;
+  max-width: 100%;
+  margin-bottom: 8px;
+  filter: drop-shadow(3px 3px 0 var(--accent));
+  pointer-events: none;
+  animation: cpanel-in 210ms steps(3, jump-end) both;
+}
+
+.claude[data-hiding="1"] {
   position: fixed;
   left: 84px;
   bottom: var(--floor-gap, 52px);
-  max-width: min(520px, calc(100vw - 120px));
-  padding: 2px 10px;
-  background: var(--bg);
-  border-left: 3px solid var(--tone, var(--accent));
+  max-width: min(460px, calc(100vw - 120px));
+  margin: 0;
+}
+
+.claude-plate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  padding: 5px 12px 6px 9px;
+  background: rgb(11 9 22);
   font: 12px var(--font-body);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-  animation: tx-in 160ms steps(4) both;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
 }
 
-.claude b {
-  color: var(--tone, var(--accent));
+.claude.flash .claude-plate {
+  animation: claude-flash 160ms steps(2, jump-end) 1;
+}
+
+.claude-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--tone);
+  animation: claude-blink 700ms steps(2, jump-none) infinite;
+}
+
+.claude-verb {
+  flex: none;
+  color: var(--tone);
   font: 600 11px var(--font-head);
   letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.claude[data-tone="think"] { --tone: #b58cff; color: var(--dim); }
-.claude[data-tone="need"] { --tone: var(--warn); animation: claude-blink 1s steps(2) infinite; }
+.claude-target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.claude-where {
+  flex: none;
+  color: var(--dim);
+}
+
+.claude-where::before {
+  content: "· ";
+  color: var(--accent);
+}
+
+/* while Claude works, a stripe runs along the bottom edge */
+.claude-plate::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0 35%, var(--tone) 35% 65%, transparent 65%) 0 0 / 200% 100%;
+  animation: claude-sweep 1.2s steps(12) infinite;
+  visibility: hidden;
+}
+
+.claude:is([data-tone="work"], [data-tone="think"]) .claude-plate::after {
+  visibility: visible;
+}
+
+.claude[data-tone="think"] { --tone: #b58cff; }
+.claude[data-tone="think"] .claude-target { color: var(--dim); }
+.claude[data-tone="need"] { --tone: var(--warn); }
+.claude[data-tone="need"] .claude-plate { animation: claude-blink 1s steps(2) infinite; }
 .claude[data-tone="fail"] { --tone: #ff4d5e; }
-.claude[data-tone="done"] { --tone: var(--accent-2); }
 .claude[data-tone="info"] { --tone: var(--dim); }
-.claude[data-hiding="1"][data-tone="done"],
-.claude[data-hiding="1"][data-tone="fail"] { animation: claude-blink 1s steps(2) 6; }
+.claude[data-hiding="1"]:is([data-tone="done"], [data-tone="fail"]) .claude-plate { animation: claude-blink 1s steps(2) 6; }
+
+@keyframes claude-flash {
+  0% { background: var(--tone); color: #0b0916; }
+  100% { background: rgb(11 9 22); }
+}
 
 @keyframes claude-blink {
   50% { opacity: 0.35; }
+}
+
+@keyframes claude-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
 }
 
 /* Claude's bubble over her head: her face, the project, a tag, her line, Claude's words and the numbers.
@@ -641,7 +715,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cpanel {
-    animation: none;
+  .cpanel,
+  .claude,
+  .claude-plate,
+  .claude-plate::after,
+  .claude-dot {
+    animation: none !important;
   }
 }

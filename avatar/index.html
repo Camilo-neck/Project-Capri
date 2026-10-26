@@ -11,7 +11,6 @@
     <canvas id="fx" class="fx"></canvas>
     <canvas id="mask" class="mask" hidden></canvas>
     <canvas id="hide" class="mask hide" hidden></canvas>
-    <div id="claude" class="claude" hidden><b>◢ CLAUDE</b> <span id="claude-text"></span></div>
     <main class="hud">
       <section id="tx" class="tx" hidden>
         <header class="tx-tab">
@@ -41,6 +40,11 @@
           </div>
         </div>
       </aside>
+      <div id="claude" class="claude" hidden>
+        <div class="claude-plate">
+          <i class="claude-dot"></i><b id="claude-verb" class="claude-verb"></b><span id="claude-target" class="claude-target"></span><span id="claude-where" class="claude-where"></span>
+        </div>
+      </div>
       <div id="status" class="status" data-state="down">
         <span class="status-mark">◢</span>
         <span id="status-label">SIN ENLACE</span>

@@ -11,7 +11,7 @@ export type Finale = "chispa" | "victoria" | "fallo";
 export const LONG_MS = 4000; // a tool running this long earns a victory
 export const AURA_MAX_MS = 15_000; // the sparks stop by then even if the end never comes
 
-interface Zap {
+export interface Zap {
   bolt: BoltTarget | null;
   frame?: boolean; // the current runs around the target window's frame
 }

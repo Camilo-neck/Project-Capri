@@ -1,13 +1,24 @@
 import type { ClaudeEvent, Emocion, Gesto } from "../net/protocol.ts";
+import type { Zap } from "./zap.ts";
 
 /** Claude mode: what the ticker says about the Claude Code session that moved last (the data is only displayed). */
 export const THINK_MS = 15_000; // no news for this long while it works: "pensando…"
 const FLASH_MS = { inicio: 4000, fallo: 6000, termino: 12_000, respuesta: 4000 };
 
 export type Tone = "work" | "think" | "need" | "fail" | "done" | "info";
+/** The ticker: "▪ EDITANDO main.ts · capri" */
 export interface Line {
-  text: string;
+  verb: string;
+  target: string;
+  project: string;
   tone: Tone;
+}
+
+/** "Editando main.ts" → ["Editando", "main.ts"]; "Ejecutando: npm test" → ["Ejecutando", "npm test"]; a prompt is a "tarea". */
+export function split(detalle: string): [string, string] {
+  if (detalle.startsWith("«")) return ["tarea", detalle];
+  const m = detalle.match(/^(\S+?):?\s+(.*)$/);
+  return m ? [m[1], m[2]] : [detalle, ""];
 }
 
 export class Tracker {
@@ -24,26 +35,21 @@ export class Tracker {
     const e = this.last;
     if (!e) return null;
     const age = now - this.at;
-    const who = `${e.project} › `;
+    const line = (verb: string, target: string, tone: Tone): Line => ({ verb, target, project: e.project, tone });
     switch (e.estado) {
       case "trabajando":
-        return age >= THINK_MS
-          ? { text: `${who}pensando… ${Math.floor(age / 1000)} s`, tone: "think" }
-          : { text: who + e.detalle, tone: "work" };
+        return age >= THINK_MS ? line("pensando", `${Math.floor(age / 1000)} s`, "think") : line(...split(e.detalle), "work");
       case "necesita":
-        return { text: `${who}te necesita: ${e.detalle}`, tone: "need" };
+        return line("te necesita", e.detalle, "need");
       case "inicio":
       case "fallo":
       case "termino":
       case "respuesta":
         if (age >= FLASH_MS[e.estado]) return null;
-        const lines: Record<"inicio" | "fallo" | "termino" | "respuesta", Line> = {
-          inicio: { text: who + e.detalle, tone: "info" },
-          fallo: { text: `${who}falló: ${e.detalle}`, tone: "fail" },
-          termino: { text: `${who}terminó · ${summary(e)}`, tone: "done" },
-          respuesta: { text: `${who}respondió`, tone: "info" },
-        };
-        return lines[e.estado];
+        if (e.estado === "inicio") return line("sesión nueva", "", "info");
+        if (e.estado === "fallo") return line("falló", e.detalle, "fail");
+        if (e.estado === "termino") return line("terminó", summary(e), "done");
+        return line("respondió", "", "info");
       default:
         return null;
     }
@@ -61,6 +67,8 @@ export function summary(e: ClaudeEvent): string {
 /** How she reacts to an event, for when she is out and about (not hiding, not on do-not-disturb). */
 export function reaction(e: ClaudeEvent): { emocion: Emocion; gesto: Gesto } | null {
   switch (e.estado) {
+    case "trabajando":
+      return e.herramienta ? null : { emocion: "pensativa", gesto: "asentir" }; // got the prompt
     case "termino":
       return { emocion: "feliz", gesto: "saltar" };
     case "fallo":
@@ -70,6 +78,29 @@ export function reaction(e: ClaudeEvent): { emocion: Emocion; gesto: Gesto } | n
     default:
       return null;
   }
+}
+
+// Her lightning for what Claude does (render as in state/zap.ts): a command runs into the window in front,
+// the web goes to the middle of the screen, an edit is a spark on her. Reading doesn't spark.
+const SPARKS: Record<string, Zap> = {
+  Bash: { bolt: "window", frame: true },
+  PowerShell: { bolt: "window", frame: true },
+  WebFetch: { bolt: "center" },
+  WebSearch: { bolt: "center" },
+  Edit: { bolt: null },
+  MultiEdit: { bolt: null },
+  Write: { bolt: null },
+  NotebookEdit: { bolt: null },
+};
+export const SPARK_GAP_MS = 1500; // a burst of tool calls is one spark, not a strobe
+
+export function sparkFor(e: ClaudeEvent): Zap | null {
+  return e.estado === "trabajando" ? SPARKS[e.herramienta] ?? null : null;
+}
+
+/** A long job earns her victory sequence when it ends. */
+export function bigJob(e: ClaudeEvent): boolean {
+  return e.estado === "termino" && (e.segundos >= 120 || e.acciones >= 20);
 }
 
 export type Face = "grin" | "look";

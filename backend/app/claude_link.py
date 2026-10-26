@@ -102,7 +102,8 @@ class ClaudeLink:
                 args = p.get("tool_input") or {}
                 if p.get("tool_name") in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
                     s.files.add(str(args.get("file_path") or args.get("notebook_path") or ""))
-                return out("trabajando", detalle=doing(str(p.get("tool_name")), args))
+                tool = clip(p.get("tool_name"), 40)
+                return out("trabajando", detalle=doing(tool, args), herramienta=tool)
             case "PostToolUseFailure" if p.get("tool_name") in FAILS and not p.get("is_interrupt"):
                 error = str(p.get("error") or "")
                 lines = [ln for ln in error.splitlines()[1:] if ln.strip()] or [error]

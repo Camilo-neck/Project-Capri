@@ -58,6 +58,7 @@ class ClaudeEvent(BaseModel):
     project: str  # folder name of the session
     estado: Literal["inicio", "trabajando", "necesita", "fallo", "termino", "respuesta", "fin"]
     detalle: str = ""  # what it is doing now / the error / what it needs
+    herramienta: str = ""  # the tool Claude is using while it works ("" for the prompt)
     resumen: str = ""  # termino and respuesta: Claude's last message
     segundos: int = 0  # termino: how long the prompt took
     acciones: int = 0  # termino: tool calls

@@ -22,7 +22,8 @@ def test_a_work_session_becomes_a_story():
     e = link.ingest(hook("UserPromptSubmit", prompt="arregla   el\nbug del login " + "x" * 200))
     assert (e.estado, e.project) == ("trabajando", "capri") and len(e.detalle) <= 75 and "\n" not in e.detalle
     assert link.ingest(hook("PreToolUse", tool_name="Read", tool_input={"file_path": "C:\\a\\b\\login.py"})).detalle == "Leyendo login.py"
-    assert link.ingest(hook("PreToolUse", tool_name="Edit", tool_input={"file_path": "C:/a/b/login.py"})).detalle == "Editando login.py"
+    edit = link.ingest(hook("PreToolUse", tool_name="Edit", tool_input={"file_path": "C:/a/b/login.py"}))
+    assert (edit.detalle, edit.herramienta) == ("Editando login.py", "Edit")
     link.ingest(hook("PreToolUse", tool_name="Write", tool_input={"file_path": "C:/a/b/nuevo.py"}))
     link.ingest(hook("PreToolUse", tool_name="Edit", tool_input={"file_path": "C:/a/b/login.py"}))  # same file again
     done = link.ingest(hook("Stop", last_assistant_message="Listo, arreglé el login."))

@@ -54,6 +54,7 @@ export interface ClaudeEvent {
   project: string; // folder name of the session
   estado: "inicio" | "trabajando" | "necesita" | "fallo" | "termino" | "respuesta" | "fin";
   detalle: string; // what it is doing now, the error, or what it needs
+  herramienta: string; // the tool Claude is using while it works ("" for the prompt)
   resumen: string; // Claude's last message (termino and respuesta)
   segundos: number; // seconds the prompt took (termino)
   acciones: number; // tool calls (termino)

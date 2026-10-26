@@ -169,3 +169,15 @@ def test_not_connected_tells_capri_to_connect():
     with pytest.raises(tools.ToolError, match="conectar_spotify"):
         tools.play_spotify(tools.SpotifyArgs(consulta="algo"), settings.load())
     assert not tools.TOOLS["spotify"].effect and tools.TOOLS["conectar_spotify"].effect
+
+
+def test_the_result_with_the_most_words_of_the_query_wins():
+    connect()
+    items = [{"name": "MÁS DE AHÍ - Remix", "uri": "spotify:track:1", "artists": [{"name": "Topboy TGR"}]},
+             {"name": "NALGUISIMA", "uri": "spotify:track:2", "artists": [{"name": "Topboy TGR"}]}]
+
+    def fake(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"tracks": {"items": items}})
+
+    sp = spotify.Spotify(http=httpx.Client(transport=httpx.MockTransport(fake)), open_url=lambda u: None)
+    assert sp.find("Nalguisima de topboy", "cancion")["uri"] == "spotify:track:2"

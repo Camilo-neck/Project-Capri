@@ -13,7 +13,9 @@ import logging
 import os
 import secrets
 import threading
+import re
 import time
+import unicodedata
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -30,6 +32,14 @@ API = "https://api.spotify.com/v1"
 SCOPES = "user-modify-playback-state user-read-playback-state"
 KINDS = {"cancion": "track", "playlist": "playlist", "album": "album", "artista": "artist"}
 LOGIN_S = 180  # how long the one-shot callback server waits for the user to authorize
+
+
+FILLER = {"de", "del", "la", "el", "by", "artist"}
+
+
+def words(text: str) -> set[str]:
+    plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return set(re.findall(r"\w+", plain))
 
 
 class SpotifyError(Exception):
@@ -164,12 +174,15 @@ class Spotify:
 
     def find(self, query: str, kind: str) -> dict:
         t = KINDS[kind]
-        r = self.call("GET", "/search", params={"q": query, "type": t, "limit": 1})
+        r = self.call("GET", "/search", params={"q": query, "type": t, "limit": 5})
         r.raise_for_status()
         items = [i for i in r.json()[f"{t}s"]["items"] if i]
         if not items:
             raise SpotifyError(f"no encontré nada en Spotify para «{query}»")
-        return items[0]
+        # Spotify's own ranking can slip on filler words ("nalguisima de topboy" gave another song by
+        # the artist), so the item that contains the most words of the query wins; ties keep its order.
+        want = words(query) - FILLER
+        return max(items, key=lambda i: len(want & words(i["name"] + " " + " ".join(a["name"] for a in i.get("artists", [])))))
 
     def playing(self) -> bool:
         r = self.call("GET", "/me/player")

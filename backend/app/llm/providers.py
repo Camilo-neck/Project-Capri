@@ -1,14 +1,20 @@
-"""Her brain, from config.toml [modelo]: a local model through Ollama, or Claude (Anthropic) or GPT
-(OpenAI) in the cloud. Read on every call, so switching applies to the next message.
+"""Her brain, from config.toml [modelo]: a local model through Ollama, Claude through Claude Code on the
+user's own plan (`claude -p`, no key), or Claude (Anthropic API) or GPT (OpenAI) with a key. Read on
+every call, so switching applies to the next message.
 
-All three take the same messages (Ollama's shape: system/user/assistant, images as bytes on a user
+All of them take the same messages (Ollama's shape: system/user/assistant, images as bytes on a user
 message) and yield the reply's text in chunks, then the context tokens used. The cloud ones get the
 JSON format from the prompt and the reply is validated like any other (client.reply)."""
 
+import asyncio
 import base64
+import json as jsonlib
 import logging
 import os
+import shutil
+import tempfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import keyring
 from ollama import AsyncClient
@@ -17,8 +23,11 @@ from app import config, settings
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = ("ollama", "anthropic", "openai")
+PROVIDERS = ("ollama", "claude_code", "anthropic", "openai")
+NAMES = {"ollama": "Ollama", "claude_code": "Claude de tu plan", "anthropic": "Claude API", "openai": "GPT"}
 ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+# Claude Code's aliases for the latest of each; it runs on the user's Claude plan, no key
+PLAN_MODELS = ["sonnet", "haiku", "opus"]
 # offered before a key lets her ask the provider for its list
 CLAUDE_MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
 # the server re-runs a declined request on another model (Claude API only)
@@ -97,10 +106,22 @@ async def generate(messages: list[dict], json: bool = True) -> AsyncIterator[str
         gen = _anthropic(messages, s.model_name, s.model_effort)
     elif s.model_provider == "openai":
         gen = _openai(messages, s.model_name, json)
+    elif s.model_provider == "claude_code":
+        gen = _claude_code(messages, s.model_name, s.model_effort, json)
     else:
         gen = _ollama(messages, s.model_name, json)
-    async for part in gen:
-        yield part
+    said = False
+    try:
+        async for part in gen:
+            said = said or isinstance(part, str) and bool(part)
+            yield part
+    except Exception as e:  # no key, no network, a limit reached, Ollama down: she says so instead of freezing
+        log.exception("%s failed", s.model_provider)
+        if not json or said:
+            raise
+        why = f"{type(e).__name__}: {e}"[:160].replace('"', "'").replace("\\", "/").replace("\n", " ")
+        yield ('{"emocion":"triste","gesto":"ninguno","accion":null,"texto":"Se me desconectó el cerebro '
+               f'({NAMES[s.model_provider]}): {why}"}}')
 
 
 async def complete(messages: list[dict]) -> str:
@@ -150,11 +171,84 @@ async def _openai(messages: list[dict], model: str, json: bool) -> AsyncIterator
             yield chunk.usage.total_tokens
 
 
+def to_claude_code(messages: list[dict]) -> tuple[str, dict]:
+    """`claude -p` takes one system prompt and one user message: the persona and the turn's context, then
+    the conversation so far as a transcript (her lines by their text) and the message to answer, images first."""
+    system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+    turns = [m for m in messages if m["role"] != "system"]
+    *before, last = turns or [{"role": "user", "content": ""}]
+
+    def line(m: dict) -> str:
+        if m["role"] == "user":
+            return f"Usuario: {m['content']}"
+        try:
+            return f"Capri: {jsonlib.loads(m['content'])['texto']}"
+        except (ValueError, KeyError, TypeError):
+            return f"Capri: {m['content']}"
+
+    text = last["content"]
+    if before:
+        text = ("La conversación hasta ahora (ya pasó; no la repitas):\n" + "\n".join(map(line, before))
+                + f"\n\nEl mensaje que respondes ahora:\n{text}")
+    content = [*({"type": "image", "source": {"type": "base64", "media_type": mime(i), "data": b64(i)}} for i in last.get("images", [])),
+               {"type": "text", "text": text}]
+    return system, {"type": "user", "message": {"role": "user", "content": content}}
+
+
+async def _claude_code(messages: list[dict], model: str, effort: str, json: bool) -> AsyncIterator[str | int]:
+    """Claude Code headless, on the user's plan: no tools, no MCP, no saved session, and its hooks keep
+    quiet (CAPRI_CLAUDE_RUN) so her own Claude-mode ticker doesn't show her thinking."""
+    from app.claude_link import RUN_ENV
+
+    exe = shutil.which("claude")
+    if not exe:
+        raise RuntimeError("no encuentro el comando `claude` (instala Claude Code e inicia sesión)")
+    system, message = to_claude_code(messages)
+    if json:
+        system += "\n\nResponde únicamente con el objeto JSON."
+    work = Path(tempfile.mkdtemp(prefix="capri-brain-"))  # an empty folder: no project, no CLAUDE.md of one
+    (work / "system.md").write_text(system, encoding="utf-8")
+    proc = await asyncio.create_subprocess_exec(
+        exe, "-p", "--system-prompt-file", str(work / "system.md"), "--tools", "", "--strict-mcp-config",
+        "--no-session-persistence", "--input-format", "stream-json", "--output-format", "stream-json",
+        "--include-partial-messages", "--verbose", "--model", model, "--effort", effort,
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        cwd=work, env={**os.environ, RUN_ENV: "1"}, creationflags=0x0800_0000, limit=2**24)
+    try:
+        proc.stdin.write((jsonlib.dumps(message) + "\n").encode())
+        await proc.stdin.drain()
+        proc.stdin.close()
+        failure = ""
+        async for raw in proc.stdout:
+            try:
+                ev = jsonlib.loads(raw)
+            except ValueError:
+                continue
+            if ev.get("type") == "stream_event":
+                delta = ev["event"].get("delta", {})
+                if delta.get("type") == "text_delta":
+                    yield delta["text"]
+            elif ev.get("type") == "result":
+                if ev.get("is_error"):
+                    failure = str(ev.get("result") or ev.get("subtype") or "error")
+                u = ev.get("usage") or {}
+                yield sum(u.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"))
+        await proc.wait()
+        if failure or proc.returncode:
+            err = (await proc.stderr.read()).decode("utf-8", "replace").strip()
+            raise RuntimeError(failure or err[:200] or f"claude salió con código {proc.returncode}")
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+        shutil.rmtree(work, ignore_errors=True)
+
+
 # ---- choosing ----
 
 async def options() -> dict[str, list[str]]:
     """The models each provider offers: installed local ones, and the cloud ones the key can use."""
-    out: dict[str, list[str]] = {"ollama": [], "anthropic": list(CLAUDE_MODELS), "openai": []}
+    out: dict[str, list[str]] = {"ollama": [], "claude_code": list(PLAN_MODELS) if shutil.which("claude") else [],
+                                 "anthropic": list(CLAUDE_MODELS), "openai": []}
     try:
         out["ollama"] = sorted(m.model for m in (await ollama.list()).models)
     except Exception as e:  # Ollama not running

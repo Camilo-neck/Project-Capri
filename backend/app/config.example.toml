@@ -47,7 +47,7 @@ silencio = "23:00-08:00"  # horas en las que no habla por iniciativa propia ("" 
 # con tu clave (se guarda en el Administrador de credenciales de Windows, o ANTHROPIC_API_KEY / OPENAI_API_KEY);
 # entonces tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ese servicio.
 [modelo]
-proveedor = "ollama"
+proveedor = "ollama"       # "ollama", "claude_code" (tu plan de Claude, sin clave), "anthropic" o "openai"
 nombre = "qwen3-vl:8b-instruct"
 esfuerzo = "low"          # solo Claude: low | medium | high (más piensa, más tarda)
 

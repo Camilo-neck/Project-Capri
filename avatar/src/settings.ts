@@ -56,7 +56,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const prov = $("prov"), model = $<HTMLSelectElement>("model"), note = $("brain-note");
 const keyRow = $("key-row"), key = $<HTMLInputElement>("key"), pull = $<HTMLInputElement>("pull");
 const pullRow = $("pull-row"), bar = $("pull-bar");
-const NAMES: Record<string, string> = { ollama: "Local", anthropic: "Claude", openai: "GPT" };
+const KEYED = ["anthropic", "openai"];
 const KEY_HINT: Record<string, string> = { anthropic: "Clave de API de Anthropic (sk-ant-…)", openai: "Clave de API de OpenAI (sk-…)" };
 const SUGGESTED = ["gemma3:12b", "qwen3-vl:8b-instruct", "gemma3:4b"];
 $("suggest").innerHTML = SUGGESTED.map((m) => `<option value="${m}">`).join("");
@@ -68,7 +68,8 @@ function render(error = info?.error ?? ""): void {
   if (!info) return;
   prov.querySelectorAll<HTMLElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.prov === shown));
   const cloud = shown !== "ollama";
-  const hasKey = !cloud || info.claves[shown];
+  const keyed = KEYED.includes(shown);
+  const hasKey = !keyed || info.claves[shown];
   const list = info.opciones[shown] ?? [];
   const current = info.proveedor === shown ? info.nombre : "";
   const pick = new Option("Elige un modelo…", "", true, true);
@@ -76,14 +77,19 @@ function render(error = info?.error ?? ""): void {
   const names = [...new Set([current, ...list].filter(Boolean))];
   model.replaceChildren(...(current ? [] : [pick]), ...names.map((m) => new Option(m, m, false, m === current)));
   model.disabled = !hasKey || !list.length;
-  keyRow.hidden = !cloud;
+  keyRow.hidden = !keyed;
   key.placeholder = info.claves[shown] ? "Clave guardada · pega otra para cambiarla" : KEY_HINT[shown] ?? "";
   pullRow.hidden = cloud;
+  const away = `Tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ${shown === "openai" ? "OpenAI" : "Anthropic"}.`;
   note.className = "note" + (error ? " err" : cloud ? " warn" : "");
-  note.textContent = error ||
-    (cloud
-      ? `Con ${NAMES[shown]} tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ${shown === "anthropic" ? "Anthropic" : "OpenAI"}. ${hasKey ? "" : "Pega tu clave para elegir modelo."}`
-      : list.length ? "Todo en tu PC. Los modelos locales gastan GPU: uno a la vez." : "Ollama no responde o no tiene modelos.");
+  note.textContent = error || {
+    ollama: list.length ? "Todo en tu PC. Los modelos locales gastan GPU: uno a la vez." : "Ollama no responde o no tiene modelos.",
+    claude_code: list.length
+      ? `Usa tu plan de Claude a través de Claude Code, sin clave: gasta de tu cupo y tarda unos segundos más en empezar a hablar. ${away}`
+      : "No encuentro Claude Code (el comando `claude`) en este PC.",
+    anthropic: `API de Anthropic, pago por uso aparte de tu plan. ${away} ${hasKey ? "" : "Pega tu clave para elegir modelo."}`,
+    openai: `${away} ${hasKey ? "" : "Pega tu clave para elegir modelo."}`,
+  }[shown] || "";
 }
 
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {

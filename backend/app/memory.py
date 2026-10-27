@@ -40,6 +40,8 @@ create table if not exists mensajes (
 
 BUDGET = 1200  # chars of memory injected per turn (~300 tokens)
 MAX_FACTS = 5
+# a fact about "today" stops being true tomorrow
+RELATIVE = re.compile(r"\b(hoy|mañana|ahorita|esta (noche|tarde|mañana|semana)|today|tomorrow|tonight|this (morning|afternoon|evening|week))\b", re.IGNORECASE)
 
 
 def words(text: str) -> list[str]:
@@ -153,13 +155,21 @@ class Memory:
 
     def context(self, query: str, session: int, running: str = "") -> str:
         """The memory block for this turn: preferences, related facts and summaries, within BUDGET."""
-        lines = [f"- {p}" for p in self.preferences()]
-        lines += [f"- {t}" for _, t, tipo in self.search(query) if tipo == "hecho"]
+        today = datetime.now().date().isoformat()
+
+        def dated(ids: list[int]) -> list[str]:
+            """Dated, and a "hoy" or "mañana" noted another day is left out: it already passed."""
+            rows = self.db.execute(f"select texto, creado from recuerdos where id in ({','.join('?' * len(ids))}) order by id", ids)
+            return [f"- {t} (anotado el {c[8:10]}/{c[5:7]})" for t, c in rows if c[:10] == today or not RELATIVE.search(t)]
+
+        prefs = [i for (i,) in self.db.execute("select id from recuerdos where tipo = 'preferencia'")]
+        lines = dated(prefs + [i for i, _, tipo in self.search(query) if tipo == "hecho"])
         parts = []
         if lines:
             parts.append("Lo que recuerdas del usuario:\n" + "\n".join(lines))
         if previous := self.last_summary(session):
-            parts.append(f"La última vez hablasteis de: {previous}")
+            when = self.db.execute("select inicio from sesiones where resumen = ? order by id desc", (previous,)).fetchone()[0]
+            parts.append(f"Vuestra última conversación, el {when[8:10]}/{when[5:7]} (ya pasó: no la retomes si él no la saca): {previous}")
         if running:
             parts.append(f"Antes en esta conversación: {running}")
         block = "\n".join(parts)

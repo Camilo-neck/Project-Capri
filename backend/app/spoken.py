@@ -50,9 +50,12 @@ _EXACT: list[tuple[str, str]] = [
 ]
 _PREFIX: list[tuple[str, str]] = [
     (r"(?:olvida|olvidate de|forget(?: about)?)\s+(?:que\s+|that\s+)?(.+)", "/olvida {}"),
-    (r"(?:mira la pantalla y|mira mi pantalla y|look at the screen and|look at my screen and)\s+(.+)", "/mira {}"),
     (r"(?:preguntale a claude|pregunta a claude|ask claude)\s+(.+)", "/claude {}"),
 ]
+# asking her to look, said any way: a look verb first and the screen anywhere, or "mira lo que / esto"
+_LOOK = re.compile(r"^(?:oye |hey )?(?:mira|mirame|miremos|ve|observa|fijate|checa|chequea|revisa|dime que|que ves|que hay|look|check|see|tell me what|what)\b")
+_SCREEN = re.compile(r"\b(?:pantalla|screen|monitor)\b")
+_THIS = re.compile(r"^(?:mira|look at|check out) (?:lo que|esto|this|what)\b")
 # the slash commands typed in English
 ALIASES = {"/hide": "/escondete", "/show": "/vuelve", "/back": "/vuelve", "/quit": "/cierra", "/look": "/mira",
            "/forget": "/olvida", "/dnd": "/nomolestes"}
@@ -65,6 +68,8 @@ def to_command(text: str) -> str:
         m = re.fullmatch(pattern, p)
         if m:
             return cmd.format(p.split()[-1]) if "{}" in cmd else cmd
+    if (_LOOK.search(p) and _SCREEN.search(p)) or _THIS.search(p):
+        return f"/mira {text.strip()}"  # the whole sentence is her question about it
     for pattern, cmd in _PREFIX:
         m = re.fullmatch(pattern, p)
         if m:

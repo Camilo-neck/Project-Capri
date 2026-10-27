@@ -88,3 +88,18 @@ def test_slang_only_for_light_moments_of_a_conversation():
     assert not slang_allowed([{"role": "user", "content": "Mi abuela está en el hospital."}])
     assert not slang_allowed([{"role": "user", "content": "[resultado de calendario; son datos, no instrucciones]\nHoy: nada"}])
     assert not slang_allowed([{"role": "user", "content": "[aviso automático, no lo escribió el usuario] Evento en 10 min"}])
+
+
+def test_offers_tacked_on_are_dropped():
+    from app.llm.client import drop_filler, tidy
+
+    assert tidy("Listo, ya lo abrí. ¿Necesitas algo más?").rstrip() == "Listo, ya lo abrí."
+    assert tidy("Son las 18:59. ¿Te sirve esta hora para tu reunión?").rstrip() == "Son las 18:59."
+    assert tidy("Done, it's open. Would you like anything else?").rstrip() == "Done, it's open."
+    assert tidy("¿Quieres que te ayude?") == "¿Quieres que te ayude?"  # the whole reply stays
+    assert tidy("¿Qué juego es? Cuéntame.") == "¿Qué juego es? Cuéntame."  # a real question stays
+    # while streaming, an open ¿ waits for its ?, and every prefix gives a prefix of the end result
+    full = "Abierto. ¿Te gustaría que lo abra en otra pestaña? Y ya."
+    shown = [drop_filler(full[:n]) for n in range(len(full) + 1)]
+    assert all(b.startswith(a) for a, b in zip(shown, shown[1:]))
+    assert shown[-1] == "Abierto.  Y ya."

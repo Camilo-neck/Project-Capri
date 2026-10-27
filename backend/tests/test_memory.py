@@ -213,7 +213,7 @@ def test_a_session_closed_without_summary_is_summarized_next_time(tmp_path):
         ws.send_json({"type": "text_input", "text": "hola"})
         until_idle(ws)
     assert "Usuario: mañana tengo una entrevista" in got[0]
-    assert "La última vez hablasteis de: Tenía una entrevista" in memory_block(calls[0])
+    assert "no la saca): Tenía una entrevista" in memory_block(calls[0])
 
 
 def test_no_memory_tools_on_screen_turns(tmp_path):
@@ -222,3 +222,14 @@ def test_no_memory_tools_on_screen_turns(tmp_path):
     orch = Orchestrator(generate, capture=lambda rect: b"jpg", memory=memory)
     asyncio.run(orch.look("", (0, 0, 10, 10), lambda m: asyncio.sleep(0)))
     assert memory.search("contraseña") == []
+
+
+def test_a_today_noted_yesterday_is_left_out(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    m.remember("Prefiere que lo llamen C", "preferencia")
+    m.remember("Debe recordar 10 minutos antes de su reunión de hoy", "preferencia")
+    m.db.execute("update recuerdos set creado = '2020-01-01T09:00:00'")
+    m.remember("Tiene reunión hoy a las 3", "preferencia")  # noted today: still true
+    ctx = m.context("", m.new_session())
+    assert "llamen C (anotado el 01/01)" in ctx
+    assert "10 minutos" not in ctx and "reunión hoy a las 3" in ctx

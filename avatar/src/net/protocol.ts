@@ -56,6 +56,24 @@ export interface Heard {
   idioma: string;
 }
 
+/** Her brain, for the tray's settings panel. */
+export interface ModelInfo {
+  type: "model_info";
+  proveedor: string;
+  nombre: string;
+  opciones: Record<string, string[]>;
+  claves: Record<string, boolean>;
+  error: string;
+}
+
+export interface ModelProgress {
+  type: "model_progress";
+  nombre: string;
+  estado: string;
+  completado: number;
+  total: number;
+}
+
 export interface ConfirmRequest {
   type: "confirm_request";
   id: string;
@@ -116,5 +134,25 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard;
-export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
+// the tray's settings panel: her brain
+export interface ModelGet {
+  type: "model_get";
+}
+export interface ModelSet {
+  type: "model_set";
+  proveedor: string;
+  nombre: string;
+}
+/** An API key for Claude or GPT ("" removes it); the backend keeps it in Windows' Credential Manager. */
+export interface ModelKey {
+  type: "model_key";
+  proveedor: string;
+  clave: string;
+}
+export interface ModelPull {
+  type: "model_pull";
+  nombre: string;
+}
+
+export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull;

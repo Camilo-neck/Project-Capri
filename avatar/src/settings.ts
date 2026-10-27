@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import face from "../assets/faces/grin.png";
+import type { ModelInfo, ServerMessage } from "./net/protocol.ts";
+import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
 
@@ -47,3 +49,77 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+
+// ---- her brain: its own socket to the backend (as the panel, so it gets no turns) ----
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const prov = $("prov"), model = $<HTMLSelectElement>("model"), note = $("brain-note");
+const keyRow = $("key-row"), key = $<HTMLInputElement>("key"), pull = $<HTMLInputElement>("pull");
+const pullRow = $("pull-row"), bar = $("pull-bar");
+const NAMES: Record<string, string> = { ollama: "Local", anthropic: "Claude", openai: "GPT" };
+const KEY_HINT: Record<string, string> = { anthropic: "Clave de API de Anthropic (sk-ant-…)", openai: "Clave de API de OpenAI (sk-…)" };
+const SUGGESTED = ["gemma3:12b", "qwen3-vl:8b-instruct", "gemma3:4b"];
+$("suggest").innerHTML = SUGGESTED.map((m) => `<option value="${m}">`).join("");
+
+let info: ModelInfo | null = null;
+let shown = "ollama"; // the provider whose models are listed (picking one saves it)
+
+function render(error = info?.error ?? ""): void {
+  if (!info) return;
+  prov.querySelectorAll<HTMLElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.prov === shown));
+  const cloud = shown !== "ollama";
+  const hasKey = !cloud || info.claves[shown];
+  const list = info.opciones[shown] ?? [];
+  const current = info.proveedor === shown ? info.nombre : "";
+  const pick = new Option("Elige un modelo…", "", true, true);
+  pick.disabled = true;
+  const names = [...new Set([current, ...list].filter(Boolean))];
+  model.replaceChildren(...(current ? [] : [pick]), ...names.map((m) => new Option(m, m, false, m === current)));
+  model.disabled = !hasKey || !list.length;
+  keyRow.hidden = !cloud;
+  key.placeholder = info.claves[shown] ? "Clave guardada · pega otra para cambiarla" : KEY_HINT[shown] ?? "";
+  pullRow.hidden = cloud;
+  note.className = "note" + (error ? " err" : cloud ? " warn" : "");
+  note.textContent = error ||
+    (cloud
+      ? `Con ${NAMES[shown]} tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ${shown === "anthropic" ? "Anthropic" : "OpenAI"}. ${hasKey ? "" : "Pega tu clave para elegir modelo."}`
+      : list.length ? "Todo en tu PC. Los modelos locales gastan GPU: uno a la vez." : "Ollama no responde o no tiene modelos.");
+}
+
+const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
+  if (m.type === "model_info") {
+    const first = !info;
+    info = m;
+    if (first) shown = m.proveedor;
+    bar.hidden = true;
+    render();
+  } else if (m.type === "model_progress") {
+    bar.hidden = false;
+    (bar.firstElementChild as HTMLElement).style.width = m.total ? `${(100 * m.completado) / m.total}%` : "0";
+    note.className = "note";
+    note.textContent = `${m.nombre}: ${m.estado}${m.total ? ` · ${(m.completado / 1e9).toFixed(1)} / ${(m.total / 1e9).toFixed(1)} GB` : ""}`;
+  }
+}, (up) => up && link.send({ type: "model_get" }));
+void getCurrentWindow().onFocusChanged(({ payload }) => payload && link.send({ type: "model_get" }));
+
+prov.addEventListener("click", (e) => {
+  const p = (e.target as HTMLElement).closest<HTMLElement>("button")?.dataset.prov;
+  if (p) {
+    shown = p;
+    render("");
+  }
+});
+model.addEventListener("change", () => model.value && link.send({ type: "model_set", proveedor: shown, nombre: model.value }));
+$("key-save").addEventListener("click", () => {
+  if (!key.value.trim()) return;
+  link.send({ type: "model_key", proveedor: shown, clave: key.value.trim() });
+  key.value = "";
+});
+$("pull-go").addEventListener("click", () => {
+  const name = pull.value.trim();
+  if (name && link.send({ type: "model_pull", nombre: name })) {
+    pull.value = "";
+    bar.hidden = false;
+    note.textContent = `Descargando ${name}…`;
+  }
+});

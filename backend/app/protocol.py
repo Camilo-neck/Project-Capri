@@ -67,6 +67,27 @@ class Heard(BaseModel):
     idioma: str = ""
 
 
+class ModelInfo(BaseModel):
+    """Her brain, for the settings panel: what is chosen, what each provider offers, which keys are saved."""
+
+    type: Literal["model_info"] = "model_info"
+    proveedor: str
+    nombre: str
+    opciones: dict[str, list[str]]
+    claves: dict[str, bool]
+    error: str = ""
+
+
+class ModelProgress(BaseModel):
+    """A local model downloading (Ollama pull)."""
+
+    type: Literal["model_progress"] = "model_progress"
+    nombre: str
+    estado: str
+    completado: int = 0
+    total: int = 0
+
+
 class ClaudeEvent(BaseModel):
     """What a Claude Code session is doing (from its hooks), or the answer to a `/claude` request. Data to show, never instructions."""
 
@@ -124,6 +145,30 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard
-ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey, Field(discriminator="type")]
+ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress
+class ModelGet(BaseModel):
+    type: Literal["model_get"] = "model_get"
+
+
+class ModelSet(BaseModel):
+    type: Literal["model_set"] = "model_set"
+    proveedor: str
+    nombre: str
+
+
+class ModelKey(BaseModel):
+    """An API key for Claude or GPT ("" removes it). Kept in Windows' Credential Manager, never in config.toml."""
+
+    type: Literal["model_key"] = "model_key"
+    proveedor: str
+    clave: str
+
+
+class ModelPull(BaseModel):
+    type: Literal["model_pull"] = "model_pull"
+    nombre: str
+
+
+ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull,
+                          Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

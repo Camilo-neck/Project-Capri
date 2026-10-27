@@ -3,14 +3,17 @@ name = "capri-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.3.0",
     "fastapi>=0.162.0",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "icalendar>=7.3.0",
+    "keyring>=25.7.0",
     "mss>=10.2.0",
     "nvidia-cublas-cu12>=12.9.2.10",
     "nvidia-cudnn-cu12>=9.27.0.42",
     "ollama>=0.6.3",
+    "openai>=3.39.0",
     "pillow>=13.0.0",
     "pydantic>=2.14.1",
     "pyperclip>=1.11.0",

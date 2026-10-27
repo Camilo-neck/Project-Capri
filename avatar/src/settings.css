@@ -55,3 +55,25 @@ footer { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
 .danger:hover { background: rgb(255 77 109 / 0.25); }
 .danger.ghost { background: transparent; border-color: transparent; color: var(--dim); font-size: 11px; padding: 6px; }
 .danger.ghost:hover { color: #ff9db0; }
+
+/* Her brain: provider, model, key, download */
+.panel { overflow-y: auto; scrollbar-width: thin; }
+.seg3 { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; gap: 6px; }
+.field-input {
+  flex: 1; min-width: 0; box-sizing: border-box; padding: 7px 9px; border: 1px solid rgb(255 255 255 / 0.1); border-radius: 9px;
+  background: rgb(0 0 0 / 0.3); color: var(--fg); font: inherit; outline: none;
+}
+.field-input:focus { border-color: var(--accent); }
+.field-input:disabled { opacity: 0.45; }
+select.field-input { width: 100%; }
+select.field-input option { background: #17132a; }
+.mini { padding: 0 11px; border: 0; border-radius: 9px; background: var(--card-hi); }
+.mini:hover { background: var(--accent); color: #fff; }
+.bar { height: 4px; border-radius: 2px; background: var(--card); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent-2); transition: width 200ms; }
+.note { color: var(--dim); font-size: 10.5px; line-height: 1.35; }
+.note.warn { color: #ffb020; }
+.note.err { color: #ff9db0; }
+
+[hidden] { display: none !important; }

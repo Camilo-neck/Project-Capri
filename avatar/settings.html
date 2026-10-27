@@ -46,6 +46,27 @@
         </label>
       </section>
 
+      <section id="brain">
+        <h2>Cerebro</h2>
+        <div class="seg seg3" id="prov">
+          <button data-prov="ollama">Local</button>
+          <button data-prov="anthropic">Claude</button>
+          <button data-prov="openai">GPT</button>
+        </div>
+        <select id="model" class="field-input"></select>
+        <div id="key-row" class="field" hidden>
+          <input id="key" class="field-input" type="password" autocomplete="off" spellcheck="false" />
+          <button id="key-save" class="mini">Guardar</button>
+        </div>
+        <div id="pull-row" class="field">
+          <input id="pull" class="field-input" list="suggest" spellcheck="false" placeholder="otro modelo: gemma3:12b" />
+          <button id="pull-go" class="mini">Descargar</button>
+          <datalist id="suggest"></datalist>
+        </div>
+        <div id="pull-bar" class="bar" hidden><i></i></div>
+        <small id="brain-note" class="note"></small>
+      </section>
+
       <section>
         <h2>Apariencia</h2>
         <div class="seg" id="style">

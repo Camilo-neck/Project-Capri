@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 
 use crate::{ollama, user_config};
 
-const PANEL: (f64, f64) = (340.0, 650.0);
+const PANEL: (f64, f64) = (340.0, 720.0);
 
 /// The toggles by id, so the panel shows the real state when it opens and when a mode changes by other means.
 pub struct States(Mutex<HashMap<&'static str, bool>>);

@@ -115,3 +115,29 @@ def test_ts_protocol_matches_pydantic():
         fields = interfaces[model.__name__]
         assert set(fields) == set(model.model_fields), model.__name__
         assert fields["type"] == json.dumps(model.model_fields["type"].default)
+
+
+def test_settings_panel_picks_her_brain(client, monkeypatch, tmp_path):
+    from app.llm import providers
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    unloaded = []
+
+    async def options():
+        return {"ollama": ["gemma3:12b", "qwen3-vl:8b-instruct"], "anthropic": ["claude-opus-5-5"], "openai": []}
+
+    async def unload(**kw):
+        unloaded.append(kw["model"])
+
+    monkeypatch.setattr(providers, "options", options)
+    monkeypatch.setattr(providers.ollama, "generate", unload)
+    monkeypatch.setattr(providers, "key", lambda p: "")
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "model_get"})
+        info = ws.receive_json()
+        assert info["type"] == "model_info" and info["proveedor"] == "ollama" and info["claves"] == {"anthropic": False, "openai": False}
+        ws.send_json({"type": "model_set", "proveedor": "ollama", "nombre": "gemma3:12b"})
+        info = ws.receive_json()
+        assert info["nombre"] == "gemma3:12b" and unloaded == ["qwen3-vl:8b-instruct"]  # the old one leaves the GPU
+        ws.send_json({"type": "model_set", "proveedor": "nube", "nombre": "x"})
+        assert ws.receive_json()["error"]

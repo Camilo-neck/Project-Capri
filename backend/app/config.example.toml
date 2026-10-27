@@ -42,6 +42,15 @@ max_por_hora = 2
 inactividad_horas = 2
 silencio = "23:00-08:00"  # horas en las que no habla por iniciativa propia ("" = nunca)
 
+# Su cerebro. Se cambia desde el panel de la bandeja (clic derecho en su icono › Cerebro) o aquí.
+# "ollama": un modelo local (gratis, nada sale del PC). "anthropic" (Claude) u "openai" (GPT): en la nube,
+# con tu clave (se guarda en el Administrador de credenciales de Windows, o ANTHROPIC_API_KEY / OPENAI_API_KEY);
+# entonces tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ese servicio.
+[modelo]
+proveedor = "ollama"
+nombre = "qwen3-vl:8b-instruct"
+esfuerzo = "low"          # solo Claude: low | medium | high (más piensa, más tarda)
+
 # Voz: le hablas y ella contesta con texto, en español o inglés. El micrófono solo se abre cuando la voz está
 # activa (interruptor "Voz" del panel de la bandeja) y el audio no sale de este PC ni se guarda.
 [voz]

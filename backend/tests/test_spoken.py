@@ -26,7 +26,7 @@ def test_no_wake(said):
     ("Olvida todo", "/olvida todo"), ("forget everything", "/olvida todo"),
     ("olvida que me gusta el café", "/olvida me gusta el café"),
     ("Mira la pantalla", "/mira"), ("what do you see", "/mira"),
-    ("look at my screen and tell me the error", "/mira tell me the error"),
+    ("look at my screen and tell me the error", "/mira look at my screen and tell me the error"),
     ("Ciérrate", "/cierra"), ("close Capri", "/cierra"),
     ("modo claude off", "/claude off"), ("ask Claude what it is doing", "/claude what it is doing"),
 ])
@@ -44,3 +44,15 @@ def test_english_slash_aliases():
     assert alias("/dnd") == "/nomolestes"
     assert alias("/mira") == "/mira"
     assert alias("hello") == "hello"
+
+
+@pytest.mark.parametrize("said", [
+    "Mira lo que tengo en la pantalla", "mira lo que estoy jugando", "¿Qué ves en mi pantalla?",
+    "revisa mi pantalla, sale un error", "check my screen please", "look at this",
+])
+def test_looking_said_any_way(said):
+    assert to_command(said) == f"/mira {said}"
+
+
+def test_screen_without_looking_is_chat():
+    assert to_command("compré una pantalla nueva") == "compré una pantalla nueva"

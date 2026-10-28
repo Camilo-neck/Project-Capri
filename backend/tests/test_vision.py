@@ -58,8 +58,8 @@ def test_look_sends_image_once_labeled_as_data_and_keeps_only_text():
 
     assert rects == [tuple(RECT)]
     assert [m["value"] for m in look[:2]] == ["looking", "thinking"]  # indicator first
-    user = calls[0][-2]  # last message is the time context
-    assert user["images"] == [SHOT] and user["content"].startswith(SCREEN_NOTE) and "¿qué ves?" in user["content"]
+    user = calls[0][-1]  # his question last, the time context before it
+    assert user["images"] == [SHOT] and SCREEN_NOTE in user["content"] and "¿qué ves?" in user["content"]
     # next turn: the image is gone, only a mark stays in the history
     assert not any("images" in m for m in calls[1])
     assert orch.history[0] == {"role": "user", "content": "[captura de pantalla] ¿qué ves?"}
@@ -69,7 +69,7 @@ def test_look_sends_image_once_labeled_as_data_and_keeps_only_text():
 def test_look_without_question_asks_to_describe():
     generate, calls = recording(DEMO[0].model_dump_json())
     run(Orchestrator(generate, capture=lambda rect: SHOT), {"type": "look", "rect": RECT})
-    assert calls[0][-2]["content"].endswith(LOOK_DEFAULT)
+    assert calls[0][-1]["content"].endswith(LOOK_DEFAULT)
 
 
 def test_screen_text_cannot_trigger_an_action():
@@ -89,7 +89,7 @@ def test_failed_capture_still_answers_without_an_image():
     generate, calls = recording(DEMO[0].model_dump_json())
     (turn,) = run(Orchestrator(generate, capture=broken), {"type": "look", "text": "mira", "rect": RECT})
     assert turn[-1] == {"type": "state", "value": "idle"}
-    assert not any("images" in m for m in calls[0]) and "falló" in calls[0][-2]["content"]
+    assert not any("images" in m for m in calls[0]) and "falló" in calls[0][-1]["content"]
 
 
 def test_look_rejects_a_malformed_rect():

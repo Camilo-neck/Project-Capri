@@ -31,7 +31,7 @@ def scripted(*replies: str | tuple[str, int]):
 
 
 def memory_block(call: list[dict]) -> str:
-    return call[-1]["content"]  # the final system message: time, then memory
+    return call[-1]["content"]  # the last message starts with the time, then memory
 
 
 async def no_summary(text: str) -> str:
@@ -80,7 +80,7 @@ def test_context_has_preferences_related_facts_and_summaries_within_budget(tmp_p
     m.remember("Prefiere respuestas cortas", "preferencia")
     m.remember("Trabaja de diseñador")
     m.remember("Su perro se llama Toby")
-    block = m.context("¿cómo está Toby?", now, running="Pidió ayuda con un correo.")
+    block = m.context("¿cómo está Toby?", now, running="Pidió ayuda con un correo.", first=True)
     assert "Prefiere respuestas cortas" in block and "Toby" in block and "diseñador" not in block
     assert "Cartagena" in block and "correo" in block
     for i in range(80):
@@ -233,3 +233,35 @@ def test_a_today_noted_yesterday_is_left_out(tmp_path):
     ctx = m.context("", m.new_session())
     assert "llamen C (anotado el 01/01)" in ctx
     assert "10 minutos" not in ctx and "reunión hoy a las 3" in ctx
+
+
+def test_the_last_conversation_comes_up_only_on_the_first_turn_or_when_it_fits(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    old = m.new_session()
+    m.set_summary(old, "Habló de un reencuentro con Guzmán y de disfraces.")
+    now = m.new_session()
+    assert "Guzmán" in m.context("hola", now, first=True)
+    assert "Guzmán" in m.context("¿qué disfraz me pongo?", now)  # he brought it up
+    assert "Guzmán" not in m.context("pon música de Bad Bunny", now)
+    assert "Guzmán" not in m.context("de que me hablaste?", now)  # stopwords don't count as bringing it up
+    assert "Guzmán" not in m.context("[aviso automático] salúdale", now, first=True, own=True)
+
+
+def test_after_a_result_she_is_reminded_what_was_asked(tmp_path):
+    generate, calls = scripted(say("Busco.", {"nombre": "calendario", "args": {"dias": 1}}), say("Nada hoy."))
+    with connect(Orchestrator(generate, memory=Memory(tmp_path / "m.db"))) as ws:
+        ws.send_json({"type": "text_input", "text": "¿qué tengo hoy?"})
+        until_idle(ws)
+    result = [m for m in calls[-1] if m["role"] == "user" and "[resultado de" in m["content"]][0]["content"]
+    assert "[resultado de calendario para «¿qué tengo hoy?»" in result
+
+
+def test_the_previous_summary_stays_out_of_her_later_turns(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    m.set_summary(m.new_session(), "Habló de un reencuentro con Guzmán.")
+    generate, calls = scripted(say("Hola."), say("Va."))
+    with connect(Orchestrator(generate, memory=m)) as ws:
+        for text in ["hola", "pon música"]:
+            ws.send_json({"type": "text_input", "text": text})
+            until_idle(ws)
+    assert "Guzmán" in memory_block(calls[0]) and "Guzmán" not in memory_block(calls[1])

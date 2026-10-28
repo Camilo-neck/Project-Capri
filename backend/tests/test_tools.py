@@ -59,7 +59,7 @@ def until_idle(ws) -> list[dict]:
 
 def results(calls) -> list[str]:
     """Tool results the model saw, in order."""
-    return [m["content"] for m in calls[-1] if m["content"].startswith("[resultado de")]
+    return [m["content"][m["content"].index("[resultado de"):] for m in calls[-1] if m["role"] == "user" and "[resultado de" in m["content"]]
 
 
 def test_effect_runs_only_after_a_yes_with_the_right_id(opened):

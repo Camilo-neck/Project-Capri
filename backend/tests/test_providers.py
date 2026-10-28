@@ -72,3 +72,28 @@ def test_a_brain_that_fails_says_so_instead_of_freezing(monkeypatch):
 
     r = asyncio.run(run())[-1][1]
     assert r.emocion == "triste" and "Claude de tu plan" in r.texto and "rate limit" in r.texto
+
+
+def test_the_local_model_runs_at_a_steady_temperature(monkeypatch):
+    # Gemma's own default (1.0) makes the same JSON pass that picks tools too random.
+    from app import config
+    from app.llm import providers
+
+    got = {}
+
+    async def chat(**kw):
+        got.update(kw)
+
+        async def parts():
+            return
+            yield
+
+        return parts()
+
+    monkeypatch.setattr(providers.ollama, "chat", chat)
+
+    async def run():
+        return [p async for p in providers._ollama([], "gemma3:12b", True)]
+
+    asyncio.run(run())
+    assert got["options"]["temperature"] == config.TEMPERATURE < 1

@@ -179,8 +179,6 @@ class Spotify:
         items = [i for i in r.json()[f"{t}s"]["items"] if i]
         if not items:
             raise SpotifyError(f"no encontré nada en Spotify para «{query}»")
-        # Spotify's own ranking can slip on filler words ("nalguisima de topboy" gave another song by
-        # the artist), so the item that contains the most words of the query wins; ties keep its order.
         want = words(query) - FILLER
         return max(items, key=lambda i: len(want & words(i["name"] + " " + " ".join(a["name"] for a in i.get("artists", [])))))
 

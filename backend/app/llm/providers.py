@@ -133,7 +133,7 @@ async def _ollama(messages: list[dict], model: str, json: bool) -> AsyncIterator
     from app.llm.client import SCHEMA
 
     stream = await ollama.chat(model=model, messages=messages, stream=True, format=SCHEMA if json else None, think=False,
-                               keep_alive=config.KEEP_ALIVE, options={"num_ctx": config.NUM_CTX})
+                               keep_alive=config.KEEP_ALIVE, options={"num_ctx": config.NUM_CTX, "temperature": config.TEMPERATURE})
     async for part in stream:
         yield part.message.content or ""
         if part.done:

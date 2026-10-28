@@ -102,7 +102,7 @@ class UrlArgs(BaseModel):
 
 
 class WebSearchArgs(BaseModel):
-    sitio: Literal["youtube", "google", "spotify"]
+    sitio: str = Field(min_length=1, max_length=40)  # youtube, google, spotify; any other goes through Google
     consulta: str = Field(min_length=1, max_length=200)
 
 
@@ -284,8 +284,11 @@ SEARCH_URLS = {
 
 
 def web_search(a: WebSearchArgs, s: Settings) -> str:
-    os.startfile(SEARCH_URLS[a.sitio].format(quote(a.consulta)))  # noqa: S606  (fixed sites)
-    return f"Abrí la búsqueda de «{a.consulta}» en {a.sitio}."
+    site = a.sitio.strip().lower()
+    url = SEARCH_URLS[site].format(quote(a.consulta)) if site in SEARCH_URLS else \
+        SEARCH_URLS["google"].format(quote(f"{a.consulta} {a.sitio.strip()}"))
+    os.startfile(url)  # noqa: S606  (fixed sites)
+    return f"Abrí la búsqueda de «{a.consulta}» en {a.sitio if site in SEARCH_URLS else 'Google'}."
 
 
 FIRST_VIDEO = re.compile(r'"videoRenderer":\{"videoId":"([\w-]{11})".{0,1500}?"title":\{"runs":\[\{"text":"(.*?)"\}', re.S)

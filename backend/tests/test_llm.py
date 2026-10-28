@@ -66,13 +66,20 @@ def test_reply_falls_back_to_neutral():
     assert events[-1][1].texto == FALLBACK_TEXT
 
 
-def test_variable_context_goes_last():
-    history = [{"role": "user", "content": "hola"}]
-    msgs = build_messages(history)
-    assert msgs[0]["role"] == "system" and msgs[1:-1] == history
-    assert msgs[-1]["content"].startswith("Contexto actual:")
-    assert "choom" not in msgs[0]["content"] + msgs[-1]["content"]  # the words are only in turns that may use them
+def test_the_users_words_come_last_with_the_context_before_them():
+    # Gemma renders a system message as a user turn: a context block after the user's words was read
+    # as his latest message, so she answered her memory instead of him.
+    history = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "{}"}, {"role": "user", "content": "pon música"}]
+    msgs = build_messages(history, memory="Lo que recuerdas: X")
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"] and msgs[1:3] == history[:2]
+    last = msgs[-1]["content"]
+    assert last.startswith("[Contexto") and last.endswith("\n\npon música") and "Lo que recuerdas: X" in last
+    assert "choom" not in msgs[0]["content"] + last  # the words are only in turns that may use them
     assert "choom" in build_messages(history, slang=True)[-1]["content"]
+    look = build_messages(history, image=b"jpg")[-1]
+    assert look["images"] == [b"jpg"] and look["content"].startswith("[Contexto") and look["content"].endswith("Pregunta: pon música")
+    assert history[-1] == {"role": "user", "content": "pon música"}  # the history itself is untouched
+    assert build_messages([])[-1]["content"].startswith("[Contexto")
 
 
 def test_emoji_never_reach_the_subtitle():

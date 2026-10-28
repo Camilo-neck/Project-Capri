@@ -44,9 +44,22 @@ MAX_FACTS = 5
 RELATIVE = re.compile(r"\b(hoy|mañana|ahorita|esta (noche|tarde|mañana|semana)|today|tomorrow|tonight|this (morning|afternoon|evening|week))\b", re.IGNORECASE)
 
 
+# words that say nothing about what a message is about ("que", "por", "the"...), folded
+STOPWORDS = set(
+    "que por para con los las del una uno unos unas como mas pero sus esta este esto eso esa ese hay ser fue era "
+    "muy algo todo toda todos nada cuando donde quien cual porque pues tambien solo hoy ayer manana ahora luego "
+    "tengo tiene tienes quiero puedes puedo dime hola gracias favor porfa vale bueno usuario capri "
+    "the and for you your with this that what are was have has can not but from about please".split())
+
+
 def words(text: str) -> list[str]:
     """Search terms: words of 3+ letters."""
     return [w for w in re.findall(r"\w+", text.lower()) if len(w) >= 3]
+
+
+def content_words(text: str) -> set[str]:
+    """The words that say what `text` is about: folded, 3+ letters, no stopwords."""
+    return {w for w in re.findall(r"\w+", fold(text)) if len(w) >= 3 and w not in STOPWORDS}
 
 
 def fold(text: str) -> str:
@@ -153,8 +166,10 @@ class Memory:
 
     # ---- what goes into the prompt ----
 
-    def context(self, query: str, session: int, running: str = "") -> str:
-        """The memory block for this turn: preferences, related facts and summaries, within BUDGET."""
+    def context(self, query: str, session: int, running: str = "", first: bool = False, own: bool = False) -> str:
+        """The memory block for this turn: preferences, related facts and summaries, within BUDGET.
+        The last conversation only on his `first` message of this one or when he brings it up, never on
+        her `own` turns: always there, she kept going back to it."""
         today = datetime.now().date().isoformat()
 
         def dated(ids: list[int]) -> list[str]:
@@ -167,7 +182,10 @@ class Memory:
         parts = []
         if lines:
             parts.append("Lo que recuerdas del usuario:\n" + "\n".join(lines))
-        if previous := self.last_summary(session):
+        previous = None if own else self.last_summary(session)
+        # ponytail: a 5-letter prefix as the stem ("disfraz" ~ "disfraces"); FTS over summaries if it falls short
+        stems = lambda t: {w[:5] for w in content_words(t)}  # noqa: E731
+        if previous and (first or stems(query) & stems(previous)):
             when = self.db.execute("select inicio from sesiones where resumen = ? order by id desc", (previous,)).fetchone()[0]
             parts.append(f"Vuestra última conversación, el {when[8:10]}/{when[5:7]} (ya pasó: no la retomes si él no la saca): {previous}")
         if running:

@@ -50,6 +50,12 @@ def test_searches_open_fixed_sites_without_asking(opened):
     ]
 
 
+def test_a_search_on_any_other_site_goes_through_google(opened):
+    # "busca el stream de westcol en kick" was refused: only youtube, google and spotify were allowed
+    tools.web_search(tools.WebSearchArgs(sitio="Kick", consulta="westcol"), settings.Settings())
+    assert opened == ["https://www.google.com/search?q=westcol%20Kick"]
+
+
 def test_media_keys(monkeypatch):
     pressed: list[int] = []
     monkeypatch.setattr(tools, "press_key", pressed.append)

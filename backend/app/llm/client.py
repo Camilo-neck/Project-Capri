@@ -86,19 +86,23 @@ def build_messages(
     history: list[dict], now: datetime | None = None, image: bytes | None = None, memory: str = "",
     slang: bool = False,
 ) -> list[dict]:
-    # Stable prefix first so Ollama reuses the KV cache; variable context (time, memory) goes last.
+    # Stable prefix first so Ollama reuses the KV cache. The variable context (time, memory) rides at the
+    # start of the last message, so his words (or the result she asked for) are the last thing she reads:
+    # as a message of its own after them, Gemma took it for his latest message and answered her memory.
     now = now or datetime.now()
-    context = f"Contexto actual: {DAYS[now.weekday()]} {now:%d/%m/%Y, %H:%M}."
+    context = f"[Contexto (no lo escribió el usuario): {DAYS[now.weekday()]} {now:%d/%m/%Y, %H:%M}."
     if slang:
         context += f"\n{SLANG_ON}"
     if memory:
         context += f"\n{MEMORY_NOTE}\n{memory}"
-    turns = list(history)
+    context += "]"
+    *turns, last = history or [{"role": "user", "content": ""}]
+    last = {"role": last["role"], "content": last["content"]}
     if image is not None:
         # The image only rides on this call; the history keeps the text (see Orchestrator.turn).
-        question = turns[-1]["content"]
-        turns[-1] = {"role": "user", "content": f"{SCREEN_NOTE}\nPregunta: {question}", "images": [image]}
-    return [{"role": "system", "content": SYSTEM_PROMPT}, *turns, {"role": "system", "content": context}]
+        last = {"role": "user", "content": f"{SCREEN_NOTE}\nPregunta: {last['content']}", "images": [image]}
+    last["content"] = f"{context}\n\n{last['content']}".rstrip()
+    return [{"role": "system", "content": SYSTEM_PROMPT}, *turns, last]
 
 
 # Emoji and pictographs (the prompt forbids them, the 8B model slips now and then; the text is

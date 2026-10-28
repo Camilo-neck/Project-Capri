@@ -56,7 +56,8 @@ esfuerzo = "low"          # solo Claude: low | medium | high (más piensa, más 
 # activa (interruptor "Voz" del panel de la bandeja) y el audio no sale de este PC ni se guarda.
 [voz]
 activa = false            # abrir el micrófono al arrancar
-llamada = true            # solo hace caso a lo que empieza por "hey Capri" / "oye Capri" / "Capri, ..." (false: solo con el atajo)
+nombres = ["capri"]       # cómo la llamas: su nombre solo, al principio ("oye Capri, ...") o al final ("..., Capri")
+llamada = true            # solo hace caso a lo que la llama por su nombre (false: solo con el atajo)
 silencio_ms = 900         # silencio que da por terminada una frase
 modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" gasta menos GPU)
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = caché de Hugging Face)

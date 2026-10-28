@@ -71,8 +71,8 @@ class Gate:
     and the sentence right after it (the rest after a pause, or his answer to her); the hotkey opens the
     same window. Only her name opens it, so overheard talk can't keep it open."""
 
-    def __init__(self, wake: bool = True, window_s: float = 8):
-        self.wake, self.window = wake, window_s
+    def __init__(self, wake: bool = True, window_s: float = 8, names: Sequence[str] = (spoken.NAME,)):
+        self.wake, self.window, self.names = wake, window_s, tuple(names)
         self.until = 0.0
         self.followup = False  # the window was opened by a whole sentence to her, not a bare name or the hotkey
         self.chat = False  # what decide() let through came only from such a window: chat, never a command
@@ -84,7 +84,7 @@ class Gate:
         return now < self.until
 
     def decide(self, text: str, now: float) -> str | None:
-        called, rest = spoken.strip_wake(text)  # "hey Capri, ..." inside the window still works
+        called, rest = spoken.strip_wake(text, self.names)  # "hey Capri, ..." inside the window still works
         if self.armed(now):
             self.until = 0.0
             said = (rest if called else text).strip()
@@ -168,12 +168,12 @@ class SileroVad:
 
 class Voice:
     def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 900, wake: bool = True, autostart: bool = False,
-                 log_path: Path | None = None):
+                 log_path: Path | None = None, names: Sequence[str] = (spoken.NAME,)):
         self.autostart = autostart
-        self.names: tuple[str, ...] = (spoken.NAME,)
+        self.names = tuple(names)
         self.voice_log = VoiceLog(log_path) if log_path else None
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
-        self.gate = Gate(wake)
+        self.gate = Gate(wake, names=self.names)
         self.state = "off"  # off | loading | idle | listening | hearing | thinking
         self._whisper = None
         self._thread: threading.Thread | None = None

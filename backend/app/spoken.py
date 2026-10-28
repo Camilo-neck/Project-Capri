@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 
 NAME = "capri"
 GREETINGS = {"hey", "hei", "ey", "eh", "oye", "oiga", "ok", "okay", "okey", "oki", "hola", "hi", "hello", "yo", "buenas",
-             "bueno", "ay", "ah", "ehh", "mmm"}
+             "bueno", "ay", "ah", "ehh", "mmm", "psst", "pss"}
 _ARTICLE = re.compile(r"^(?:the|a|la|el)\s+")
 
 
@@ -21,18 +21,21 @@ def plain(text: str) -> str:
 
 def is_name(word: str, names: Sequence[str] = (NAME,)) -> bool:
     """A word (plain) that is one of her names as a speech model may write it ("Kapri", "Capry"...)."""
-    return any(SequenceMatcher(None, word, n).ratio() >= 0.74 for n in names) or (NAME in names and word in {"kapri", "capri", "cabri", "capry"})
+    return any(SequenceMatcher(None, word, n).ratio() >= 0.78 for n in names) or (NAME in names and word in {"kapri", "capri", "cabri", "capry"})
 
 
-def strip_wake(text: str) -> tuple[bool, str]:
-    """(called, what is left): "Hey Capri, abre Spotify" -> (True, "abre Spotify"). The name has to be
-    first, or after a greeting or two ("eh, hey Capri"): Capri mentioned mid-sentence doesn't wake her."""
+def strip_wake(text: str, names: Sequence[str] = (NAME,)) -> tuple[bool, str]:
+    """(called, what is left): "Hey Capri, abre Spotify" -> (True, "abre Spotify"), "abre Spotify, Capri" ->
+    (True, "abre Spotify"). The name has to be first (after a greeting or two: "eh, hey Capri") or last:
+    Capri mentioned mid-sentence is talk about her, and doesn't wake her."""
     words = text.strip().split()
     for i, head in enumerate(plain(w) for w in words[:3]):
-        if is_name(head):
+        if is_name(head, names):
             return True, " ".join(words[i + 1:]).lstrip(" ,.;:!?¡¿-")
         if head and head not in GREETINGS:
             break
+    if words and is_name(plain(words[-1]), names):
+        return True, " ".join(words[:-1]).rstrip(" ,.;:!?¡¿-")
     return False, text
 
 

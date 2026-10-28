@@ -82,3 +82,27 @@ def test_talk_about_screens_is_not_a_look(said):
 def test_this_on_its_own_is_still_a_look():
     assert to_command("mira esto") == "/mira"
     assert to_command("mira esto en mi pantalla") == "/mira mira esto en mi pantalla"
+
+
+@pytest.mark.parametrize("said, left", [
+    ("Capri", ""),
+    ("Capri.", ""),
+    ("psst Capri, ven", "ven"),
+    ("abre Spotify, Capri", "abre Spotify"),
+    ("te quiero mucho Capri", "te quiero mucho"),
+    ("abre spotify kapri", "abre spotify"),
+    ("What time is it, Capri?", "What time is it"),
+])
+def test_her_name_alone_first_or_last(said, left):
+    assert strip_wake(said) == (True, left)
+
+
+@pytest.mark.parametrize("said", ["la chica de capri baila sola", "le hablé a Capri ayer de ti"])
+def test_her_name_mid_sentence_is_talk_about_her(said):
+    assert strip_wake(said)[0] is False
+
+
+def test_other_names_she_answers_to():
+    assert strip_wake("oye cap, pon música", names=("capri", "cap")) == (True, "pon música")
+    assert strip_wake("pon música, nova", names=("capri", "nova")) == (True, "pon música")
+    assert strip_wake("oye cap, pon música")[0] is False  # only when it's in [voz] nombres

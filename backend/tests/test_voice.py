@@ -145,3 +145,9 @@ def test_the_voice_log_keeps_the_last_lines(tmp_path):
     for i in range(5):
         log.write(f"line {i}")
     assert (tmp_path / "voz.log").read_text(encoding="utf-8").splitlines() == ["line 2", "line 3", "line 4"]
+
+
+def test_the_gate_answers_to_her_other_names():
+    g = Gate(names=("capri", "nova"))
+    assert g.decide("nova", 0) is None
+    assert g.armed(1)

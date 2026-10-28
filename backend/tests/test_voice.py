@@ -47,3 +47,59 @@ def test_junk_filter():
     assert junk("Subtítulos por la comunidad de Amara.org", -0.2, 0.1)
     assert junk("ok", -2.0, 0.1)
     assert not junk("abre spotify", -0.3, 0.05)
+
+
+def test_after_her_name_a_follow_up_needs_no_name():
+    # "Hey Capri, pon" [a pause] "algo de Bad Bunny": the second half, or his answer to her question, is hers too
+    g = Gate(wake=True, window_s=8)
+    assert g.decide("Hey Capri, pon algo", 0) == "pon algo"
+    assert g.decide("de Bad Bunny", 2) == "de Bad Bunny"
+    assert g.decide("y luego otra cosa", 3) is None  # a follow-up doesn't keep the window open
+
+
+def test_a_sentence_ends_after_most_of_a_second_of_silence():
+    from app import settings
+
+    assert Segmenter().silence == int(900 / (CHUNK * 1000 / 16_000)) and settings.Settings().voice_silence_ms == 900
+
+
+def test_what_is_said_while_she_transcribes_is_not_thrown_away(monkeypatch):
+    import sys
+    import types
+
+    from app import voice
+    from app.protocol import Heard
+
+    speech, quiet = np.ones(CHUNK, dtype="float32"), np.zeros(CHUNK, dtype="float32")
+    blocks = ([speech] * 12 + [quiet] * 30) * 2  # two sentences; the second arrives while the first is read
+
+    class Stream:
+        def __init__(self, callback, **kw):
+            self.callback = callback
+
+        def __enter__(self):
+            for b in blocks:
+                self.callback(b[:, None], len(b), None, None)
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    monkeypatch.setitem(sys.modules, "sounddevice", types.SimpleNamespace(InputStream=Stream))
+    monkeypatch.setattr(voice, "SileroVad", lambda: lambda chunk: float(chunk[0]))
+    v = voice.Voice()
+    said = iter(["Hey Capri, uno", "Hey Capri, dos"])
+
+    def transcribe(audio):
+        text = next(said, None)
+        return (text, "es") if text else None
+
+    sent = []
+    monkeypatch.setattr(v, "_load", lambda: None)
+    monkeypatch.setattr(v, "transcribe", transcribe)
+    monkeypatch.setattr(v, "_emit", sent.append)
+    import threading
+
+    threading.Timer(1, v.stop).start()  # the loop ends once the queue has been idle a moment
+    v._run()
+    assert [m.texto for m in sent if isinstance(m, Heard)] == ["uno", "dos"]

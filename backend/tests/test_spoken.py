@@ -10,6 +10,9 @@ from app.spoken import alias, strip_wake, to_command
     ("Hey Kapri, what time is it?", "what time is it?"),
     ("Capri, look at my screen", "look at my screen"),
     ("ok capri", ""),
+    ("Eh, hey Capri, abre Spotify", "abre Spotify"),
+    ("Okey Capri, qué hora es", "qué hora es"),
+    ("Bueno Capri pon música", "pon música"),
 ])
 def test_wake_phrase(said, left):
     assert strip_wake(said) == (True, left)
@@ -56,3 +59,26 @@ def test_looking_said_any_way(said):
 
 def test_screen_without_looking_is_chat():
     assert to_command("compré una pantalla nueva") == "compré una pantalla nueva"
+
+
+@pytest.mark.parametrize("said, cmd", [
+    ("Escóndete por favor.", "/escondete"), ("Escóndete un rato", "/escondete"), ("please hide", "/escondete"),
+    ("No molestes, por favor", "/nomolestes"), ("olvida todo por favor.", "/olvida todo"),
+    ("Capri, escóndete", "/escondete"),
+])
+def test_commands_said_politely(said, cmd):
+    assert to_command(said) == cmd
+
+
+@pytest.mark.parametrize("said", [
+    "check out this song by Drake", "what's the best screen size for gaming", "revisa el monitor de recursos",
+    "ve a la pantalla de inicio", "mira esto que me pasó hoy en el trabajo",
+])
+def test_talk_about_screens_is_not_a_look(said):
+    # each of these took a screenshot (and with a cloud brain, sent it out)
+    assert to_command(said) == said
+
+
+def test_this_on_its_own_is_still_a_look():
+    assert to_command("mira esto") == "/mira"
+    assert to_command("mira esto en mi pantalla") == "/mira mira esto en mi pantalla"

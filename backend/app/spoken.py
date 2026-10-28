@@ -6,7 +6,8 @@ import unicodedata
 from difflib import SequenceMatcher
 
 NAME = "capri"
-GREETINGS = {"hey", "hei", "ey", "eh", "oye", "oiga", "ok", "okay", "hola", "hi", "hello", "yo", "buenas"}
+GREETINGS = {"hey", "hei", "ey", "eh", "oye", "oiga", "ok", "okay", "okey", "oki", "hola", "hi", "hello", "yo", "buenas",
+             "bueno", "ay", "ah", "ehh", "mmm"}
 _ARTICLE = re.compile(r"^(?:the|a|la|el)\s+")
 
 
@@ -23,18 +24,13 @@ def _is_name(word: str) -> bool:
 
 def strip_wake(text: str) -> tuple[bool, str]:
     """(called, what is left): "Hey Capri, abre Spotify" -> (True, "abre Spotify"). The name has to be
-    first, or right after a greeting: Capri mentioned mid-sentence doesn't wake her."""
+    first, or after a greeting or two ("eh, hey Capri"): Capri mentioned mid-sentence doesn't wake her."""
     words = text.strip().split()
-    for take in (1, 2):  # "capri ..." or "hey capri ..."
-        if len(words) < take:
-            continue
-        head = [plain(w) for w in words[:take]]
-        if "".join(head) == "":
-            continue
-        if take == 1 and _is_name(head[0]):
-            return True, " ".join(words[1:]).lstrip(" ,.;:!?¡¿-")
-        if take == 2 and head[0] in GREETINGS and _is_name(head[1]):
-            return True, " ".join(words[2:]).lstrip(" ,.;:!?¡¿-")
+    for i, head in enumerate(plain(w) for w in words[:3]):
+        if _is_name(head):
+            return True, " ".join(words[i + 1:]).lstrip(" ,.;:!?¡¿-")
+        if head and head not in GREETINGS:
+            break
     return False, text
 
 
@@ -52,10 +48,13 @@ _PREFIX: list[tuple[str, str]] = [
     (r"(?:olvida|olvidate de|forget(?: about)?)\s+(?:que\s+|that\s+)?(.+)", "/olvida {}"),
     (r"(?:preguntale a claude|pregunta a claude|ask claude)\s+(.+)", "/claude {}"),
 ]
-# asking her to look, said any way: a look verb first and the screen anywhere, or "mira lo que / esto"
-_LOOK = re.compile(r"^(?:oye |hey )?(?:mira|mirame|miremos|ve|observa|fijate|checa|chequea|revisa|dime que|que ves|que hay|look|check|see|tell me what|what)\b")
-_SCREEN = re.compile(r"\b(?:pantalla|screen|monitor)\b")
-_THIS = re.compile(r"^(?:mira|look at|check out) (?:lo que|esto|this|what)\b")
+# asking her to look, said any way: a look verb first and the screen anywhere, or "mira lo que", or "mira
+# esto" alone. Looser ones ("ve a la pantalla de inicio", "check out this song") took screenshots.
+_LOOK = re.compile(r"^(?:oye |hey )?(?:mira|mirame|miremos|observa|fijate|checa|chequea|revisa|dime que|que ves|que hay|look|check|tell me what)\b")
+_SCREEN = re.compile(r"\b(?:pantalla|screen)\b")
+_THIS = re.compile(r"^(?:mira|look at|check out) (?:lo que\b|what\b|(?:esto|this)$)")
+# what doesn't change the command: "escóndete por favor", "please hide", "Capri, escóndete"
+_POLITE = re.compile(r"\b(?:por favor|porfa(?:vor)?|please|pls|ya|un rato|un momento|ahora|ahorita|capri)\b")
 # the slash commands typed in English
 ALIASES = {"/hide": "/escondete", "/show": "/vuelve", "/back": "/vuelve", "/quit": "/cierra", "/look": "/mira",
            "/forget": "/olvida", "/dnd": "/nomolestes"}
@@ -64,10 +63,10 @@ ALIASES = {"/hide": "/escondete", "/show": "/vuelve", "/back": "/vuelve", "/quit
 def to_command(text: str) -> str:
     """A spoken command as its slash command; anything else comes back untouched (it's chat)."""
     p = plain(text)
+    core = " ".join(_POLITE.sub(" ", p).split())
     for pattern, cmd in _EXACT:
-        m = re.fullmatch(pattern, p)
-        if m:
-            return cmd.format(p.split()[-1]) if "{}" in cmd else cmd
+        if re.fullmatch(pattern, p) or re.fullmatch(pattern, core):  # "close capri" needs her name
+            return cmd.format(core.split()[-1]) if "{}" in cmd else cmd
     if (_LOOK.search(p) and _SCREEN.search(p)) or _THIS.search(p):
         return f"/mira {text.strip()}"  # the whole sentence is her question about it
     for pattern, cmd in _PREFIX:

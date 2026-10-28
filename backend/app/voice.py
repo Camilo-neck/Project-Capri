@@ -34,7 +34,7 @@ class Segmenter:
     """Cuts a stream of VAD probabilities into utterances. Pure: `feed` gets a chunk and its probability
     and returns the finished utterance (a float32 array) or None."""
 
-    def __init__(self, silence_ms: int = 600, min_ms: int = 250, max_s: float = 20, pre_ms: int = 300, threshold: float = 0.5):
+    def __init__(self, silence_ms: int = 900, min_ms: int = 250, max_s: float = 20, pre_ms: int = 300, threshold: float = 0.5):
         ms = CHUNK * 1000 / RATE
         self.silence, self.min, self.max = int(silence_ms / ms), int(min_ms / ms), int(max_s * 1000 / ms)
         self.pre: list[np.ndarray] = []
@@ -66,8 +66,9 @@ class Segmenter:
 
 
 class Gate:
-    """Who is she being talked to? With the wake phrase on, only what starts with "hey Capri" gets through
-    (a bare "hey Capri" opens a window for the next sentence); the hotkey opens the same window."""
+    """Who is she being talked to? With the wake phrase on, only what starts with "hey Capri" gets through,
+    and the sentence right after it (the rest after a pause, or his answer to her); the hotkey opens the
+    same window. Only her name opens it, so overheard talk can't keep it open."""
 
     def __init__(self, wake: bool = True, window_s: float = 8):
         self.wake, self.window = wake, window_s
@@ -80,19 +81,17 @@ class Gate:
         return now < self.until
 
     def decide(self, text: str, now: float) -> str | None:
+        called, rest = spoken.strip_wake(text)  # "hey Capri, ..." inside the window still works
         if self.armed(now):
             self.until = 0.0
-            called, rest = spoken.strip_wake(text)  # "hey Capri, ..." inside the window still works
-            return (rest if called else text).strip() or None
-        if not self.wake:
+            said = (rest if called else text).strip()
+        elif self.wake and called:
+            said = rest.strip()
+        else:
             return None
-        called, rest = spoken.strip_wake(text)
-        if not called:
-            return None
-        if rest.strip():
-            return rest.strip()
-        self.arm(now)  # just her name: the next sentence is for her
-        return None
+        if called:
+            self.arm(now)
+        return said or None
 
 
 def junk(text: str, avg_logprob: float, no_speech: float) -> bool:
@@ -138,7 +137,7 @@ class SileroVad:
 
 
 class Voice:
-    def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 600, wake: bool = True, autostart: bool = False):
+    def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 900, wake: bool = True, autostart: bool = False):
         self.autostart = autostart
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
         self.gate = Gate(wake)
@@ -238,9 +237,8 @@ class Voice:
                     text = heard and self.gate.decide(heard[0], time.monotonic())
                     if text:
                         self._emit(Heard(texto=spoken.to_command(text), original=text, idioma=heard[1]))
+                    # what piled up while it was reading stays queued: it's the next thing he said
                     self._set("listening" if self.gate.armed(time.monotonic()) else "idle")
-                    while not blocks.empty():  # what piled up while it was reading
-                        blocks.get_nowait()
         except Exception:
             log.exception("voice stopped")
         finally:

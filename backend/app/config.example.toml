@@ -56,7 +56,7 @@ esfuerzo = "low"          # solo Claude: low | medium | high (más piensa, más 
 [voz]
 activa = false            # abrir el micrófono al arrancar
 llamada = true            # solo hace caso a lo que empieza por "hey Capri" / "oye Capri" / "Capri, ..." (false: solo con el atajo)
-silencio_ms = 600         # silencio que da por terminada una frase
+silencio_ms = 900         # silencio que da por terminada una frase
 modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" gasta menos GPU)
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = caché de Hugging Face)
 

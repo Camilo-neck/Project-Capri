@@ -35,7 +35,7 @@ class Settings:
     voice_on: bool = False  # the microphone opens at start
     voice_model: str = "turbo"  # faster-whisper model
     voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
-    voice_silence_ms: int = 600  # silence that ends a sentence
+    voice_silence_ms: int = 900  # silence that ends a sentence (600 cut "pon... algo de Bad Bunny" in two)
     voice_wake: bool = True  # only what starts with "hey Capri" counts
 
     def quiet_now(self, now: datetime) -> bool:
@@ -82,7 +82,7 @@ def load() -> Settings:
         voice_on=bool(data.get("voz", {}).get("activa", False)),
         voice_model=data.get("voz", {}).get("modelo", "turbo"),
         voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),
-        voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 600)),
+        voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 900)),
         voice_wake=bool(data.get("voz", {}).get("llamada", True)),
     )
 

@@ -10,7 +10,7 @@ from app.orchestrator import Orchestrator, recover
 from app import settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Presence, ServerMessage, TextInput, Voice as VoiceState, client_message)
+                          Presence, Pressed, ServerMessage, TextInput, Voice as VoiceState, client_message)
 from app.voice import Voice
 
 log = logging.getLogger(__name__)
@@ -100,6 +100,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             if reminders:
                 tasks.add(asyncio.create_task(orchestrator.reminders(send)))
                 tasks.add(asyncio.create_task(orchestrator.chatter(send)))
+                tasks.add(asyncio.create_task(orchestrator.alarm_loop(send)))
 
         async def pull(name: str) -> None:
             try:
@@ -122,6 +123,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         spawn(orchestrator.turn(text, send))
                     case Look(text=text, rect=rect):
                         spawn(orchestrator.look(text, rect, send))
+                    case Pressed(id=id, boton=boton):
+                        spawn(orchestrator.press(id, boton, send))
                     case ConfirmResponse(id=id, ok=ok):
                         orchestrator.confirm(id, ok)
                     case Presence(fullscreen=full):

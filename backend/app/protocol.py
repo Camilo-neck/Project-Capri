@@ -51,6 +51,19 @@ class ConfirmRequest(BaseModel):
     riesgo: Literal["normal", "alto"] = "normal"  # "alto": the avatar shows it in red and takes no key, only a click
 
 
+class Button(BaseModel):
+    id: str
+    texto: str
+
+
+class Buttons(BaseModel):
+    """Buttons under what she just said that don't hold anything up (cancel a reminder, done, snooze...)."""
+
+    type: Literal["buttons"] = "buttons"
+    id: str
+    botones: list[Button]
+
+
 class Voice(BaseModel):
     """The microphone: off, loading the model, idle (waiting for "hey Capri"), hearing someone, listening (the next sentence is for her) or reading what was said."""
 
@@ -123,6 +136,14 @@ class ConfirmResponse(BaseModel):
     ok: bool
 
 
+class Pressed(BaseModel):
+    """One of her Buttons was clicked."""
+
+    type: Literal["pressed"] = "pressed"
+    id: str
+    boton: str
+
+
 class Presence(BaseModel):
     """A fullscreen app (game, video) is in front: Capri is hidden and keeps quiet until it goes."""
 
@@ -145,7 +166,8 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
-ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress
+ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | Action | ClaudeEvent
+                 | Voice | Heard | ModelInfo | ModelProgress)
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"
 
@@ -169,6 +191,6 @@ class ModelPull(BaseModel):
     nombre: str
 
 
-ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull,
+ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

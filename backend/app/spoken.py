@@ -57,7 +57,7 @@ _THIS = re.compile(r"^(?:mira|look at|check out) (?:lo que\b|what\b|(?:esto|this
 _POLITE = re.compile(r"\b(?:por favor|porfa(?:vor)?|please|pls|ya|un rato|un momento|ahora|ahorita|capri)\b")
 # the slash commands typed in English
 ALIASES = {"/hide": "/escondete", "/show": "/vuelve", "/back": "/vuelve", "/quit": "/cierra", "/look": "/mira",
-           "/forget": "/olvida", "/dnd": "/nomolestes"}
+           "/forget": "/olvida", "/dnd": "/nomolestes", "/reminders": "/recordatorios"}
 
 
 def to_command(text: str) -> str:

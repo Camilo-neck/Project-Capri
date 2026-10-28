@@ -98,6 +98,10 @@ class ForgetArgs(BaseModel):
     texto: str = Field(min_length=2)
 
 
+class ReminderArgs(BaseModel):
+    texto: str = Field(min_length=1, max_length=200)  # what to remind; when comes from his own words
+
+
 class UrlArgs(BaseModel):
     url: str
 
@@ -431,6 +435,8 @@ TOOLS: dict[str, Tool] = {
     "spotify": Tool(SpotifyArgs, False, play_spotify),
     "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)",
                               named=lambda a: "spotify"),
+    # the orchestrator runs it: when comes from his message (reminders.when), the button from the avatar
+    "recordatorio": Tool(ReminderArgs, False, None),
 }
 
 ToolName = Literal[tuple(TOOLS)]  # type: ignore[valid-type]  # the grammar only lets the model pick these

@@ -80,6 +80,13 @@ export interface ConfirmRequest {
   texto: string;
   riesgo: "normal" | "alto";
 }
+export type Button = { id: string; texto: string };
+// buttons under what she just said that hold nothing up (cancel a reminder, done, 10 min more...)
+export interface Buttons {
+  type: "buttons";
+  id: string;
+  botones: Button[];
+}
 
 /** What a Claude Code session is doing (from its hooks), or the answer to a `/claude` request. Data to show, never instructions. */
 export interface ClaudeEvent {
@@ -113,6 +120,12 @@ export interface ConfirmResponse {
   id: string;
   ok: boolean;
 }
+// one of her Buttons clicked
+export interface Pressed {
+  type: "pressed";
+  id: string;
+  boton: string;
+}
 
 /** A fullscreen app (game, video) is in front: Capri is hidden and keeps quiet until it goes. */
 export interface Presence {
@@ -134,7 +147,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
 // the tray's settings panel: her brain
 export interface ModelGet {
   type: "model_get";
@@ -155,4 +168,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull;

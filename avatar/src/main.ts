@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
-import type { Action, ClaudeEvent, Emocion, ServerMessage, VoiceState } from "./net/protocol.ts";
+import type { Action, Buttons, ClaudeEvent, Emocion, ServerMessage, VoiceState } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -116,6 +116,9 @@ let turn = 0;
 let awaiting = false; // a message of ours is being answered; a turn without one is Capri's own (a reminder)
 let confirming: string | null = null; // id of the confirmation on screen
 let confirmingRed = false; // a red one takes only a click, never a key
+let buttonsId: string | null = null; // her Buttons on screen (cancel a reminder, done...): they hold nothing up
+let buttonsTimer = 0;
+const BUTTONS_MS = 120_000; // left alone this long, they go
 let sentAt = 0;
 let latency: number | null = null;
 let ctx: number | null = null;
@@ -614,6 +617,7 @@ const link = connect(
       case "utterance_start":
         wakeUp();
         if (confirming) hideChoices(); // the confirmation timed out: the turn moved on
+        else if (buttonsId) hideButtons(); // what she says next replaces them
         // Also covers a retry: the new utterance replaces the text shown so far.
         if (avatar.setEmotion(msg.emocion) && !teleporting) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
         avatar.playGesture(msg.gesto, now);
@@ -631,6 +635,9 @@ const link = connect(
         ended = true;
         ctx = msg.ctx ?? ctx;
         updateMeta();
+        break;
+      case "buttons":
+        showButtons(msg);
         break;
       case "confirm_request":
         showChoices(msg.id, msg.texto, msg.riesgo === "alto");
@@ -826,6 +833,7 @@ async function victory(): Promise<void> {
 /** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected.
  *  A red one (deleting, installing, outside her folder, after reading outside content) shows as danger. */
 function showChoices(id: string, what: string, red = false): void {
+  hideButtons(); // a confirmation takes their place
   confirming = id;
   confirmingRed = red;
   const option = (n: 1 | 2, label: string) => {
@@ -842,6 +850,42 @@ function showChoices(id: string, what: string, red = false): void {
   choices.replaceChildren(option(1, what), option(2, "Ahora no"));
   choices.hidden = false;
   showTx();
+}
+
+/** Her Buttons under what she said (Cancelar, Hecho, 10 min más...): a click sends it and they go. A
+ *  confirmation that comes meanwhile takes their place. */
+function showButtons(msg: Buttons): void {
+  if (confirming) return;
+  buttonsId = msg.id;
+  choices.replaceChildren(...msg.botones.map((b) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = `▸ ${b.texto}`;
+    btn.addEventListener("click", () => {
+      link.send({ type: "pressed", id: msg.id, boton: b.id });
+      hideButtons();
+    });
+    li.append(btn);
+    return li;
+  }));
+  choices.hidden = false;
+  showTx();
+  clearTimeout(buttonsTimer);
+  buttonsTimer = window.setTimeout(() => {
+    hideButtons();
+    hideTx();
+  }, BUTTONS_MS);
+}
+
+function hideButtons(): void {
+  if (!buttonsId) return;
+  buttonsId = null;
+  clearTimeout(buttonsTimer);
+  if (!confirming) {
+    choices.hidden = true;
+    choices.replaceChildren();
+  }
 }
 
 function hideChoices(): void {
@@ -883,7 +927,7 @@ function setInputOpen(open: boolean): void {
 /** The transmission goes away, unless a choice still waits on it. */
 function hideTx(): void {
   hideTimer = 0;
-  if (!confirming) tx.hidden = true;
+  if (!confirming && !buttonsId) tx.hidden = true;
 }
 
 let guardTimer = 0;
@@ -1299,7 +1343,7 @@ pet.app.ticker.add((ticker) => {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
   }
-  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming ? [] : [tx])];
+  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId ? [] : [tx])];
   for (const el of ui) {
     const r = el.getBoundingClientRect();
     if (r.width) boxes.push([r.left, r.top, r.width, r.height]);

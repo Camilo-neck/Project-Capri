@@ -11,7 +11,7 @@ from app.orchestrator import Orchestrator, recover
 from app import launch, pcsense, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, PcEvent, Presence, Pressed, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
+                          Heard, Interrupt, PcEvent, Presence, Pressed, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -114,6 +114,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
         def spawn(coro: Coroutine) -> None:
             async def locked() -> None:
                 async with orchestrator.lock:
+                    orchestrator.current = asyncio.current_task()  # what an interruption cancels
                     try:
                         await coro
                     except Exception:  # a broken turn must not leave her "thinking" forever
@@ -199,7 +200,14 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                             speaker.stop()
                             speaker.say("¡Hola! Así sueno ahora, ¿te gusta?", force=True)
                     case Hotkey(name="escuchar") if voice:
+                        if speaker and speaker.playing:  # over her: she stops and listens
+                            speaker.stop()
+                            orchestrator.interrupt()
                         voice.listen_now()
+                    case Interrupt():
+                        if speaker:
+                            speaker.stop()
+                        orchestrator.interrupt()
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
                     case ModelGet():

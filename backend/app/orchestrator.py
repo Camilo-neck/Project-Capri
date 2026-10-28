@@ -72,6 +72,7 @@ class Orchestrator:
         self.ctx = 0  # context tokens of the last reply
         self.lock = asyncio.Lock()  # one turn at a time (user turns, looks and reminders)
         self.pending: dict[str, asyncio.Future[bool]] = {}  # confirmation id -> answer
+        self.current: asyncio.Task | None = None  # the turn running now (ws.spawn sets it): what interrupt() cancels
         self.reminded: set = set()  # calendar events already brought up
         self.idle_s = idle_s
         self.clock = clock  # one clock for everything time-based (tests set it)
@@ -100,6 +101,14 @@ class Orchestrator:
             log.warning("confirm_response for unknown or answered id %r", id)
             return
         fut.set_result(ok)
+
+    def interrupt(self) -> bool:
+        """He talked over her: the turn stops where it is. Never while a confirmation waits on his click (the voice
+        doesn't answer those). True if a turn was cancelled."""
+        if self.pending or self.current is None or self.current.done():
+            return False
+        self.current.cancel()
+        return True
 
     def cancel_pending(self) -> None:
         """The avatar went away: every open confirmation is a no."""
@@ -150,6 +159,17 @@ class Orchestrator:
         self.request = "" if own or image else text  # what's on screen never counts as him asking
         self.add("user", f"[captura de pantalla] {text}" if image else text)
         await send(State(value="thinking"))
+        try:
+            await self.steps(text, send, image, own)
+        except asyncio.CancelledError:  # interrupted (what she got to say is in the history already)
+            self.after.clear()
+            await send(State(value="idle"))
+            raise
+        if self.ctx > TRIM_AT:
+            await self.trim()
+
+    async def steps(self, text: str, send: Send, image: bytes | None, own: bool) -> None:
+        """Her replies to a message, and the actions they take, until she's done."""
         denied = False
         first, self.spoke = not own and not self.spoke, self.spoke or not own
         for step in range(MAX_ACTIONS + 1):
@@ -177,33 +197,40 @@ class Orchestrator:
             await send(msg)
         self.after.clear()
         await send(State(value="idle"))
-        if self.ctx > TRIM_AT:
-            await self.trim()
 
     async def say(self, send: Send, image: bytes | None, query: str = "", first: bool = False, own: bool = False) -> Reply:
         """One model reply, streamed to the avatar; returns it (validated) and adds it to the history."""
         started, ctx, final = False, None, None
+        face, shown = ("neutral", "ninguno"), ""
         memory = self.memory.context(query, self.session, self.running, first=first, own=own)
-        async for event in reply(self.history, generate=self.generate, image=image, memory=memory):
-            match event:
-                case ("ctx", n):
-                    ctx = n
-                case ("start", emocion, gesto):
-                    started = True
-                    await send(State(value="speaking"))
-                    await send(UtteranceStart(emocion=emocion, gesto=gesto))
-                case ("delta", chunk):
-                    await send(TextDelta(text=chunk))
-                case ("retry",) if started:
-                    # The avatar drops the shown text; the next utterance_start replaces it.
-                    started = False
-                    await send(UtteranceEnd())
-                case ("end", r):
-                    final = r
-                    if not started:  # fallback without any streamed text
+        try:
+            async for event in reply(self.history, generate=self.generate, image=image, memory=memory):
+                match event:
+                    case ("ctx", n):
+                        ctx = n
+                    case ("start", emocion, gesto):
+                        started, face, shown = True, (emocion, gesto), ""
                         await send(State(value="speaking"))
-                        await send(UtteranceStart(emocion=r.emocion, gesto=r.gesto))
-                        await send(TextDelta(text=r.texto))
+                        await send(UtteranceStart(emocion=emocion, gesto=gesto))
+                    case ("delta", chunk):
+                        shown += chunk
+                        await send(TextDelta(text=chunk))
+                    case ("retry",) if started:
+                        # The avatar drops the shown text; the next utterance_start replaces it.
+                        started = False
+                        await send(UtteranceEnd())
+                    case ("end", r):
+                        final = r
+                        if not started:  # fallback without any streamed text
+                            await send(State(value="speaking"))
+                            await send(UtteranceStart(emocion=r.emocion, gesto=r.gesto))
+                            await send(TextDelta(text=r.texto))
+        except asyncio.CancelledError:
+            if started:  # cut off mid-sentence: she remembers what she got to say, and where she was cut
+                cut = Reply(emocion=face[0], gesto=face[1], accion=None, texto=shown.rstrip() + "—")
+                self.add("assistant", cut.model_dump_json())
+                await send(UtteranceEnd(cortada=True))
+            raise
         stored = final if image is None else final.model_copy(update={"accion": None})
         self.add("assistant", stored.model_dump_json())
         self.ctx = ctx or self.ctx

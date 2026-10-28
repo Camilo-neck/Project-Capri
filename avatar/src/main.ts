@@ -684,6 +684,11 @@ const link = connect(
         typewriter.push(msg.text);
         break;
       case "utterance_end":
+        if (msg.cortada) {
+          typewriter.clear(); // cut off: what she hadn't shown yet she never said
+          txText.textContent = txText.textContent!.trimEnd() + "—";
+          ttsAt = 0;
+        }
         ended = true;
         ctx = msg.ctx ?? ctx;
         updateMeta();
@@ -790,6 +795,10 @@ function showClaudePanel(p: Panel, autoClose: boolean): void {
 }
 
 // A click closes the bubble, unless it was to select Claude's words.
+// a click on her transmission while she talks out loud cuts her off
+tx.addEventListener("click", (e) => {
+  if (voiced(performance.now()) && !(e.target as HTMLElement).closest("button")) link.send({ type: "interrupt" });
+});
 claudePanel.addEventListener("click", () => {
   if (!getSelection()?.toString()) claudePanel.hidden = true;
 });
@@ -1632,7 +1641,7 @@ pet.app.ticker.add((ticker) => {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
   }
-  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId ? [] : [tx])];
+  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId && !voiced(now) ? [] : [tx])];
   for (const el of ui) {
     const r = el.getBoundingClientRect();
     if (r.width) boxes.push([r.left, r.top, r.width, r.height]);

@@ -176,6 +176,10 @@ export interface Say {
   type: "say";
   texto: string;
 }
+/** He cuts her off (a click on her transmission): she stops talking, and the turn where it is. */
+export interface Interrupt {
+  type: "interrupt";
+}
 // the tray's settings panel: her voice
 export interface VoiceGet {
   type: "voice_get";
@@ -207,4 +211,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt;

@@ -202,6 +202,12 @@ class Say(BaseModel):
     texto: str = Field(max_length=500)
 
 
+class Interrupt(BaseModel):
+    """He cuts her off (a click on her transmission): she stops talking, and the turn stops where it is."""
+
+    type: Literal["interrupt"] = "interrupt"
+
+
 class VoiceGet(BaseModel):
     type: Literal["voice_get"] = "voice_get"
 
@@ -240,6 +246,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet,
+                          | Say | VoiceGet | VoiceSet | Interrupt,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

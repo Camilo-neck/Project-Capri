@@ -174,6 +174,9 @@ class FakeVoice:
     def converse(self):
         self.conversed += 1
 
+    def listen_now(self):
+        self.listened = getattr(self, "listened", 0) + 1
+
 
 def test_the_end_of_a_turn_opens_the_conversation_window():
     voice = FakeVoice()
@@ -288,3 +291,20 @@ def test_the_panel_tunes_her_voice(monkeypatch, tmp_path):
     assert speaker.said and speaker.said[0][1] is True  # "Probar" plays even with the voice off
     s = settings.load()
     assert (s.tts_speed, s.tts_robot, s.tts_glitch) == (1.2, 0.4, 1.0)
+
+
+def test_he_can_cut_her_off_with_a_click_or_the_listen_hotkey():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "interrupt"})
+        ws.send_json({"type": "model_get"})
+        while ws.receive_json()["type"] != "model_info":
+            pass
+        assert speaker.stops == 1  # the click: her voice stops (and the turn, if one is running)
+        speaker.playing = True
+        voice.listened = 0
+        ws.send_json({"type": "hotkey", "name": "escuchar"})
+        ws.send_json({"type": "model_get"})
+        while ws.receive_json()["type"] != "model_info":
+            pass
+        assert speaker.stops == 2 and voice.listened == 1

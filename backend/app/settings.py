@@ -40,6 +40,12 @@ class Settings:
     voice_wake: bool = True  # only what starts with "hey Capri" counts
     voice_names: tuple[str, ...] = ("capri",)  # what she answers to (compared loosely: "Kapri", "Capry")
     voice_log: bool = True  # voz.log: what she heard that was meant for her
+    speak: bool = True  # with the voice on, she answers out loud
+    tts_voice: str = "capri"  # a tuned style in tts_dir (scripts/tune_voice.py), a Kokoro voice, or "" for the stock ones
+    tts_dir: str = r"D:\capri-models\tts"  # Kokoro's model (and tuned voices)
+    tts_speed: float = 1.0
+    tts_robot: float = 0.0  # her metallic touch, 0-1
+    tts_glitch: float = 0.0  # how often her voice stutters, 0-1
 
     def quiet_now(self, now: datetime) -> bool:
         if not self.quiet:
@@ -90,11 +96,17 @@ def load() -> Settings:
         voice_wake=bool(data.get("voz", {}).get("llamada", True)),
         voice_names=tuple(n.lower() for n in data.get("voz", {}).get("nombres", ["capri"]) if n.strip()) or ("capri",),
         voice_log=bool(data.get("voz", {}).get("registro", True)),
+        speak=bool(data.get("voz", {}).get("hablar", True)),
+        tts_voice=str(data.get("voz", {}).get("voz_tts", "capri")),
+        tts_dir=str(data.get("voz", {}).get("carpeta_tts", r"D:\capri-models\tts")),
+        tts_speed=min(1.5, max(0.7, float(data.get("voz", {}).get("velocidad", 1.0)))),
+        tts_robot=min(1.0, max(0.0, float(data.get("voz", {}).get("robot", 0.0)))),
+        tts_glitch=min(1.0, max(0.0, float(data.get("voz", {}).get("glitch", 0.0)))),
     )
 
 
-def set_value(section: str, key: str, value: str) -> None:
-    """Writes `key = "value"` in [section], keeping the rest of the file (and its comments) as it is."""
+def set_value(section: str, key: str, value: str | bool | float) -> None:
+    """Writes `key = value` in [section], keeping the rest of the file (and its comments) as it is."""
     load()  # creates the file if needed
     p = path()
     text = p.read_text(encoding="utf-8")

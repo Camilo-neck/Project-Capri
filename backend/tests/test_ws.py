@@ -42,7 +42,7 @@ def test_demo_turns_arrive_in_order(client):
             ]
             assert {m["type"] for m in msgs[3:-2]} == {"text_delta"}
             assert "".join(m["text"] for m in msgs[3:-2]) == expected.texto
-            assert msgs[-2:] == [{"type": "utterance_end", "ctx": None}, {"type": "state", "value": "idle"}]
+            assert msgs[-2:] == [{"type": "utterance_end", "ctx": None, "cortada": False}, {"type": "state", "value": "idle"}]
     assert {r.emocion for r in DEMO} == set(get_args(Emocion))
     assert {r.gesto for r in DEMO} == set(get_args(Gesto))
 
@@ -90,7 +90,7 @@ def test_utterance_end_reports_context_tokens():
     app = create_app(TOKEN, Orchestrator(with_usage))
     with TestClient(app).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
         ws.send_json({"type": "text_input", "text": "hola"})
-        assert receive_turn(ws)[-2] == {"type": "utterance_end", "ctx": 1234}
+        assert receive_turn(ws)[-2] == {"type": "utterance_end", "ctx": 1234, "cortada": False}
 
 
 def test_a_turn_that_breaks_ends_and_she_can_go_on(tmp_path):

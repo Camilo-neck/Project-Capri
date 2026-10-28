@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from app import spoken
+from app.speech import level
 from app.protocol import Heard, Level, ServerMessage, Voice as VoiceState
 
 log = logging.getLogger(__name__)
@@ -122,11 +123,6 @@ class VoiceLog:
             self.path.write_text("\n".join([*old, line][-self.keep:]) + "\n", encoding="utf-8")
         except OSError:
             log.warning("could not write %s", self.path)
-
-
-def level(chunk: np.ndarray) -> float:
-    """How loud a chunk is, 0-1 (RMS scaled so normal speech fills most of the meter)."""
-    return min(1.0, float(np.sqrt(np.mean(chunk ** 2))) * 10)
 
 
 def junk(text: str, avg_logprob: float, no_speech: float) -> bool:

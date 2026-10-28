@@ -26,6 +26,7 @@ export interface TextDelta {
 export interface UtteranceEnd {
   type: "utterance_end";
   ctx: number | null;
+  cortada: boolean; // she was interrupted: the text ends where she was cut off
 }
 
 /** Capri saved something to her long-term memory (shown as a mark in the transmission). */

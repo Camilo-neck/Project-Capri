@@ -27,6 +27,7 @@ class TextDelta(BaseModel):
 class UtteranceEnd(BaseModel):
     type: Literal["utterance_end"] = "utterance_end"
     ctx: int | None = None  # context tokens used, as reported by Ollama
+    cortada: bool = False  # she was interrupted: the text ends where she was cut off
 
 
 class Remembered(BaseModel):

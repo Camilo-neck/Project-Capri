@@ -554,7 +554,15 @@ function setStatus(s: Status): void {
     unhide(); // she comes out to answer
   }
   if (s !== "down" && linkStatus === "down") greetAt = performance.now();
-  if (s === "looking") fx.scan();
+  if (s === "looking") {
+    fx.scan();
+    // a capture she didn't start (a screenshot, his search read off the browser): she keeps herself out of it too
+    if (linkStatus !== "looking") {
+      void invoke("capture_guard", { on: true }).catch((e) => console.warn("capture_guard", e));
+      clearTimeout(guardTimer);
+      guardTimer = window.setTimeout(guardOff, 5000);
+    }
+  }
   if (s === "thinking" && linkStatus === "idle" && !awaiting) startTurn(""); // she speaks up on her own
   if (s === "idle") awaiting = false;
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken

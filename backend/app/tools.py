@@ -21,7 +21,7 @@ import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, launch, power, settings, spotify
+from app import calendar_ics, launch, power, settings, spotify, vision
 from app.memory import content_words, fold
 from app.power import ToolError
 from app.settings import Settings
@@ -44,6 +44,10 @@ class NoArgs(BaseModel):
 
 class AppArgs(BaseModel):
     nombre: str
+
+
+class FolderArgs(BaseModel):
+    nombre: str = Field(min_length=1, max_length=260)  # "descargas", "la papelera", "mi cv" (on the desktop), a path
 
 
 class SearchArgs(BaseModel):
@@ -144,9 +148,14 @@ class Tool:
 
 
 def named_in(target: str, message: str) -> bool:
-    """He asked for it himself: at least half the words of `target` (and one at least) are in his message."""
-    want, have = content_words(target), set(re.findall(r"\w+", fold(message)))
-    return bool(want) and 2 * len(want & have) >= len(want)
+    """He asked for it himself: at least half the words of `target` (and one at least) are in his message.
+    `target` may give alternatives, "captura|pantallazo|screenshot": any of them will do."""
+    have = set(re.findall(r"\w+", fold(message)))
+    for alt in target.split("|"):
+        want = content_words(alt)
+        if want and 2 * len(want & have) >= len(want):
+            return True
+    return False
 
 
 def site(url: str) -> str:
@@ -212,6 +221,92 @@ def open_app(a: AppArgs, s: Settings) -> str:
                             "llama en el menú Inicio o su ruta") from e
         os.startfile(str(link))  # noqa: S606  (the Start menu shortcut of the program he confirmed)
     return f"Abrí {a.nombre}."
+
+
+# ---- folders, the desktop, a screenshot ----
+
+# what he calls them -> the shell's own name for them (it follows them wherever they were moved)
+FOLDERS = {
+    "shell:Downloads": "descargas downloads",
+    "shell:Personal": "documentos documents",
+    "shell:Desktop": "escritorio desktop",
+    "shell:My Pictures": "imagenes fotos pictures photos",
+    "shell:My Music": "musica music",
+    "shell:My Video": "videos",
+    "shell:Screenshots": "capturas pantallazos screenshots",
+    "shell:RecycleBinFolder": "papelera reciclaje recycle trash",
+    "shell:MyComputerFolder": "explorador explorer equipo computer",
+}
+NOT_A_NAME = re.compile(r"^(?:(?:mi|mis|la|el|los|las|my|the|carpeta|folder|de|del|of)\s+)+|\s+(?:folder|carpeta)$")
+
+
+def desktops() -> list[Path]:
+    """His desktop (wherever Windows keeps it) and the public one."""
+    out = []
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            out.append(Path(os.path.expandvars(winreg.QueryValueEx(k, "Desktop")[0])))
+    except OSError:
+        out.append(Path.home() / "Desktop")
+    return out + [Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "Desktop"]
+
+
+def folder_target(nombre: str) -> str:
+    """Where "abre X" goes: a known folder (shell:...), a path, or a file or shortcut on his desktop by name."""
+    said = NOT_A_NAME.sub("", fold(nombre).strip()).strip()
+    words = set(re.findall(r"\w+", said))
+    for target, names in FOLDERS.items():
+        if words & set(names.split()):
+            return target
+    p = power.resolve(nombre)
+    if p.exists():
+        power.guard(str(p))  # never his keys and credentials
+        return str(p)
+    for d in desktops():
+        for f in sorted(d.iterdir()) if d.is_dir() else []:
+            if said and said in fold(f.stem):
+                return str(f)
+    raise ToolError(f"no encontré «{nombre}»: ni carpeta conocida, ni ruta, ni nada en el escritorio con ese nombre")
+
+
+def folder_risk(a: FolderArgs, s: Settings) -> str:
+    """A folder or a document is a plain click (none if he named it); something that runs a program, or a
+    place outside his folder, always asks in red."""
+    t = folder_target(a.nombre)
+    if t.startswith("shell:"):
+        return "normal"
+    p = Path(t)
+    return "alto" if p.suffix.lower() in RUNNABLE - {".lnk"} or not power.inside_home(p.resolve()) and not any(
+        d in p.parents for d in desktops()) else "normal"
+
+
+def open_folder(a: FolderArgs, s: Settings) -> str:
+    t = folder_target(a.nombre)
+    if t.startswith("shell:"):
+        subprocess.Popen(["explorer.exe", t], creationflags=0x0800_0000)
+    else:
+        os.startfile(t)  # noqa: S606  (he named it, or confirmed it)
+    return f"Abrí {a.nombre}."
+
+
+def screenshots_folder() -> Path:
+    """Pictures › Screenshots, wherever Windows keeps his Pictures."""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            pictures = Path(os.path.expandvars(winreg.QueryValueEx(k, "My Pictures")[0]))
+    except OSError:
+        pictures = Path.home() / "Pictures"
+    return pictures / "Screenshots"
+
+
+def screenshot(a: NoArgs, s: Settings) -> str:
+    """The screen he's on (where the pointer is), full size, saved; she keeps herself out of it."""
+    path = vision.save_shot(vision.cursor_monitor(), screenshots_folder())
+    return f"Guardé la captura en {path}."
 
 
 SKIP_DIRS = {"node_modules", "appdata", "$recycle.bin", "windows", "site-packages", "target", "__pycache__"}
@@ -425,6 +520,9 @@ def connect_spotify(a: NoArgs, s: Settings) -> str:
 
 TOOLS: dict[str, Tool] = {
     "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}", app_risk, named=lambda a: a.nombre),
+    "abrir_carpeta": Tool(FolderArgs, True, open_folder, lambda a: f"Abrir {folder_target(a.nombre)}", folder_risk, named=lambda a: a.nombre),
+    "captura": Tool(NoArgs, True, screenshot, lambda a: "Tomar una captura de tu pantalla (sin mí) y guardarla en Imágenes",
+                    named=lambda a: "captura|pantallazo|screenshot|screen shot"),
     "buscar_archivos": Tool(SearchArgs, False, search_files, log=True),
     # Her hands on the PC. Reading inside the user's folder is free; writing, commands and anything
     # outside it wait for a click that shows exactly what happens (see power.py for the tiers).

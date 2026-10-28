@@ -89,3 +89,47 @@ def test_roblox_finding_nothing_says_so(monkeypatch):
     monkeypatch.setattr(launch.httpx, "get", lambda *a, **k: httpx.Response(200, json={"searchResults": []}, request=httpx.Request("GET", "https://x")))
     with pytest.raises(tools.ToolError, match="no encontré"):
         tools.TOOLS["roblox"].run(tools.RobloxArgs(juego="zzzz"), settings.Settings())
+
+
+# ---- folders and the desktop ----
+
+@pytest.mark.parametrize("said, target", [
+    ("descargas", "shell:Downloads"), ("mis descargas", "shell:Downloads"), ("Downloads", "shell:Downloads"),
+    ("la papelera", "shell:RecycleBinFolder"), ("recycle bin", "shell:RecycleBinFolder"),
+    ("el explorador de archivos", "shell:MyComputerFolder"), ("mis documentos", "shell:Personal"),
+    ("imágenes", "shell:My Pictures"), ("capturas de pantalla", "shell:Screenshots"), ("escritorio", "shell:Desktop"),
+])
+def test_known_folders_open_in_the_explorer(monkeypatch, said, target):
+    ran = []
+    monkeypatch.setattr(tools.subprocess, "Popen", lambda args, **kw: ran.append(args))
+    tools.open_folder(tools.FolderArgs(nombre=said), settings.Settings())
+    assert ran == [["explorer.exe", target]]
+
+
+def test_a_file_or_shortcut_on_the_desktop_by_its_name(monkeypatch, tmp_path):
+    (tmp_path / "CV Camilo 2026.pdf").write_text("")
+    (tmp_path / "instalar.exe").write_text("")
+    monkeypatch.setattr(tools, "desktops", lambda: [tmp_path])
+    opened = []
+    monkeypatch.setattr(tools.os, "startfile", opened.append, raising=False)
+    tools.open_folder(tools.FolderArgs(nombre="mi cv"), settings.Settings())
+    assert opened == [str(tmp_path / "CV Camilo 2026.pdf")]
+    assert tools.folder_risk(tools.FolderArgs(nombre="mi cv"), settings.Settings()) == "normal"
+    assert tools.folder_risk(tools.FolderArgs(nombre="instalar"), settings.Settings()) == "alto"  # runs a program: always a click
+    with pytest.raises(tools.ToolError, match="no encontré"):
+        tools.folder_target("algo que no existe")
+
+
+# ---- a screenshot to Pictures ----
+
+def test_a_screenshot_is_saved_without_her(monkeypatch, tmp_path):
+    from app import vision
+
+    monkeypatch.setattr(vision, "cursor_monitor", lambda: (0, 0, 800, 600))
+    saved = []
+    monkeypatch.setattr(vision, "save_shot", lambda rect, folder: saved.append((rect, folder)) or folder / "Capri 2026-10-28 153000.png")
+    monkeypatch.setattr(tools, "screenshots_folder", lambda: tmp_path)
+    msg = tools.TOOLS["captura"].run(tools.NoArgs(), settings.Settings())
+    assert saved == [((0, 0, 800, 600), tmp_path)] and "Capri 2026-10-28 153000.png" in msg
+    assert tools.named_in(tools.TOOLS["captura"].named(tools.NoArgs()), "toma un pantallazo")
+    assert tools.named_in(tools.TOOLS["captura"].named(tools.NoArgs()), "take a screenshot")

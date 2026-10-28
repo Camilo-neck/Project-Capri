@@ -5,6 +5,7 @@ import ctypes
 import io
 import logging
 import time
+from pathlib import Path
 from ctypes import wintypes
 
 import mss
@@ -43,6 +44,28 @@ def foreground() -> Rect:
     m = info.rcMonitor
     rect = (max(win.left, m.left), max(win.top, m.top), min(win.right, m.right), min(win.bottom, m.bottom))
     return rect if rect[2] > rect[0] and rect[3] > rect[1] else (m.left, m.top, m.right, m.bottom)
+
+
+def cursor_monitor() -> Rect:
+    """The monitor the pointer is on (where he's looking)."""
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # physical px like mss; fails harmlessly if already set
+    user32 = ctypes.windll.user32
+    pt, info = wintypes.POINT(), _MonitorInfo(cbSize=ctypes.sizeof(_MonitorInfo))
+    user32.GetCursorPos(ctypes.byref(pt))
+    user32.GetMonitorInfoW(user32.MonitorFromPoint(pt, 2), ctypes.byref(info))  # 2: the nearest monitor
+    m = info.rcMonitor
+    return m.left, m.top, m.right, m.bottom
+
+
+def save_shot(rect: Rect, folder: Path) -> Path:
+    """A full-size screenshot of `rect`, saved as a PNG in `folder` (made if needed). Its path."""
+    left, top, right, bottom = rect
+    with mss.MSS() as sct:
+        shot = sct.grab({"left": left, "top": top, "width": right - left, "height": bottom - top})
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"Capri {time.strftime('%Y-%m-%d %H%M%S')}.png"
+    Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX").save(path)
+    return path
 
 
 def capture(rect: Rect) -> bytes:

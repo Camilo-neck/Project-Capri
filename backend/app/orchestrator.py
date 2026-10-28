@@ -31,6 +31,7 @@ TAIL_HOURS, TAIL_MESSAGES = 3, 6  # a restart within this keeps that many messag
 TRANSCRIPT_MAX = 12_000  # chars of a past session handed to the summarizer
 ASKED_MAX = 120  # chars of his request repeated with a tool result
 SEARCH_LOAD_S = 3  # a search opened in his browser gets this long to load before she reads it
+GUARD_S = 0.25  # after "looking", before a capture: time for the avatar to keep herself out of it
 # What these bring in may be written by someone else (a page, a file, a program's output): once one
 # ran in a turn (or a command that wasn't plainly read-only), any action that asks for a click asks in red.
 EXTERNAL = {"leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
@@ -360,6 +361,9 @@ class Orchestrator:
                 return DENIED
         elif tool.log:
             tools.audit({"accion": accion.nombre, "args": args.model_dump()})
+        if accion.nombre == "captura":
+            await send(State(value="looking"))  # the indicator, and the avatar keeps herself out of the shot
+            await asyncio.sleep(GUARD_S)
         await send(Action(nombre=accion.nombre, fase="inicio"))
         start, ok = time.monotonic(), False
         try:
@@ -393,6 +397,7 @@ class Orchestrator:
             await asyncio.to_thread(tools.web_search, tools.WebSearchArgs(sitio="google", consulta=query), settings.load())
             await asyncio.sleep(self.load_s)  # ponytail: a fixed wait for the page; a slow connection may need more
             await send(State(value="looking"))
+            await asyncio.sleep(GUARD_S)  # the avatar keeps herself out of the shot
             image = await asyncio.to_thread(self.capture, vision.foreground())
             result, done = await self.read(image, query), True
         except Exception as e:

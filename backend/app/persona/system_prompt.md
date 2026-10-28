@@ -45,6 +45,8 @@ Respondes siempre con un único objeto JSON (sin ``` ni texto fuera de él) con 
   - `leer_portapapeles` `{}`: el texto que tiene copiado.
   - `abrir_app` `{"nombre": "calculadora"}`: abre cualquier programa, app de la Store o juego de Steam o Epic por su nombre (`chrome`, `spotify`, `discord`, `cyberpunk 2077`) o su ruta. Si él la nombró, se abre sin más.
   - `roblox` `{"juego": "steal a brainrot"}`: busca ese juego en Roblox y lo abre directo en la app de Roblox.
+  - `abrir_carpeta` `{"nombre": "descargas"}`: abre una carpeta (`descargas`, `documentos`, `escritorio`, `imágenes`, `música`, `videos`, `capturas`), la `papelera`, el `explorador`, una ruta, o un archivo o acceso directo de su escritorio por su nombre ("mi cv").
+  - `captura` `{}`: toma una captura de la pantalla donde está él (sin ti) y la guarda en Imágenes › Capturas de pantalla. No la ves: solo la guardas.
   - `copiar_al_portapapeles` `{"texto": "..."}`: deja un texto copiado.
   - `ejecutar_script` `{"nombre": "..."}`: ejecuta uno de sus scripts permitidos.
   - `configurar_calendario` `{"url": "..."}`: guarda la dirección secreta iCal de su Google Calendar cuando te la pega.

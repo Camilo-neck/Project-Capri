@@ -173,13 +173,16 @@ def qwen(folder: str, voice: str = "capri", cmd: list[str] | None = None) -> Cal
         synth.proc.stdin.write((json.dumps(msg) + "\n").encode())
         synth.proc.stdin.flush()
 
+    starting = threading.Lock()  # warm() and her first sentence may both start it: one process
+
     def synth(text: str, lang: str, speed: float = 1.0) -> tuple[Iterator[np.ndarray], int]:
-        if synth.proc is None or synth.proc.poll() is not None:
-            err = open(root / "worker.log", "ab") if root.is_dir() else subprocess.DEVNULL
-            synth.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
-                                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            if size() != 0:  # it says it's ready once the model is loaded and its graphs captured
-                raise RuntimeError("her voice didn't load (see qwen/worker.log)")
+        with starting:
+            if synth.proc is None or synth.proc.poll() is not None:
+                err = open(root / "worker.log", "ab") if root.is_dir() else subprocess.DEVNULL
+                synth.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
+                                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                if size() != 0:  # it says it's ready once the model is loaded and its graphs captured
+                    raise RuntimeError("her voice didn't load (see qwen/worker.log)")
 
         def chunks() -> Iterator[np.ndarray]:
             send({"text": text, "lang": lang})

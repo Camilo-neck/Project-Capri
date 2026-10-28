@@ -348,3 +348,28 @@ def test_the_cloned_voice_streams_from_its_own_process(tmp_path):
     finally:
         synth.close()
     assert synth.proc.poll() is not None  # gone: its VRAM is free
+
+
+def test_warming_up_and_her_first_sentence_start_one_process(tmp_path, monkeypatch):
+    import subprocess
+
+    from app import speech
+
+    spawned, real = [], subprocess.Popen
+
+    def popen(*a, **kw):
+        time.sleep(0.2)  # a slow start: the other caller arrives meanwhile
+        spawned.append(1)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(speech.subprocess, "Popen", popen)
+    synth = qwen_fake(tmp_path)
+    try:
+        threads = [threading.Thread(target=synth, args=("Hola.", "es")) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(5)
+        assert spawned == [1]
+    finally:
+        synth.close()

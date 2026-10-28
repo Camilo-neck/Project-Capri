@@ -735,3 +735,8 @@ body {
     animation: none !important;
   }
 }
+
+/* her intro (render/intro.ts): over everything while it plays */
+.intro {
+  z-index: 50;
+}

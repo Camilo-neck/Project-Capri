@@ -12,6 +12,7 @@ import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
+import { IntroView } from "./render/intro.ts";
 import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
@@ -57,6 +58,7 @@ const statusLabel = $("status-label");
 const inputRow = $<HTMLFormElement>("input-row");
 const input = $<HTMLInputElement>("input");
 const stage = $("stage");
+stage.style.visibility = "hidden"; // until her intro brings her in (playIntro)
 const cam = $("cam");
 const camTag = $("cam-tag");
 const camClock = $("cam-clock");
@@ -76,6 +78,12 @@ const typewriter = new Typewriter(50);
 const pet = await createPet(stage);
 const fxCanvas = $<HTMLCanvasElement>("fx");
 const fx = new Fx(fxCanvas);
+// her intro when she starts: her close-up grabs the screen, says hi and dives down to her spot
+const intro = new IntroView($<HTMLCanvasElement>("intro"), {
+  burst: (x, y, size) => fx.burst(x, y, size, false),
+  crackle: (x, y, r, life) => fx.crackle(() => ({ x, y, r }), () => true, life),
+  rush: (x, y) => fx.rush(x, y),
+});
 const director = new Director();
 type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean };
 const settings = await invoke<AvatarSettings>("avatar_settings");
@@ -155,7 +163,7 @@ function wanderGap(): number {
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || hiding;
+const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || hiding || intro.playing;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -1274,7 +1282,8 @@ pet.app.ticker.add((ticker) => {
   drawMask(now);
   drawHide(now);
   drawClaude(now);
-  const boxes: number[][] = dragging ? [[0, 0, innerWidth, innerHeight]] : []; // a fast drag must not slip off her
+  // a fast drag must not slip off her; during her intro a click anywhere skips it
+  const boxes: number[][] = dragging || intro.playing ? [[0, 0, innerWidth, innerHeight]] : [];
   if (!mask.canvas.hidden) boxes.push(mask.box());
   if (!hideMask.canvas.hidden) boxes.push(hideMask.box());
   const b = teleporting || doze.asleep || camera || peek || hiding ? null : petBounds(); // while she's gone, nothing to click
@@ -1302,3 +1311,30 @@ pet.app.ticker.add((ticker) => {
     void invoke("set_hitboxes", { boxes: rounded });
   }
 });
+
+/** Her intro when she starts (not with a fullscreen app in front): when her face lands on her spot, her
+ * body comes in there with the usual glitch. Without the drawings, she just appears. */
+async function playIntro(): Promise<void> {
+  if (!fullscreen && (await intro.load())) {
+    const [x, y] = headOnPage();
+    await intro.play({ to: { x, y, size: body().size * 0.45 }, label: "¡HOLA!", caption: "CAPRI · PROJECT CAPRICORN",
+      still: reducedMotion.matches });
+  }
+  stage.style.visibility = "";
+  const now = performance.now();
+  glitch.kick("arrive", now);
+  if (!reducedMotion.matches) {
+    const b = body();
+    fx.burst(b.x, b.y, b.size, true);
+  }
+  greetAt = now;
+}
+
+// a click while it plays skips it (and does nothing else)
+addEventListener("pointerdown", (e) => {
+  if (!intro.playing) return;
+  e.stopImmediatePropagation();
+  intro.skip();
+}, true);
+
+void playIntro();

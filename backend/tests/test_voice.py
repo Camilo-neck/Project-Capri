@@ -1,6 +1,6 @@
 import numpy as np
 
-from app.voice import CHUNK, Gate, Segmenter, junk
+from app.voice import CHUNK, Gate, Segmenter, junk, level
 
 CH = np.zeros(CHUNK, dtype="float32")
 
@@ -121,3 +121,9 @@ def test_with_the_hotkey_only_her_name_does_not_open_the_window():
     g.arm(0)
     assert g.decide("Capri, pon música", 1) == "pon música"
     assert not g.armed(2)
+
+
+def test_mic_level_is_zero_in_silence_and_tops_out_at_one():
+    assert level(np.zeros(CHUNK, dtype="float32")) == 0.0
+    assert level(np.ones(CHUNK, dtype="float32")) == 1.0
+    assert 0 < level(np.full(CHUNK, 0.02, dtype="float32")) < 1

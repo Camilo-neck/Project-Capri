@@ -23,6 +23,7 @@ import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { bigJob, panelFor, reaction, SPARK_GAP_MS, sparkFor, Tracker, type Panel } from "./state/claude.ts";
 import { CameraPlayer, type ShotName, shotFor, tagFor } from "./state/camera.ts";
+import { micView } from "./state/mic.ts";
 import { AwayWatch, backLine, speaksOnBack } from "./state/away.ts";
 import { Doze, sleepy, WAKE_MS } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
@@ -60,6 +61,7 @@ const choices = $<HTMLOListElement>("choices");
 const txMem = $("tx-mem");
 const status = $("status");
 const statusLabel = $("status-label");
+const micDot = $("mic-dot");
 const inputRow = $<HTMLFormElement>("input-row");
 const input = $<HTMLInputElement>("input");
 const stage = $("stage");
@@ -394,6 +396,7 @@ function hide(): void {
     placePeek(null);
   }
   hiding = true;
+  renderStatus();
   clearTimeout(hideTimer);
   hideTx(); // nothing of hers left floating around
   glitch.kick("doze", performance.now());
@@ -409,6 +412,7 @@ function hide(): void {
 function unhide(): void {
   if (!hiding) return;
   hiding = false;
+  renderStatus();
   if (claudePending) showClaudePanel(claudePending, true);
   claudePending = null;
   hideMask.show(false);
@@ -426,8 +430,14 @@ function drawHide(now: number): void {
   // shown once her body has come apart
   const shown = hiding && glitch.at(now, false).collapse >= 1;
   hideMask.show(shown);
+  micDot.hidden = !shown || voice === "off";
   if (!shown) return;
   hideMask.center = hideSpot();
+  if (!micDot.hidden) {
+    const [bx, by, bw] = hideMask.box();
+    micDot.style.transform = `translate(${Math.round(bx + bw - 4)}px, ${Math.round(by + 4)}px)`;
+    micDot.classList.toggle("beat", voice === "hearing");
+  }
   const blink = now % HIDE_BLINK_MS < 130;
   hideMask.draw(
     { eyes: blink ? [0, 0] : [1, 1], look: cursor ? { x: cursor[0], y: cursor[1] } : null },
@@ -605,12 +615,15 @@ const VOICE_LABEL: Record<VoiceState, string> = {
 };
 let voice: VoiceState = "off";
 
-/** The status bar; while the microphone is open it always shows, with what it is doing. */
+/** The status bar. The open microphone: a dot at rest, its words only while she's listening to you
+ * (the mask carries it when she hides, the feed's tag in camera mode; see state/mic.ts). */
 function renderStatus(): void {
-  const mic = voice !== "off" && (linkStatus === "idle" || linkStatus === "down");
-  status.toggleAttribute("data-mic", voice !== "off");
+  const view = micView({ voice, hiding, camera });
+  const bar = view === "bar" && (linkStatus === "idle" || linkStatus === "down");
+  if (view === "bar" || view === "dot") status.dataset.mic = view;
+  else delete status.dataset.mic;
   status.dataset.voice = voice;
-  statusLabel.textContent = mic ? VOICE_LABEL[voice] : linkStatus === "idle" && dnd ? "NO MOLESTAR" : STATUS[linkStatus];
+  statusLabel.textContent = bar ? VOICE_LABEL[voice] : linkStatus === "idle" && dnd ? "NO MOLESTAR" : STATUS[linkStatus];
 }
 
 function setVoice(v: VoiceState): void {
@@ -696,6 +709,9 @@ const link = connect(
         break;
       case "voice":
         setVoice(msg.estado);
+        break;
+      case "level":
+        if (msg.fuente === "mic") cam.style.setProperty("--lv", msg.valor.toFixed(2));
         break;
       case "heard":
         wakeUp();
@@ -1158,6 +1174,7 @@ void listen("camera", async () => {
   glitch.kick("change", performance.now());
   void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
   trayCheck("camera", camera);
+  renderStatus();
 });
 void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
@@ -1466,11 +1483,13 @@ function drawFeed(now: number, g: Glitch, seed: number): void {
     listening: !inputRow.hidden,
     confirming: !!confirming,
     asleep: doze.phase === "mask" || doze.phase === "waking",
+    voice,
   };
   if (camPlayer.want(shotFor(sc), now) && !doze.asleep) glitch.kick("change", now);
   camTag.textContent = tagFor(sc);
   camClock.textContent = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false });
   cam.classList.toggle("talking", !ended || typewriter.pending);
+  cam.classList.toggle("hearing", voice === "hearing" && ended && !typewriter.pending);
   camView.draw({ frame: camPlayer.frame(now), glitch: reducedMotion.matches ? OFF : g, seed, mask: maskLook(now) });
 }
 

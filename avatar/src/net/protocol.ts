@@ -48,6 +48,13 @@ export interface Voice {
   estado: VoiceState;
 }
 
+/** How loud: the microphone while he talks (camera meter) or her voice while she speaks (her mouth). */
+export interface Level {
+  type: "level";
+  fuente: "mic" | "tts";
+  valor: number;
+}
+
 /** What was said to her; handled as if it had been typed (slash commands included). */
 export interface Heard {
   type: "heard";
@@ -153,7 +160,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress;
 // the tray's settings panel: her brain
 export interface ModelGet {
   type: "model_get";

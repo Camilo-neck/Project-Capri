@@ -1,7 +1,7 @@
 // Camera mode: instead of her whole body, a transmission feed of her close-ups from the show
 // (avatar/assets/camera, scripts/build_camera.py). Which shot fits the moment, its tag, and how
 // shots play and cut. Pure logic; render/camera.ts draws it.
-import type { Emocion } from "../net/protocol.ts";
+import type { Emocion, VoiceState } from "../net/protocol.ts";
 
 export type ShotName = "escucha" | "lado" | "piensa" | "gira" | "mira" | "muchos" | "ojos" | "risa" | "sonrisa";
 
@@ -44,6 +44,7 @@ export interface Scene {
   listening: boolean; // the input bar is open
   confirming: boolean; // an action waits on your click
   asleep: boolean;
+  voice: VoiceState; // the microphone
 }
 
 /** The shot for the moment; null = no signal (the backend is down) or her mask (asleep). */
@@ -64,7 +65,9 @@ export function tagFor(s: Scene): string {
   if (s.status === "looking") return "ESCANEANDO";
   if (s.status === "thinking") return "PROCESANDO";
   if (s.status === "speaking") return "TRANSMITIENDO";
-  return s.listening ? "ESCUCHANDO" : "EN LÍNEA";
+  if (s.voice === "hearing") return "OYÉNDOTE";
+  if (s.voice === "listening") return "TE ESCUCHO";
+  return s.listening || s.voice !== "off" ? "ESCUCHANDO" : "EN LÍNEA";
 }
 
 export const PUSH_MS = 9000; // the slow push-in on each shot

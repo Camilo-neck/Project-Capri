@@ -384,6 +384,15 @@ body {
   background: var(--cam);
 }
 
+/* his voice while she hears him: the bars follow the microphone */
+.cam.hearing .cam-level i {
+  height: calc(3px + var(--lv, 0) * 9px);
+}
+
+.cam.hearing .cam-level i:nth-child(2n) {
+  height: calc(3px + var(--lv, 0) * 6px);
+}
+
 .cam.talking .cam-level i {
   animation: level 420ms steps(3) infinite alternate;
 }
@@ -408,16 +417,51 @@ body {
   display: none;
 }
 
-.status[data-mic] {
-  color: #ff5d73; /* the microphone is open */
+.status[data-mic="bar"] {
+  color: #ff5d73; /* she's listening to you */
 }
 
-.status[data-mic][data-voice="loading"] {
-  color: var(--warn);
+/* the microphone open at rest: only a red dot by the mark */
+.status[data-mic] .status-mark::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #ff5d73;
+  vertical-align: 1px;
 }
 
-.status[data-mic][data-voice="idle"] .segs i {
-  animation: none;
+.status[data-mic][data-voice="loading"] .status-mark::after {
+  background: var(--warn);
+}
+
+.hud:not(.input-open) .status[data-mic="dot"][data-state="idle"]:not([data-dnd="1"]) :is(#status-label, .segs) {
+  display: none;
+}
+
+/* hiding: the dot sits on her mask, and beats while she hears you */
+.mic-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff5d73;
+  pointer-events: none;
+}
+
+.mic-dot.beat {
+  animation: beat 500ms ease-in-out infinite alternate;
+}
+
+@keyframes beat {
+  to {
+    transform-origin: center;
+    box-shadow: 0 0 0 3px rgb(255 93 115 / 0.35);
+  }
 }
 
 .status[data-dnd="1"][data-state="idle"] {

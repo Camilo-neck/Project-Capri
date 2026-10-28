@@ -79,6 +79,14 @@ class Voice(BaseModel):
     estado: Literal["off", "loading", "idle", "hearing", "listening", "thinking"]
 
 
+class Level(BaseModel):
+    """How loud: the microphone while he talks (camera mode's meter) or her voice while she speaks (her mouth)."""
+
+    type: Literal["level"] = "level"
+    fuente: Literal["mic", "tts"]
+    valor: float  # 0-1
+
+
 class Heard(BaseModel):
     """What was said to her. The avatar handles `texto` as if it had been typed (slash commands included)."""
 
@@ -175,7 +183,7 @@ class Action(BaseModel):
 
 
 ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
-                 | Voice | Heard | ModelInfo | ModelProgress)
+                 | Voice | Level | Heard | ModelInfo | ModelProgress)
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"
 

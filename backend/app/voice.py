@@ -17,13 +17,14 @@ from pathlib import Path
 import numpy as np
 
 from app import spoken
-from app.protocol import Heard, ServerMessage, Voice as VoiceState
+from app.protocol import Heard, Level, ServerMessage, Voice as VoiceState
 
 log = logging.getLogger(__name__)
 
 RATE = 16_000
 CHUNK = 512  # what Silero takes at 16 kHz (32 ms)
 CONTEXT = 64
+LEVEL_EVERY_S = 0.066  # the mic meter in camera mode, ~15 Hz
 LANGS = ("es", "en")
 # what Whisper writes over silence and noise
 HALLUCINATIONS = ("amara.org", "thanks for watching", "gracias por ver", "subtitulos", "subtítulos", "suscríbete", "like and subscribe")
@@ -96,6 +97,11 @@ class Gate:
             self.arm(now)
             self.followup = bool(said)
         return said or None
+
+
+def level(chunk: np.ndarray) -> float:
+    """How loud a chunk is, 0-1 (RMS scaled so normal speech fills most of the meter)."""
+    return min(1.0, float(np.sqrt(np.mean(chunk ** 2))) * 10)
 
 
 def junk(text: str, avg_logprob: float, no_speech: float) -> bool:
@@ -220,6 +226,7 @@ class Voice:
             self._set("loading")
             self._load()
             vad, seg = SileroVad(), Segmenter(self.silence_ms)
+            level_at = 0.0
             blocks: queue.Queue[np.ndarray] = queue.Queue()
             with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=CHUNK,
                                 callback=lambda data, *_: blocks.put(data[:, 0].copy())):
@@ -231,6 +238,9 @@ class Voice:
                         continue
                     audio = seg.feed(chunk, vad(chunk))
                     now = time.monotonic()
+                    if seg.speaking and now - level_at >= LEVEL_EVERY_S:
+                        level_at = now
+                        self._emit(Level(fuente="mic", valor=level(chunk)))
                     if audio is None:
                         self._set("hearing" if seg.speaking else "listening" if self.gate.armed(now) else "idle")
                         continue

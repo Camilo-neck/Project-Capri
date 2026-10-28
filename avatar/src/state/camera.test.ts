@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { CameraPlayer, EMOTION_SHOT, PUSH, PUSH_MS, SHOTS, shotFor, tagFor, type Scene } from "./camera.ts";
 
 const scene = (over: Partial<Scene> = {}): Scene => ({
-  status: "idle", emocion: "neutral", talking: false, listening: false, confirming: false, asleep: false, ...over,
+  status: "idle", emocion: "neutral", talking: false, listening: false, confirming: false, asleep: false, voice: "off", ...over,
 });
 
 test("the shot follows what she's doing, and her mood while she talks", () => {
@@ -25,6 +25,14 @@ test("the tag says what she's doing", () => {
   assert.equal(tagFor(scene({ status: "speaking" })), "TRANSMITIENDO");
   assert.equal(tagFor(scene({ status: "down" })), "SIN SEÑAL");
   assert.equal(tagFor(scene({ asleep: true })), "EN REPOSO");
+});
+
+test("with the microphone open the tag says how she's listening", () => {
+  assert.equal(tagFor(scene({ voice: "idle" })), "ESCUCHANDO");
+  assert.equal(tagFor(scene({ voice: "hearing" })), "OYÉNDOTE");
+  assert.equal(tagFor(scene({ voice: "listening" })), "TE ESCUCHO");
+  assert.equal(tagFor(scene({ voice: "hearing", status: "speaking" })), "TRANSMITIENDO");
+  assert.equal(tagFor(scene({ voice: "hearing", confirming: true })), "ESPERA TU OK");
 });
 
 test("shots play forth and back without jumps, and only a new target is a cut", () => {

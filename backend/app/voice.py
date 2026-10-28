@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app import spoken
+from app import speech, spoken
 from app.speech import level
 from app.protocol import Heard, Level, ServerMessage, Voice as VoiceState
 
@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 RATE = 16_000
 CHUNK = 512  # what Silero takes at 16 kHz (32 ms)
 CONTEXT = 64
+BARGE_MS = 300  # this much voice over her and she turns down to hear him
 SPOKEN_EXCHANGE_S = 120  # her answer reopens the window only if he spoke to her this recently
 LEVEL_EVERY_S = 0.066  # the mic meter in camera mode, ~15 Hz
 LANGS = ("es", "en")
@@ -49,6 +50,11 @@ class Segmenter:
     @property
     def speaking(self) -> bool:
         return bool(self.chunks)
+
+    @property
+    def voiced_ms(self) -> float:
+        """How much voice the sentence in progress has so far."""
+        return self.voiced * CHUNK * 1000 / RATE
 
     def feed(self, chunk: np.ndarray, prob: float) -> np.ndarray | None:
         voice = prob >= self.threshold
@@ -123,6 +129,14 @@ class VoiceLog:
             self.path.write_text("\n".join([*old, line][-self.keep:]) + "\n", encoding="utf-8")
         except OSError:
             log.warning("could not write %s", self.path)
+
+
+def barge(text: str | None, said: list[str], names: Sequence[str] = (spoken.NAME,)) -> str:
+    """Something heard while she was talking: "echo" (her own voice through the speakers, or noise: she goes on),
+    "stop" (he only wanted her quiet) or "interrupt" (he says something new: she stops and listens)."""
+    if not text or speech.echo(text, said):
+        return "echo"
+    return "stop" if spoken.stop_word(text, names) else "interrupt"
 
 
 def junk(text: str, avg_logprob: float, no_speech: float) -> bool:
@@ -202,6 +216,8 @@ class Voice:
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
         self.gate = Gate(wake, names=self.names)
         self.heard_at = -1e9  # when something said to her last went through (the exchange is a spoken one)
+        self.speaker = None  # her voice out loud (speech.Speaker), to talk over her
+        self.on_interrupt: Callable[[], None] | None = None  # cancels her turn (runs from this thread)
         self.state = "off"  # off | loading | idle | listening | hearing | thinking
         self._whisper = None
         self._thread: threading.Thread | None = None
@@ -262,13 +278,34 @@ class Voice:
             self._emit(Heard(texto=texto, original=text, idioma=lang))
         self._log(seconds, said, lang, "pasó" if text else "no", texto, stt)
 
+    def _over_her(self, heard: tuple[str, str] | None, seconds: float, stt: float) -> tuple[str, str] | None:
+        """Something heard while she talked. Her own echo or noise: she goes on. A stop word: she stops. Anything
+        else: she stops, her turn is cancelled, and what he said goes on as the next thing in the conversation."""
+        sp = self.speaker
+        text, lang = heard or ("", "")
+        verdict = barge(heard and text, sp.recent(), self.names)
+        if verdict == "echo":
+            sp.duck(False)
+            if heard:
+                self._log(seconds, text, lang, "eco", "", stt)
+            return None
+        sp.stop()
+        sp.duck(False)
+        if self.on_interrupt:
+            self.on_interrupt()
+        self._log(seconds, text, lang, "cortó", "" if verdict == "stop" else text, stt)
+        if verdict == "stop":
+            return None
+        self.gate.converse(time.monotonic())  # he was talking to her: no name needed
+        return heard
+
     def note(self, line: str) -> None:
         """A line of hers in voz.log (her latency)."""
         if self.voice_log:
             self.voice_log.write(line)
 
     def _log(self, seconds: float, said: str, lang: str, decision: str, sent: str, stt: float) -> None:
-        if self.voice_log and loggable(said, decision == "pasó", self.names):
+        if self.voice_log and loggable(said, decision != "no", self.names):
             self.voice_log.write(f"{time.strftime('%H:%M:%S')}  {seconds:.1f}s  {lang}  [{decision}]  «{said}»"
                                  f"  → «{sent}»  (stt {stt:.2f}s)")
 
@@ -304,7 +341,7 @@ class Voice:
             self._set("loading")
             self._load()
             vad, seg, joiner = SileroVad(), Segmenter(self.silence_ms), Joiner()
-            level_at, lang, said_s, stt = 0.0, "es", 0.0, 0.0
+            level_at, lang, said_s, stt, ducked = 0.0, "es", 0.0, 0.0, False
             blocks: queue.Queue[np.ndarray] = queue.Queue()
             with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=CHUNK,
                                 callback=lambda data, *_: blocks.put(data[:, 0].copy())):
@@ -319,6 +356,9 @@ class Voice:
                     if seg.speaking and now - level_at >= LEVEL_EVERY_S:
                         level_at = now
                         self._emit(Level(fuente="mic", valor=level(chunk)))
+                    if not ducked and self.speaker and self.speaker.playing and seg.voiced_ms >= BARGE_MS:
+                        self.speaker.duck(True)  # he's talking over her: down at once, then see what it was
+                        ducked = True
                     if audio is None:
                         ready = None if seg.speaking else joiner.due(now)
                         if ready is None:
@@ -330,6 +370,9 @@ class Voice:
                         heard = self.transcribe(audio)
                         stt = time.perf_counter() - t
                         log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, stt, heard)
+                        if ducked or (self.speaker and self.speaker.playing):
+                            heard = self._over_her(heard, len(audio) / RATE, stt)
+                            ducked = False
                         if heard is None:
                             ready = joiner.due(float("inf"))  # noise after a hanging part: the part goes as it was
                         else:

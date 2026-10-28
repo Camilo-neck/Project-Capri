@@ -120,3 +120,17 @@ def test_a_finished_sentence(said):
     from app.spoken import dangling
 
     assert not dangling(said)
+
+
+@pytest.mark.parametrize("said", ["para", "Capri, para", "espera", "cállate", "stop", "ya, basta", "wait", "Para ya.", "shh"])
+def test_words_that_just_stop_her(said):
+    from app.spoken import stop_word
+
+    assert stop_word(said)
+
+
+@pytest.mark.parametrize("said", ["para mañana pon una alarma", "ya te dije que no", "espera que busco el clima", ""])
+def test_sentences_that_start_like_a_stop_but_say_more(said):
+    from app.spoken import stop_word
+
+    assert not stop_word(said)

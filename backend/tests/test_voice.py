@@ -195,3 +195,64 @@ def test_the_conversation_window_only_follows_a_spoken_exchange(monkeypatch):
     vo.heard_at = time.monotonic()
     vo.converse()
     assert vo.gate.armed(time.monotonic())
+
+
+def test_talking_over_her_echo_stop_or_interrupt():
+    from app.voice import barge
+
+    said = ["¡Listo! Ya te abrí Spotify.", "¿Quieres otra?"]
+    assert barge(None, said) == "echo"  # noise
+    assert barge("ya te abrí spotify", said) == "echo"  # her own voice through the speakers
+    assert barge("para", said) == "stop"
+    assert barge("mejor pon youtube", said) == "interrupt"
+
+
+def test_the_segmenter_counts_the_voice_in_what_it_hears():
+    seg = Segmenter(silence_ms=320, min_ms=100)
+    run(seg, [0.9] * 10)
+    assert 300 <= seg.voiced_ms < 340  # 10 chunks of 32 ms
+
+
+class Talking:
+    """A fake Speaker in the middle of a sentence."""
+
+    def __init__(self):
+        self.playing, self.stopped, self.gain = True, 0, []
+
+    def recent(self):
+        return ["¡Listo! Ya te abrí Spotify."]
+
+    def duck(self, on):
+        self.gain.append(on)
+
+    def stop(self):
+        self.stopped += 1
+        self.playing = False
+
+
+def test_over_her_echo_lets_her_go_on():
+    from app import voice as v
+
+    vo, cut = v.Voice(), []
+    vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    assert vo._over_her(("ya te abrí spotify", "es"), 1.0, 0.2) is None
+    assert vo.speaker.stopped == 0 and vo.speaker.gain == [False] and cut == []
+
+
+def test_over_her_a_stop_word_only_stops_her():
+    from app import voice as v
+
+    vo, cut = v.Voice(), []
+    vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    assert vo._over_her(("para", "es"), 0.5, 0.2) is None
+    assert vo.speaker.stopped == 1 and cut == [1]
+
+
+def test_over_her_something_new_cuts_her_and_goes_through_without_her_name():
+    from app import voice as v
+
+    vo, cut = v.Voice(), []
+    vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    assert vo._over_her(("mejor pon youtube", "es"), 1.0, 0.2) == ("mejor pon youtube", "es")
+    assert vo.speaker.stopped == 1 and cut == [1]
+    assert vo.gate.armed(time.monotonic())  # the window is open: the gate lets it through

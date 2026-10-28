@@ -53,6 +53,17 @@ def dangling(text: str) -> bool:
     return bool(words) and words[-1] in _HANGING
 
 
+# said over her, these only stop her: "para", "Capri, para", "ya, basta"
+_STOP = re.compile(r"(?:para|espera|esperate|callate|calla|silencio|shh+|basta|alto|stop|wait|hush|enough|ya)"
+                   r"(?: (?:para|ya|basta|stop|please|porfa|por favor))*")
+
+
+def stop_word(text: str, names: Sequence[str] = (NAME,)) -> bool:
+    """Words that only stop her, said alone (or with her name): not "para mañana pon una alarma"."""
+    rest = strip_wake(text, names)[1]
+    return bool(_STOP.fullmatch(plain(rest)))
+
+
 # spoken phrase (plain text) -> slash command, whole utterance. "{}" takes the rest.
 _EXACT: list[tuple[str, str]] = [
     (r"escondete|ocultate|desaparece|hide|hide yourself|go away", "/escondete"),

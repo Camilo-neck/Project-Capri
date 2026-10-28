@@ -63,6 +63,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             if speaker:
                 speaker.emit = lambda m: asyncio.run_coroutine_threadsafe(broadcast(m), loop)
                 speaker.on_first_audio = first_audio
+                voice.speaker = speaker  # so he can talk over her
+                voice.on_interrupt = lambda: loop.call_soon_threadsafe(orchestrator.interrupt)
             if voice.autostart:
                 voice.start()
                 if speaker and speaker.enabled:

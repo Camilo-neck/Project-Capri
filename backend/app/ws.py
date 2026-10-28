@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import settings
+from app import launch, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
                           Presence, Pressed, ServerMessage, TextInput, Voice as VoiceState, client_message)
@@ -97,6 +97,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             if voice and voice.state != "off":
                 await send(VoiceState(estado=voice.state))
             spawn(orchestrator.catch_up())  # summaries of sessions that ended with the app closed
+            tasks.add(asyncio.create_task(asyncio.to_thread(launch.launchables)))  # her apps and games, ahead of "abre X"
             if reminders:
                 tasks.add(asyncio.create_task(orchestrator.reminders(send)))
                 tasks.add(asyncio.create_task(orchestrator.chatter(send)))

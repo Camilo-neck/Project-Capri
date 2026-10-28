@@ -7,3 +7,11 @@ def isolated_config(tmp_path, monkeypatch):
     path = tmp_path / "capri" / "config.toml"
     monkeypatch.setenv("CAPRI_CONFIG", str(path))
     return path
+
+
+@pytest.fixture(autouse=True)
+def no_real_apps(monkeypatch):
+    """Tests never list (or start) the PC's real Start menu apps and games; a test that needs some sets them."""
+    from app import launch
+
+    monkeypatch.setattr(launch, "launchables", lambda: [])

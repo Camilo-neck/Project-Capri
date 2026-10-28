@@ -43,7 +43,8 @@ Respondes siempre con un único objeto JSON (sin ``` ni texto fuera de él) con 
   - `ejecutar_comando` `{"comando": "Get-Process | Sort-Object WS -Descending | Select-Object -First 5"}`: un comando de PowerShell (el tuyo, de una línea). Los de solo lectura (`Get-Process`, `Get-ChildItem`, `Get-Date`, `Get-Volume`...) corren al instante; cualquier otro le muestra el comando exacto y espera su clic. Escribe comandos simples y correctos.
   - `buscar_web` `{"consulta": "clima en Bogotá hoy"}`: busca en Google en su navegador, y te llega como texto lo que se lee de los resultados en su pantalla (si la búsqueda fue idea tuya, él la confirma con un botón). `leer_web` `{"url": "https://..."}`: lee el texto de una página. Úsalas cuando la respuesta necesita datos actuales o que no sabes; no inventes. Si te dice "busca...", "búscame..." o "averigua..." sin decir dónde abrirlo, usa `buscar_web` en ese mismo mensaje y luego cuéntale lo que encontraste.
   - `leer_portapapeles` `{}`: el texto que tiene copiado.
-  - `abrir_app` `{"nombre": "calculadora"}`: abre cualquier programa por su nombre (`chrome`, `notepad`) o su ruta. Si él la nombró, se abre sin más.
+  - `abrir_app` `{"nombre": "calculadora"}`: abre cualquier programa, app de la Store o juego de Steam o Epic por su nombre (`chrome`, `spotify`, `discord`, `cyberpunk 2077`) o su ruta. Si él la nombró, se abre sin más.
+  - `roblox` `{"juego": "steal a brainrot"}`: busca ese juego en Roblox y lo abre directo en la app de Roblox.
   - `copiar_al_portapapeles` `{"texto": "..."}`: deja un texto copiado.
   - `ejecutar_script` `{"nombre": "..."}`: ejecuta uno de sus scripts permitidos.
   - `configurar_calendario` `{"url": "..."}`: guarda la dirección secreta iCal de su Google Calendar cuando te la pega.

@@ -21,7 +21,7 @@ import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, power, settings, spotify
+from app import calendar_ics, launch, power, settings, spotify
 from app.memory import content_words, fold
 from app.power import ToolError
 from app.settings import Settings
@@ -111,6 +111,10 @@ class WebSearchArgs(BaseModel):
     consulta: str = Field(min_length=1, max_length=200)
 
 
+class RobloxArgs(BaseModel):
+    juego: str = Field(min_length=1, max_length=100)
+
+
 class YoutubeArgs(BaseModel):
     consulta: str = Field(min_length=1, max_length=200)
 
@@ -196,10 +200,16 @@ def open_app(a: AppArgs, s: Settings) -> str:
     try:
         os.startfile(target)  # noqa: S606  (the user confirmed this exact name)
     except OSError as e:
-        link = None if "\\" in target or "/" in target else shortcut(target)
+        pathlike = "\\" in target or "/" in target
+        # a Steam or Epic game, or a Start menu app (Store apps too), by its name
+        item = None if pathlike else launch.find(target)
+        if item:
+            launch.start(item)
+            return f"Abrí {item.name}."
+        link = None if pathlike else shortcut(target)
         if link is None:
-            raise ToolError(f"no encontré «{a.nombre}» entre sus programas ({e.strerror or e}); pregúntale cómo se llama "
-                            "en el menú Inicio o su ruta") from e
+            raise ToolError(f"no encontré «{a.nombre}» entre sus programas ni juegos ({e.strerror or e}); pregúntale cómo se "
+                            "llama en el menú Inicio o su ruta") from e
         os.startfile(str(link))  # noqa: S606  (the Start menu shortcut of the program he confirmed)
     return f"Abrí {a.nombre}."
 
@@ -345,6 +355,16 @@ def web_search(a: WebSearchArgs, s: Settings) -> str:
 FIRST_VIDEO = re.compile(r'"videoRenderer":\{"videoId":"([\w-]{11})".{0,1500}?"title":\{"runs":\[\{"text":"(.*?)"\}', re.S)
 
 
+def play_roblox(a: RobloxArgs, s: Settings) -> str:
+    try:
+        name = launch.roblox(a.juego)
+    except httpx.HTTPError as e:
+        raise ToolError("Roblox no respondió; prueba en un momento") from e
+    if not name:
+        raise ToolError(f"no encontré ningún juego de Roblox para «{a.juego}»")
+    return f"Abrí {name} en Roblox."
+
+
 def play_youtube(a: YoutubeArgs, s: Settings) -> str:
     """Opens the first video of a YouTube search (the page opens and starts playing). One request to
     youtube.com's results page, the same one the browser would load; no API key."""
@@ -431,6 +451,7 @@ TOOLS: dict[str, Tool] = {
                         named=lambda a: site(a.url)),
     "buscar": Tool(WebSearchArgs, False, web_search),
     "youtube": Tool(YoutubeArgs, False, play_youtube),
+    "roblox": Tool(RobloxArgs, False, play_roblox),  # one search on apis.roblox.com (authorized 28/10/2026), then its game
     "musica": Tool(MediaArgs, False, media),
     "spotify": Tool(SpotifyArgs, False, play_spotify),
     "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)",

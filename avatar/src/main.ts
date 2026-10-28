@@ -13,12 +13,14 @@ import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Styl
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
 import { IntroView } from "./render/intro.ts";
+import { Portrait } from "./render/portrait.ts";
+import { cutinFor, faceSquare, portraitFor } from "./state/faces.ts";
 import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { bigJob, panelFor, reaction, SPARK_GAP_MS, sparkFor, Tracker, type Panel } from "./state/claude.ts";
-import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
+import { CameraPlayer, type ShotName, shotFor, tagFor } from "./state/camera.ts";
 import { AwayWatch, backLine, speaksOnBack } from "./state/away.ts";
 import { Doze, sleepy, WAKE_MS } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
@@ -99,6 +101,9 @@ const doze = new Doze();
 const mask = new MaskView($<HTMLCanvasElement>("mask"), MASK_SCALE);
 const hideMask = new MaskView($<HTMLCanvasElement>("hide"), HIDE_SCALE);
 const camView = new CameraView($<HTMLCanvasElement>("cam-feed"));
+const portrait = new Portrait($<HTMLCanvasElement>("tx-face")); // her face by what she says
+let faceMoving = false; // its glitch is still playing: keep redrawing it
+let lastCutin = -Infinity;
 const camPlayer = new CameraPlayer();
 let camera = false; // camera mode: her close-ups in a transmission frame instead of her body
 
@@ -107,6 +112,7 @@ async function setCamera(on: boolean): Promise<void> {
   if (on) await camView.load();
   camera = on;
   cam.hidden = !on;
+  $("tx-face").hidden = on; // the feed already is her face
   pet.app.stage.visible = !on;
 }
 await setCamera(settings.camara);
@@ -629,6 +635,14 @@ const link = connect(
         // Also covers a retry: the new utterance replaces the text shown so far.
         if (avatar.setEmotion(msg.emocion) && !teleporting) glitch.kick(msg.emocion === "molesta" ? "hurt" : "change", now);
         avatar.playGesture(msg.gesto, now);
+        showFace(msg.emocion);
+        {
+          const shot = cutinFor(msg.emocion, msg.gesto, now, lastCutin, hiding || dnd || camera || fullscreen || reducedMotion.matches);
+          if (shot) {
+            lastCutin = now;
+            void cutin(shot);
+          }
+        }
         variant = Math.floor(Math.random() * 1000);
         typewriter.clear();
         txText.textContent = "";
@@ -830,12 +844,29 @@ async function victory(): Promise<void> {
   const b = body();
   glitch.kick("change", performance.now());
   fx.rush(b.x, b.y);
+  await cutin(Math.random() < 0.5 ? "risa" : "sonrisa");
+}
+
+/** An anime cut-in of her face from the show, pushed in by her, toward the middle of the screen. */
+async function cutin(shot: ShotName): Promise<void> {
+  const b = body();
   await camView.load();
-  const still = camView.still(Math.random() < 0.5 ? "risa" : "sonrisa", 1);
+  const still = camView.still(shot, 1);
   if (!still) return;
-  const dir = b.x > innerWidth / 2 ? -1 : 1; // toward the middle of the screen
+  const dir = b.x > innerWidth / 2 ? -1 : 1;
   const x = Math.min(Math.max(b.x + dir * 190, 140), innerWidth - 140);
   fx.cutin(x, Math.max(90, b.y - 140), still, dir);
+}
+
+/** Her portrait by what she says, glitching into the face of how she feels now. */
+function showFace(e: Emocion): void {
+  if (camera) return; // the feed already is her face
+  void camView.load().then(() => {
+    const p = portraitFor(e);
+    const still = camView.still(p.shot, p.index);
+    portrait.set(`${p.shot}:${p.index}`, still && faceSquare(still, p.shot), performance.now());
+    faceMoving = true;
+  });
 }
 
 /** An action with effects waits on a click: [1] do it (marked), [2] don't. Neither is preselected.
@@ -1334,6 +1365,7 @@ pet.app.ticker.add((ticker) => {
   drawMask(now);
   drawHide(now);
   drawClaude(now);
+  if (faceMoving) faceMoving = portrait.draw(now);
   // a fast drag must not slip off her; during her intro a click anywhere skips it
   const boxes: number[][] = dragging || intro.playing ? [[0, 0, innerWidth, innerHeight]] : [];
   if (!mask.canvas.hidden) boxes.push(mask.box());

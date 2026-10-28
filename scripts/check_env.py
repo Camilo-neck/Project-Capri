@@ -5,10 +5,13 @@ Loads the model into VRAM to verify it fits entirely on the GPU.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tomllib
 import urllib.request
+from pathlib import Path
 
 OLLAMA = "http://127.0.0.1:11434"
 MODEL = "qwen3-vl:8b-instruct"
@@ -16,6 +19,15 @@ NUM_CTX = 8192
 VRAM_BUDGET_MB = 15 * 1024
 
 failures = 0
+
+
+def voz() -> dict:
+    """The [voz] section of her config, if there is one."""
+    p = Path(os.environ.get("APPDATA", "")) / "Capri" / "config.toml"
+    try:
+        return tomllib.loads(p.read_text(encoding="utf-8")).get("voz", {})
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
 
 
 def report(ok: bool, label: str, detail: str = "") -> None:
@@ -51,6 +63,10 @@ def main() -> int:
     report(node is not None and int(node.lstrip("v").split(".")[0]) >= 20, "Node 20+", node or "not found")
     cargo = run("cargo", "--version")
     report(cargo is not None, "Rust (cargo)", cargo or "not found (open a new terminal after installing rustup)")
+    tts = Path(voz().get("carpeta_tts", r"D:\capri-models\tts"))
+    missing = [f for f in ("kokoro-v1.0.onnx", "voices-v1.0.bin") if not (tts / f).exists()]
+    report(not missing, "Voice model (Kokoro)", f"in {tts}" if not missing else
+           f"missing {', '.join(missing)}: run scripts/bench_voice.py once (she still works in text)")
 
     smi = run("nvidia-smi", "--query-gpu=name,driver_version,memory.total,memory.used", "--format=csv,noheader,nounits")
     if smi is None:

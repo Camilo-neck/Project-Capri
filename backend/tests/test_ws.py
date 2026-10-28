@@ -182,3 +182,109 @@ def test_the_end_of_a_turn_opens_the_conversation_window():
         ws.send_json({"type": "text_input", "text": "hola"})
         receive_turn(ws)
     assert voice.conversed == 1
+
+
+class FakeSpeaker:
+    def __init__(self):
+        self.seen, self.said, self.stops, self.afters = [], [], 0, []
+        self.enabled, self.playing, self.lang = True, False, "es"
+        self.speed, self.robot, self.glitch = 1.0, 0.0, 0.0
+        self.emit, self.on_first_audio = None, None
+
+    def see(self, msg):
+        self.seen.append(msg.type)
+
+    def say(self, text, force=False):
+        self.said.append((text, force))
+
+    def stop(self):
+        self.stops += 1
+
+    def after(self, cb):
+        self.afters.append(cb)
+
+    def warm(self):
+        pass
+
+
+def talking_app(voice_on=True):
+    voice, speaker = FakeVoice(), FakeSpeaker()
+    voice.on = voice_on
+    app = create_app(TOKEN, Orchestrator(demo_generate_factory(chunk_delay=0)), reminders=False, voice=voice, speaker=speaker)
+    return TestClient(app), voice, speaker
+
+
+def test_with_the_voice_on_her_turn_goes_to_her_voice_too():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        receive_turn(ws)
+    assert {"utterance_start", "text_delta", "utterance_end"} <= set(speaker.seen)
+    assert speaker.afters == [voice.converse]  # the conversation window opens once she's done talking
+    assert voice.conversed == 0
+
+
+def test_with_the_voice_off_she_only_writes():
+    client, voice, speaker = talking_app(voice_on=False)
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        receive_turn(ws)
+    assert speaker.seen == []
+
+
+def test_the_settings_panel_never_speaks():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        receive_turn(ws)
+    assert speaker.seen == []
+
+
+def test_a_new_message_of_his_stops_her_and_leaving_too():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        receive_turn(ws)
+        assert speaker.stops == 1
+    assert speaker.stops == 2  # the avatar went away
+
+
+def test_her_own_lines_out_loud():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "say", "texto": "¡Suerte!"})
+        ws.send_json({"type": "hotkey", "name": "nada"})  # a round trip, so the say has been handled
+        ws.send_json({"type": "model_get"})
+        while ws.receive_json()["type"] != "model_info":
+            pass
+    assert speaker.said == [("¡Suerte!", False)]
+
+
+def test_talking_out_loud_toggles_and_is_kept(monkeypatch, tmp_path):
+    from app import settings
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "hotkey", "name": "hablar"})
+        while (m := ws.receive_json())["type"] != "mode":
+            pass
+        assert m["hablar"] is False
+    assert not speaker.enabled and speaker.stops >= 1
+    assert settings.load().speak is False
+
+
+def test_the_panel_tunes_her_voice(monkeypatch, tmp_path):
+    from app import settings
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "voice_get"})
+        assert ws.receive_json() == {"type": "voice_info", "velocidad": 1.0, "robot": 0.0, "glitch": 0.0}
+        ws.send_json({"type": "voice_set", "velocidad": 1.2, "robot": 0.4, "glitch": 2, "probar": True})
+        assert ws.receive_json() == {"type": "voice_info", "velocidad": 1.2, "robot": 0.4, "glitch": 1.0}
+    assert (speaker.speed, speaker.robot, speaker.glitch) == (1.2, 0.4, 1.0)
+    assert speaker.said and speaker.said[0][1] is True  # "Probar" plays even with the voice off
+    s = settings.load()
+    assert (s.tts_speed, s.tts_robot, s.tts_glitch) == (1.2, 0.4, 1.0)

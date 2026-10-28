@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 
 use crate::{ollama, user_config};
 
-const PANEL: (f64, f64) = (340.0, 832.0);
+const PANEL: (f64, f64) = (340.0, 960.0); // taller than this scrolls (a 1080p work area is ~1030)
 
 /// The toggles by id, so the panel shows the real state when it opens and when a mode changes by other means.
 pub struct States(Mutex<HashMap<&'static str, bool>>);
@@ -100,6 +100,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ("claude", true),
         ("dnd", false),
         ("voz", false),
+        ("hablar", true), // the backend sends Mode when it is off
         ("camera", cfg.camara),
         ("style", cfg.estilo == "pixel"),
         ("deambular", cfg.deambular),

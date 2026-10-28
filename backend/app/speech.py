@@ -208,12 +208,20 @@ class Speaker:
                 for s in self._sentences.flush():
                     self._queue(s)
 
-    def say(self, text: str) -> None:
-        """A line of hers that didn't come from a turn (the avatar's own: a greeting, a reaction)."""
+    def say(self, text: str, force: bool = False) -> None:
+        """A line of hers that didn't come from a turn (the avatar's own: a greeting, a reaction); `force`: even
+        with her voice off (the panel's "Probar")."""
         self._started_at = time.perf_counter()
         lines = Sentences()
         for s in lines.feed(text) + lines.flush():
-            self._queue(s)
+            self._queue(s, force)
+
+    def warm(self) -> None:
+        """Loads the voice model ahead of her first reply (a second or two the first time)."""
+        try:
+            self.synth("Hola.", "es", self.speed)
+        except Exception:
+            log.exception("speech: the voice model didn't load")
 
     def stop(self) -> None:
         with self._lock:
@@ -245,9 +253,9 @@ class Speaker:
         since = time.monotonic() - (s or self.RECENT_S)
         return [text for at, text in self._said if at >= since]
 
-    def _queue(self, sentence: str) -> None:
+    def _queue(self, sentence: str, force: bool = False) -> None:
         text = clean(sentence)
-        if not text or not self.enabled:
+        if not text or not (self.enabled or force):
             return
         lang = lang_of(text) if len(text.split()) >= 4 else self.lang
         with self._lock:

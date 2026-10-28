@@ -40,6 +40,15 @@ export interface Mode {
   type: "mode";
   no_molestar: boolean;
   claude: boolean;
+  hablar: boolean; // with the voice on, she answers out loud
+}
+
+/** Her voice's touches (settings panel). */
+export interface VoiceInfo {
+  type: "voice_info";
+  velocidad: number;
+  robot: number;
+  glitch: number;
 }
 
 /** The microphone: idle waits for "hey Capri"; listening means the next sentence is for her. */
@@ -161,7 +170,23 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo;
+/** A line of the avatar's own (a greeting, a reaction): out loud too, if she's talking. */
+export interface Say {
+  type: "say";
+  texto: string;
+}
+// the tray's settings panel: her voice
+export interface VoiceGet {
+  type: "voice_get";
+}
+export interface VoiceSet {
+  type: "voice_set";
+  velocidad: number;
+  robot: number;
+  glitch: number;
+  probar: boolean; // play a line with them (even with the voice off)
+}
 // the tray's settings panel: her brain
 export interface ModelGet {
   type: "model_get";
@@ -182,4 +207,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet;

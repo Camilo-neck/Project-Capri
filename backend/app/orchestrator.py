@@ -76,6 +76,7 @@ class Orchestrator:
         self.idle_s = idle_s
         self.clock = clock  # one clock for everything time-based (tests set it)
         self.dnd = False  # do not disturb: she never speaks up on her own
+        self.hablar = True  # with the voice on she answers out loud (the speaker owns it; mirrored for Mode)
         self.away = False  # a fullscreen app is in front
         self.back = False  # just back from one
         self.last_user_at = clock()  # last time the user spoke to her
@@ -513,7 +514,7 @@ class Orchestrator:
     # ---- modes ----
 
     def mode(self) -> Mode:
-        return Mode(no_molestar=self.dnd, claude=self.claude.enabled)
+        return Mode(no_molestar=self.dnd, claude=self.claude.enabled, hablar=self.hablar)
 
     async def toggle_dnd(self, send: Send) -> None:
         self.dnd = not self.dnd

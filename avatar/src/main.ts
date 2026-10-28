@@ -563,6 +563,7 @@ function greetBack(line: () => { texto: string; emocion: Emocion }): void {
 
 /** A line of hers that no model wrote: shown and typed like a reply. */
 function sayLocal({ texto, emocion }: { texto: string; emocion: Emocion }): void {
+  link.send({ type: "say", texto }); // out loud too, if she's talking
   avatar.setEmotion(emocion);
   variant = Math.floor(Math.random() * 1000);
   typewriter.clear();
@@ -614,6 +615,9 @@ const VOICE_LABEL: Record<VoiceState, string> = {
   thinking: "ENTENDIENDO",
 };
 let voice: VoiceState = "off";
+let ttsAt = 0; // last level of her voice out loud (her mouth follows it, not the text)
+let ttsLevel = 0;
+const voiced = (now: number): boolean => now - ttsAt < 200;
 
 /** The status bar. The open microphone: a dot at rest, its words only while she's listening to you
  * (the mask carries it when she hides, the feed's tag in camera mode; see state/mic.ts). */
@@ -698,6 +702,7 @@ const link = connect(
         dnd = msg.no_molestar;
         trayCheck("dnd", dnd);
         trayCheck("claude", msg.claude);
+        trayCheck("hablar", msg.hablar);
         status.dataset.dnd = dnd ? "1" : "";
         setStatus(linkStatus);
         break;
@@ -712,6 +717,10 @@ const link = connect(
         break;
       case "level":
         if (msg.fuente === "mic") cam.style.setProperty("--lv", msg.valor.toFixed(2));
+        else {
+          ttsAt = now;
+          ttsLevel = msg.valor;
+        }
         break;
       case "heard":
         wakeUp();
@@ -1141,6 +1150,7 @@ void listen("dnd", () => link.send({ type: "hotkey", name: "no_molestar" }));
 // Tray menu: the items with no shortcut. Its ticks follow the real state through trayCheck.
 void listen("claude", () => link.send({ type: "hotkey", name: "claude" }));
 void listen("voz", () => link.send({ type: "hotkey", name: "voz" }));
+void listen("hablar", () => link.send({ type: "hotkey", name: "hablar" }));
 void listen("listen", () => link.send({ type: "hotkey", name: "escuchar" }));
 void listen("hide", () => (hiding ? unhide() : hide()));
 void listen<boolean>("quit", (e) => void quit(e.payload));
@@ -1518,6 +1528,13 @@ pet.app.ticker.add((ticker) => {
       if (inputRow.hidden) hideTimer = window.setTimeout(hideTx, HIDE_AFTER_MS);
     }
   }
+  if (voiced(now)) {
+    avatar.mouth = ttsLevel > 0.35 ? "A" : ttsLevel > 0.12 ? "E" : "closed";
+    lastTalk = now;
+  } else if (ttsAt && ended && !typewriter.pending && avatar.mouth !== null) {
+    avatar.mouth = null; // her voice just stopped
+    ttsAt = 0;
+  }
   if (!ended || typewriter.pending) lastTalk = now;
   petEnergy = Math.max(0, petEnergy - ticker.deltaMS * 0.08);
   if (flying) {
@@ -1570,7 +1587,7 @@ pet.app.ticker.add((ticker) => {
     look = [Math.max(-1, Math.min(1, (cursor[0] - hx) / LOOK_RANGE)), Math.max(-1, Math.min(1, (cursor[1] - hy) / LOOK_RANGE))];
   }
   const { name, pose } = director.frame(
-    { now: t, status: linkStatus === "looking" ? "thinking" : linkStatus, emocion: avatar.emocion, variant, lastTalk, pokeAt, petAt, greetAt },
+    { now: t, status: voiced(t) ? "speaking" : linkStatus === "looking" ? "thinking" : linkStatus, emocion: avatar.emocion, variant, lastTalk, pokeAt, petAt, greetAt },
     { look, petSide },
     { gesto: s.gesto, gestureT: s.gestureT, mouth: s.mouth, blinking: s.blinking },
   );

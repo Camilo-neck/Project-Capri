@@ -43,6 +43,7 @@ class Mode(BaseModel):
     type: Literal["mode"] = "mode"
     no_molestar: bool
     claude: bool = True
+    hablar: bool = True  # with the voice on, she answers out loud
 
 
 class ConfirmRequest(BaseModel):
@@ -86,6 +87,15 @@ class Level(BaseModel):
     type: Literal["level"] = "level"
     fuente: Literal["mic", "tts"]
     valor: float  # 0-1
+
+
+class VoiceInfo(BaseModel):
+    """Her voice's touches, for the settings panel."""
+
+    type: Literal["voice_info"] = "voice_info"
+    velocidad: float
+    robot: float
+    glitch: float
 
 
 class Heard(BaseModel):
@@ -184,7 +194,28 @@ class Action(BaseModel):
 
 
 ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
-                 | Voice | Level | Heard | ModelInfo | ModelProgress)
+                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo)
+class Say(BaseModel):
+    """A line of the avatar's own (a greeting, a reaction to the PC): out loud too, if she's talking."""
+
+    type: Literal["say"] = "say"
+    texto: str = Field(max_length=500)
+
+
+class VoiceGet(BaseModel):
+    type: Literal["voice_get"] = "voice_get"
+
+
+class VoiceSet(BaseModel):
+    """The panel's sliders; `probar` plays a line with them (even with the voice off)."""
+
+    type: Literal["voice_set"] = "voice_set"
+    velocidad: float
+    robot: float
+    glitch: float
+    probar: bool = False
+
+
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"
 
@@ -208,6 +239,7 @@ class ModelPull(BaseModel):
     nombre: str
 
 
-ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull,
+ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
+                          | Say | VoiceGet | VoiceSet,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import secrets
+import time
 from collections.abc import Coroutine
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
@@ -10,7 +11,9 @@ from app.orchestrator import Orchestrator, recover
 from app import launch, pcsense, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          PcEvent, Presence, Pressed, ServerMessage, State, TextInput, Voice as VoiceState, client_message)
+                          Heard, PcEvent, Presence, Pressed, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
+                          VoiceSet, Voice as VoiceState, client_message)
+from app.speech import Speaker
 from app.voice import Voice
 
 log = logging.getLogger(__name__)
@@ -25,7 +28,8 @@ async def model_info(error: str = "") -> ModelInfo:
                      claves={p: bool(providers.key(p)) for p in providers.ENV}, error=error)
 
 
-def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, voice: Voice | None = None) -> FastAPI:
+def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, voice: Voice | None = None,
+               speaker: Speaker | None = None) -> FastAPI:
     """`reminders`: run the background loops (calendar reminders, speaking up unasked); off in tests."""
     app = FastAPI()
     clients: set = set()  # the `send` of each connected avatar, for what arrives from outside the socket
@@ -33,12 +37,36 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
     async def broadcast(msg: ServerMessage) -> None:
         await asyncio.gather(*(send(msg) for send in list(clients)), return_exceptions=True)
 
+    heard_at = [-1e9]  # when something said to her last went through (her latency, in voz.log)
+    if speaker:
+        orchestrator.hablar = speaker.enabled
+
+    async def from_voice(msg: ServerMessage) -> None:
+        if speaker and isinstance(msg, Heard):
+            speaker.lang = msg.idioma or speaker.lang
+            heard_at[0] = time.perf_counter()
+        await broadcast(msg)
+
+    def first_audio(_: float) -> None:
+        after = time.perf_counter() - heard_at[0]
+        if voice and after < 30:
+            voice.note(f"{time.strftime('%H:%M:%S')}  su voz {after:.2f}s después de tu frase")
+
+    def talks() -> bool:
+        return bool(voice and speaker and voice.on and speaker.enabled)
+
     @app.on_event("startup")
     async def start_voice() -> None:
         if voice:
-            voice.attach(asyncio.get_running_loop(), broadcast)
+            loop = asyncio.get_running_loop()
+            voice.attach(loop, from_voice)
+            if speaker:
+                speaker.emit = lambda m: asyncio.run_coroutine_threadsafe(broadcast(m), loop)
+                speaker.on_first_audio = first_audio
             if voice.autostart:
                 voice.start()
+                if speaker and speaker.enabled:
+                    asyncio.create_task(asyncio.to_thread(speaker.warm))
 
     @app.post("/claude/event")
     async def claude_event(request: Request) -> Response:
@@ -72,8 +100,11 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
         panel = ws.query_params.get("panel") == "1"
 
         async def send(msg: ServerMessage) -> None:
+            if not panel and talks():
+                speaker.see(msg)  # her voice follows the reply as it streams
             if voice and not panel and isinstance(msg, State) and msg.value == "idle":
-                voice.converse()  # her turn is over: a spoken exchange goes on without her name
+                # her turn is over: a spoken exchange goes on without her name (once she's done talking)
+                speaker.after(voice.converse) if talks() else voice.converse()
             await ws.send_text(msg.model_dump_json())
 
         # Turns run as tasks, one at a time, so this loop keeps reading: a turn waiting on a
@@ -95,7 +126,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
 
         if not panel:
             clients.add(send)
-            if orchestrator.dnd or not orchestrator.claude.enabled:  # the avatar starts assuming dnd is off and Claude mode on
+            # the avatar starts assuming dnd off, Claude mode and talking on
+            if orchestrator.dnd or not orchestrator.claude.enabled or not orchestrator.hablar:
                 await send(orchestrator.mode())
             if voice and voice.state != "off":
                 await send(VoiceState(estado=voice.state))
@@ -126,6 +158,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                     continue
                 match msg:
                     case TextInput(text=text):
+                        if speaker and not panel:
+                            speaker.stop()  # a new message of his: she stops talking and listens
                         spawn(orchestrator.turn(text, send))
                     case Look(text=text, rect=rect):
                         spawn(orchestrator.look(text, rect, send))
@@ -141,6 +175,29 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         await orchestrator.toggle_claude(send)
                     case Hotkey(name="voz") if voice:
                         voice.toggle()
+                        if speaker and not voice.on:
+                            speaker.stop()
+                        elif speaker and speaker.enabled:
+                            tasks.add(asyncio.create_task(asyncio.to_thread(speaker.warm)))  # her voice ready for the first reply
+                    case Hotkey(name="hablar") if speaker:
+                        speaker.enabled = orchestrator.hablar = not speaker.enabled
+                        if not speaker.enabled:
+                            speaker.stop()
+                        settings.set_value("voz", "hablar", speaker.enabled)
+                        await broadcast(orchestrator.mode())
+                    case Say(texto=texto) if talks() and not panel:
+                        speaker.say(texto)
+                    case VoiceGet() if speaker:
+                        await send(VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch))
+                    case VoiceSet() as v if speaker:
+                        speaker.speed = min(1.5, max(0.7, v.velocidad))
+                        speaker.robot, speaker.glitch = (min(1.0, max(0.0, x)) for x in (v.robot, v.glitch))
+                        for key, value in (("velocidad", speaker.speed), ("robot", speaker.robot), ("glitch", speaker.glitch)):
+                            settings.set_value("voz", key, value)
+                        await send(VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch))
+                        if v.probar:
+                            speaker.stop()
+                            speaker.say("¡Hola! Así sueno ahora, ¿te gusta?", force=True)
                     case Hotkey(name="escuchar") if voice:
                         voice.listen_now()
                     case Hotkey(name=name):
@@ -169,6 +226,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             clients.discard(send)
             if not panel:
                 orchestrator.cancel_pending()
+                if speaker:
+                    speaker.stop()
             for task in tasks:
                 task.cancel()
 

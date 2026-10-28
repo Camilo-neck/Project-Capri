@@ -36,7 +36,12 @@
         </label>
         <label class="row" data-id="voz">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5 11a7 7 0 0014 0M12 18v3" /></svg></span>
-          <span class="txt"><b>Voz</b><small>Escúchame: di «hey Capri» (es / en)</small></span>
+          <span class="txt"><b>Voz</b><small>Escúchame: di «Capri» (es / en)</small></span>
+          <input type="checkbox" /><i class="sw"></i>
+        </label>
+        <label class="row" data-id="hablar">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11" /></svg></span>
+          <span class="txt"><b>Hablar</b><small>Con la voz activa, te contesta en voz alta</small></span>
           <input type="checkbox" /><i class="sw"></i>
         </label>
         <label class="row" data-id="camera">
@@ -66,6 +71,14 @@
         </div>
         <div id="pull-bar" class="bar" hidden><i></i></div>
         <small id="brain-note" class="note"></small>
+      </section>
+
+      <section id="voice">
+        <h2>Su voz</h2>
+        <label class="slider"><span>Velocidad</span><input id="v-speed" type="range" min="0.7" max="1.5" step="0.05" /><output></output></label>
+        <label class="slider"><span>Robótica</span><input id="v-robot" type="range" min="0" max="1" step="0.05" /><output></output></label>
+        <label class="slider"><span>Glitch</span><input id="v-glitch" type="range" min="0" max="1" step="0.05" /><output></output></label>
+        <button id="v-try" class="mini wide">Probar</button>
       </section>
 
       <section>

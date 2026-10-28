@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import face from "../assets/faces/grin.png";
-import type { ModelInfo, ServerMessage } from "./net/protocol.ts";
+import type { ModelInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
@@ -92,8 +92,24 @@ function render(error = info?.error ?? ""): void {
   }[shown] || "";
 }
 
+// ---- her voice: speed and her digital touches ----
+const sliders = { velocidad: $<HTMLInputElement>("v-speed"), robot: $<HTMLInputElement>("v-robot"), glitch: $<HTMLInputElement>("v-glitch") };
+
+function showVoice(v: VoiceInfo): void {
+  for (const [k, input] of Object.entries(sliders)) {
+    input.value = String(v[k as keyof typeof sliders]);
+    input.nextElementSibling!.textContent = k === "velocidad" ? `${Number(input.value).toFixed(2)}×` : `${Math.round(Number(input.value) * 100)} %`;
+  }
+}
+
+function sendVoice(probar: boolean): void {
+  const n = (k: keyof typeof sliders) => Number(sliders[k].value);
+  link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), probar });
+}
+
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
-  if (m.type === "model_info") {
+  if (m.type === "voice_info") showVoice(m);
+  else if (m.type === "model_info") {
     const first = !info;
     info = m;
     if (first) shown = m.proveedor;
@@ -105,8 +121,20 @@ const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&pan
     note.className = "note";
     note.textContent = `${m.nombre}: ${m.estado}${m.total ? ` · ${(m.completado / 1e9).toFixed(1)} / ${(m.total / 1e9).toFixed(1)} GB` : ""}`;
   }
-}, (up) => up && link.send({ type: "model_get" }));
-void getCurrentWindow().onFocusChanged(({ payload }) => payload && link.send({ type: "model_get" }));
+}, (up) => {
+  if (up) {
+    link.send({ type: "model_get" });
+    link.send({ type: "voice_get" });
+  }
+});
+void getCurrentWindow().onFocusChanged(({ payload }) => {
+  if (payload) {
+    link.send({ type: "model_get" });
+    link.send({ type: "voice_get" });
+  }
+});
+for (const input of Object.values(sliders)) input.addEventListener("change", () => sendVoice(false));
+$("v-try").addEventListener("click", () => sendVoice(true));
 
 prov.addEventListener("click", (e) => {
   const p = (e.target as HTMLElement).closest<HTMLElement>("button")?.dataset.prov;

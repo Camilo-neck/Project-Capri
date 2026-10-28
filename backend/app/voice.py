@@ -262,6 +262,11 @@ class Voice:
             self._emit(Heard(texto=texto, original=text, idioma=lang))
         self._log(seconds, said, lang, "pasó" if text else "no", texto, stt)
 
+    def note(self, line: str) -> None:
+        """A line of hers in voz.log (her latency)."""
+        if self.voice_log:
+            self.voice_log.write(line)
+
     def _log(self, seconds: float, said: str, lang: str, decision: str, sent: str, stt: float) -> None:
         if self.voice_log and loggable(said, decision == "pasó", self.names):
             self.voice_log.write(f"{time.strftime('%H:%M:%S')}  {seconds:.1f}s  {lang}  [{decision}]  «{said}»"

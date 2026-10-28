@@ -25,11 +25,13 @@ pub struct Avatar {
     pub camara: bool,
     /// She reacts to the PC: processor, charger, battery, network, USB sticks, devices, games (the backend reads it).
     pub reaccionar_pc: bool,
+    /// With several screens, she follows the pointer to the one it stays on.
+    pub seguir_pantallas: bool,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true, seguir_pantallas: true }
     }
 }
 

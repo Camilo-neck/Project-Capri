@@ -156,7 +156,7 @@ pub fn watch(app: tauri::AppHandle) {
         std::thread::sleep(Duration::from_millis(100));
         let Some(w) = app.get_webview_window("main") else { continue };
         if tick % 20 == 0 {
-            let area = w.primary_monitor().ok().flatten().map(|m| (m.work_area().position, m.work_area().size, *m.size()));
+            let area = crate::her_monitor(&w).ok().flatten().map(|m| (m.work_area().position, m.work_area().size, *m.size()));
             if area.is_some() && area != last_area {
                 if last_area.is_some() {
                     let _ = crate::fit(&w);

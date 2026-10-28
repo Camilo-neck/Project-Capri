@@ -16,6 +16,7 @@ import { IntroView } from "./render/intro.ts";
 import { Portrait } from "./render/portrait.ts";
 import { cutinFor, faceSquare, portraitFor } from "./state/faces.ts";
 import { reaction as pcReaction } from "./state/pc.ts";
+import { Follow, sideOf } from "./state/screens.ts";
 import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
@@ -89,7 +90,7 @@ const intro = new IntroView($<HTMLCanvasElement>("intro"), {
   rush: (x, y) => fx.rush(x, y),
 });
 const director = new Director();
-type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean };
+type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean };
 const settings = await invoke<AvatarSettings>("avatar_settings");
 let style: Style = settings.estilo === "pixel" ? "pixel" : "original";
 let sleepAfter = settings.dormir_min * 60_000;
@@ -578,7 +579,10 @@ function setStatus(s: Status): void {
       guardTimer = window.setTimeout(guardOff, 5000);
     }
   }
-  if (s === "thinking" && linkStatus === "idle" && !awaiting) startTurn(""); // she speaks up on her own
+  if (s === "thinking" && linkStatus === "idle" && !awaiting) {
+    startTurn(""); // she speaks up on her own (a reminder, a greeting): where he is
+    void comeToHim();
+  }
   if (s === "idle") awaiting = false;
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
   if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
@@ -675,6 +679,7 @@ const link = connect(
         break;
       case "confirm_request":
         showChoices(msg.id, msg.texto, msg.riesgo === "alto");
+        void comeToHim(); // the question is for him: on his screen
         break;
       case "mode":
         dnd = msg.no_molestar;
@@ -712,6 +717,7 @@ const link = connect(
 function onClaude(msg: ClaudeEvent, now: number): void {
   claudeTrack.push(msg, now);
   if (msg.estado === "termino") claudeDone = { project: msg.project, at: Date.now() };
+  if (msg.estado === "necesita") void comeToHim(); // Claude asks him something: she comes to his screen
   const react = reaction(msg);
   const free = !hiding && !dnd && !teleporting && !possessing && !falling && !dragging && !peek;
   if (react && free) {
@@ -909,6 +915,60 @@ async function onPc(e: PcEvent): Promise<void> {
     fx.burst(b.x, b.y, b.size, true);
   }
   sayLocal(r);
+}
+
+// ---- several screens: she follows the pointer to the one it stays on (state/screens.ts) ----
+
+type Screens = { rects: [number, number, number, number][]; here: number; cursor: number };
+const follow = new Follow();
+let following = false;
+
+setInterval(async () => {
+  if (following || hiding || fullscreen || busy()) return;
+  const s = await invoke<Screens | null>("screens").catch(() => null);
+  if (!s || s.rects.length < 2) return;
+  if (follow.tick(s.cursor, s.here, performance.now()) && (await invoke<AvatarSettings>("avatar_settings")).seguir_pantallas) {
+    await goToScreen(s);
+  }
+}, 500);
+
+/** Something needs him (a confirmation, a reminder, Claude asking, her own word): she comes to his screen now. */
+async function comeToHim(): Promise<void> {
+  if (following || hiding || fullscreen) return;
+  const s = await invoke<Screens | null>("screens").catch(() => null);
+  if (s && s.rects.length > 1 && s.cursor !== s.here) await goToScreen(s);
+}
+
+/** To the pointer's screen: through the edge if it's right next to hers (she jumps out of this one and comes
+ *  out of a tear on the other), else her usual teleport. */
+async function goToScreen(s: Screens): Promise<void> {
+  const rect = ([x, y, w, h]: [number, number, number, number]) => ({ x, y, w, h });
+  const side = sideOf(rect(s.rects[s.here]), rect(s.rects[s.cursor]));
+  following = teleporting = true;
+  const from = body();
+  if (!reducedMotion.matches) {
+    if (side) {
+      const to = { x: side === "right" ? innerWidth : side === "left" ? 0 : from.x, y: side === "bottom" ? innerHeight : side === "top" ? 0 : from.y };
+      fx.streak(from.x, from.y, to.x, to.y);
+    }
+    glitch.kick("vanish", performance.now());
+    fx.burst(from.x, from.y, from.size * 0.6, false);
+    await sleep(VANISH_OUT_MS);
+  }
+  await invoke("go_to_screen", { i: s.cursor });
+  await sleep(150); // the overlay moved and resized
+  perch = null;
+  const half = hud.offsetWidth / 2 + EDGE;
+  const x = side === "right" ? half + 40 : side === "left" ? innerWidth - half - 40 : innerWidth / 2;
+  at = { x: Math.min(Math.max(x, half), innerWidth - half), y: floor() };
+  placeHud();
+  if (!reducedMotion.matches) {
+    const there = body();
+    if (side === "left" || side === "right") fx.crack(side === "right" ? EDGE : innerWidth - EDGE, there.y); // the tear she came out of
+    glitch.kick("arrive", performance.now());
+    fx.burst(there.x, there.y, there.size, true);
+  }
+  following = teleporting = false;
 }
 
 /** Her portrait by what she says, glitching into the face of how she feels now. */

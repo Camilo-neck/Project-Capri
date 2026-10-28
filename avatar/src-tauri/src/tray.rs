@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 
 use crate::{ollama, user_config};
 
-const PANEL: (f64, f64) = (340.0, 776.0);
+const PANEL: (f64, f64) = (340.0, 832.0);
 
 /// The toggles by id, so the panel shows the real state when it opens and when a mode changes by other means.
 pub struct States(Mutex<HashMap<&'static str, bool>>);
@@ -42,7 +42,7 @@ pub fn tray_states(states: tauri::State<States>) -> HashMap<&'static str, bool> 
 pub fn tray_action(id: String, app: AppHandle) {
     match id.as_str() {
         "open-input" => focus_input(&app),
-        "deambular" | "poseer_ventanas" | "reaccionar_pc" => {
+        "deambular" | "poseer_ventanas" | "reaccionar_pc" | "seguir_pantallas" => {
             let on = !app.state::<States>().0.lock().unwrap().get(id.as_str()).copied().unwrap_or(true);
             set_state(&app, &id, on);
             // the frontend reads the key the next time she wanders, the backend every few seconds
@@ -105,6 +105,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ("deambular", cfg.deambular),
         ("poseer_ventanas", cfg.poseer_ventanas),
         ("reaccionar_pc", cfg.reaccionar_pc),
+        ("seguir_pantallas", cfg.seguir_pantallas),
     ]))));
 
     let panel = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))

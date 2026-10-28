@@ -41,11 +41,26 @@ fn set_hitboxes(boxes: Vec<[f64; 4]>, mouse: tauri::State<Mouse>) {
     *mouse.hitboxes.lock().unwrap() = boxes;
 }
 
-/// The overlay: the primary monitor's work area plus BELOW_GROUND over the taskbar. Not the whole
+/// The monitor she's on, by its position (physical px); None: the primary one.
+#[derive(Default)]
+struct Screen(Mutex<Option<(i32, i32)>>);
+
+/// The monitor she's on: the one she followed the pointer to, or the primary (also when that one is gone).
+pub(crate) fn her_monitor(w: &WebviewWindow) -> tauri::Result<Option<tauri::Monitor>> {
+    let chosen = *w.app_handle().state::<Screen>().0.lock().unwrap();
+    if let Some((x, y)) = chosen {
+        if let Some(m) = w.available_monitors()?.into_iter().find(|m| m.position().x == x && m.position().y == y) {
+            return Ok(Some(m));
+        }
+    }
+    w.primary_monitor()
+}
+
+/// The overlay: her monitor's work area plus BELOW_GROUND over the taskbar. Not the whole
 /// monitor, or Windows would take it for a fullscreen app and push the taskbar behind it.
 /// Fitted at start and again when the screen or the taskbar changes (win_watch::watch).
 pub(crate) fn fit(w: &WebviewWindow) -> tauri::Result<()> {
-    let Some(m) = w.primary_monitor()? else { return Ok(()) };
+    let Some(m) = her_monitor(w)? else { return Ok(()) };
     let scale = m.scale_factor();
     let area = m.work_area();
     let pos = area.position.to_logical::<f64>(scale);
@@ -54,6 +69,42 @@ pub(crate) fn fit(w: &WebviewWindow) -> tauri::Result<()> {
     let height = (work.height + BELOW_GROUND).min(screen_bottom - pos.y);
     w.set_position(LogicalPosition::new(pos.x, pos.y))?;
     w.set_size(LogicalSize::new(work.width, height))
+}
+
+#[derive(Serialize)]
+struct Screens {
+    rects: Vec<[i32; 4]>, // each monitor, physical px: x, y, width, height
+    here: usize,          // the one she's on
+    cursor: usize,        // the one the pointer is on
+}
+
+/// The monitors, hers and the pointer's (she follows it, see state/screens.ts).
+#[tauri::command]
+fn screens(app: tauri::AppHandle) -> Option<Screens> {
+    let w = app.get_webview_window("main")?;
+    let ms = w.available_monitors().ok()?;
+    let here = her_monitor(&w).ok()??;
+    let c = app.cursor_position().ok()?;
+    let inside = |m: &tauri::Monitor| {
+        let (p, s) = (m.position(), m.size());
+        c.x >= p.x as f64 && c.y >= p.y as f64 && c.x < (p.x + s.width as i32) as f64 && c.y < (p.y + s.height as i32) as f64
+    };
+    Some(Screens {
+        rects: ms.iter().map(|m| [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32]).collect(),
+        here: ms.iter().position(|m| m.position() == here.position()).unwrap_or(0),
+        cursor: ms.iter().position(inside).unwrap_or(0),
+    })
+}
+
+/// She moves to monitor `i`: the overlay is fitted there and raised.
+#[tauri::command]
+fn go_to_screen(i: usize, app: tauri::AppHandle) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let Some(m) = w.available_monitors().ok().and_then(|ms| ms.into_iter().nth(i)) else { return };
+    *app.state::<Screen>().0.lock().unwrap() = Some((m.position().x, m.position().y));
+    let _ = fit(&w);
+    let _ = w.set_always_on_top(false);
+    let _ = w.set_always_on_top(true);
 }
 
 /// After sleep Windows may have moved the screen or dropped her place on top: fit and raise her again.
@@ -158,11 +209,14 @@ pub fn run() {
         .manage(Config { ws_url })
         .manage(Backend(Mutex::new(child)))
         .manage(Mouse::default())
+        .manage(Screen::default())
         .manage(win_watch::Latest::default())
         .invoke_handler(tauri::generate_handler![
             config,
             set_hitboxes,
             refit,
+            screens,
+            go_to_screen,
             win_watch::windows,
             win_watch::idle_ms,
             win_watch::look_target,

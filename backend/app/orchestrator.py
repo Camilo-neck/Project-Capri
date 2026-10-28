@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app import calendar_ics, claude_link, presence, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
-from app.memory import Memory, fold, words
+from app.memory import Memory, content_words, fold
 from app.protocol import Action, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
 
@@ -23,7 +23,8 @@ Summarize = Callable[[str], Awaitable[str]]
 LOOK_DEFAULT = "Mira mi pantalla y dime qué ves."
 MAX_ACTIONS = 5  # tool calls per turn
 CONFIRM_S = 60  # an unanswered confirmation counts as "no"
-TRIM_AT = 5000  # context tokens (of 8192): past this, the older half of the conversation becomes a summary
+TRIM_AT = 6000  # context tokens (of 8192; the persona alone is ~3.8k): past this, the older half becomes a summary
+TAIL_HOURS, TAIL_MESSAGES = 3, 6  # a restart within this keeps that many messages of the last conversation
 TRANSCRIPT_MAX = 12_000  # chars of a past session handed to the summarizer
 ASKED_MAX = 120  # chars of his request repeated with a tool result
 # What these bring in may be written by someone else (a page, a file, a program's output): once one
@@ -47,8 +48,10 @@ class Orchestrator:
         self.summarize = summarize
         self.memory = memory or Memory()
         self.session = self.memory.new_session()
-        self.history: list[dict] = []
+        # back soon after closing (or a crash): she still has the end of that conversation
+        self.history: list[dict] = self.memory.recent_tail(self.session, TAIL_HOURS, TAIL_MESSAGES)
         self.running = ""  # summary of the part of this conversation trimmed off the history
+        self.spoke = False  # he has written to her in this session (her own turns don't count)
         self.ctx = 0  # context tokens of the last reply
         self.lock = asyncio.Lock()  # one turn at a time (user turns, looks and reminders)
         self.pending: dict[str, asyncio.Future[bool]] = {}  # confirmation id -> answer
@@ -123,7 +126,7 @@ class Orchestrator:
         self.add("user", f"[captura de pantalla] {text}" if image else text)
         await send(State(value="thinking"))
         denied = False
-        first = not own and not self.running and sum(self.starts_turn(m) for m in self.history) == 1
+        first, self.spoke = not own and not self.spoke, self.spoke or not own
         for step in range(MAX_ACTIONS + 1):
             r = await self.say(send, image, query=text, first=first and step == 0, own=own)
             if r.accion is None:
@@ -354,11 +357,19 @@ class Orchestrator:
         Also drops what mentions them from this conversation and the stored ones, so it can't come back.
         Returns "done", "none" or "declined"."""
         everything = fold(query.strip()) == "todo"
+        terms = content_words(query)  # whole words, no "que": "/olvida que me gusta el café" wiped "¿Que hora es?"
         matches = [] if everything else self.memory.search(query, limit=10)
-        if not everything and not matches:
+        msgs, sums = ([], []) if everything else self.memory.mentioning(terms)
+        if not everything and not (matches or msgs or sums):
             return "none"
-        what = ("Olvidar todo lo que recuerdo de ti (recuerdos y resúmenes)" if everything else
-                f"Olvidar {len(matches)} recuerdo{'s' if len(matches) > 1 else ''}: " + "; ".join(f"«{t}»" for _, t, _ in matches))
+        if everything:
+            what = "Olvidar todo lo que recuerdo de ti (recuerdos y resúmenes)"
+        else:
+            said = [f"{len(msgs)} mensaje{'s' if len(msgs) != 1 else ''}"] * bool(msgs) + \
+                   [f"{len(sums)} resumen{'es' if len(sums) != 1 else ''}"] * bool(sums)
+            where = f"lo que dicen {' y '.join(said)} de conversaciones" if said else ""
+            what = (f"Olvidar {len(matches)} recuerdo{'s' if len(matches) > 1 else ''}: " + "; ".join(f"«{t}»" for _, t, _ in matches)
+                    + (f" (y {where})" if where else "") if matches else f"Olvidar {where} sobre «{query.strip()}»")
         ok = await self.ask(what, send)
         tools.audit({"accion": "olvidar", "pregunta": what, "confirmado": ok})
         if not ok:
@@ -369,11 +380,9 @@ class Orchestrator:
             self.running = ""
             return "done"
         self.memory.forget([i for i, _, _ in matches])
-        terms = words(query)
         self.memory.scrub(terms)
-        folded = [fold(t) for t in terms]
-        self.history = [m for m in self.history if not any(t in fold(m["content"]) for t in folded)]
-        if any(t in fold(self.running) for t in folded):
+        self.history = [m for m in self.history if not terms & content_words(m["content"])]
+        if terms & content_words(self.running):
             self.running = ""
         return "done"
 
@@ -395,8 +404,8 @@ class Orchestrator:
         old, self.history = self.history[:cut], self.history[cut:]
         prior = f"Resumen previo: {self.running}\n\n" if self.running else ""
         try:
+            # only for this conversation: the session's own summary is made from all of it once it ends (catch_up)
             self.running = await self.summarize(prior + transcript(old))
-            self.memory.set_summary(self.session, self.running)
         except Exception:
             log.exception("summary failed; the older messages are dropped without one")
         self.ctx = 0
@@ -408,8 +417,6 @@ class Orchestrator:
 
     async def catch_up(self) -> None:
         """Summarizes earlier sessions that ended (app closed) before getting a summary."""
-        # ponytail: a session that was trimmed keeps only its running summary; what came after
-        # the last trim isn't folded in. Resummarize from the stored messages if that matters.
         for sid, msgs in self.memory.unsummarized(self.session):
             text = transcript([{"role": r, "content": c} for r, c in msgs])[-TRANSCRIPT_MAX:]
             try:
@@ -419,14 +426,7 @@ class Orchestrator:
 
 
 def transcript(messages: list[dict]) -> str:
-    """The conversation as plain lines, for the summarizer (Capri's replies as their text only)."""
-    lines = []
-    for m in messages:
-        if m["role"] == "assistant":
-            try:
-                lines.append(f"Capri: {Reply.model_validate_json(m['content']).texto}")
-            except ValidationError:
-                continue
-        elif not m["content"].startswith("[resultado de"):
-            lines.append(f"Usuario: {m['content']}")
-    return "\n".join(lines)
+    """What he said, as plain lines, for the summarizer. Not her lines: her offers and what she saw on
+    his screen ended up in the summaries as facts; nor tool results or her automatic prompts."""
+    return "\n".join(f"Usuario: {m['content']}" for m in messages
+                     if m["role"] == "user" and not m["content"].startswith(("[resultado de", "[aviso automático")))

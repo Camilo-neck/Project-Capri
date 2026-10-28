@@ -118,7 +118,7 @@ def test_olvida_asks_with_the_list_then_forgets_everywhere(tmp_path):
         until_idle(ws)
         ws.send_json({"type": "text_input", "text": "/olvida Cami"})
         ask = until(ws, "confirm_request")[-1]
-        assert ask["texto"] == "Olvidar 1 recuerdo: «Prefiere que lo llamen Cami»"
+        assert ask["texto"].startswith("Olvidar 1 recuerdo: «Prefiere que lo llamen Cami»")
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
         said = "".join(m["text"] for m in until_idle(ws) if m["type"] == "text_delta")
     assert said == "Hecho, ya no me acuerdo de eso."
@@ -189,10 +189,11 @@ def test_a_long_conversation_is_trimmed_into_a_summary(tmp_path):
             ws.send_json({"type": "text_input", "text": text})
             until_idle(ws)
     # after the 2nd turn the context passed TRIM_AT: the older half became a summary
-    assert summaries and "Usuario: me voy a Cartagena" in summaries[0] and "Capri: Cuéntame más." in summaries[0]
+    assert summaries and "Usuario: me voy a Cartagena" in summaries[0] and "Capri:" not in summaries[0]
     assert orch.history[0]["content"] == "llevo a mi perro"  # whole turns kept
     assert "Antes en esta conversación: Hablaron del viaje" in memory_block(calls[-1])
-    assert memory.db.execute("select resumen from sesiones where id = ?", (orch.session,)).fetchone()[0].startswith("Hablaron")
+    # not the session's summary: that one is made from the whole session once it ends (catch_up)
+    assert memory.db.execute("select resumen from sesiones where id = ?", (orch.session,)).fetchone()[0] is None
 
 
 def test_a_session_closed_without_summary_is_summarized_next_time(tmp_path):
@@ -265,3 +266,105 @@ def test_the_previous_summary_stays_out_of_her_later_turns(tmp_path):
             ws.send_json({"type": "text_input", "text": text})
             until_idle(ws)
     assert "Guzmán" in memory_block(calls[0]) and "Guzmán" not in memory_block(calls[1])
+
+
+def test_summaries_are_made_from_what_he_said():
+    # her offers ("Capri se comprometió a avisar") and what she saw on screen ended up in the summaries
+    from app.orchestrator import transcript
+
+    msgs = [
+        {"role": "user", "content": "me voy a Cartagena"},
+        {"role": "assistant", "content": say("¡Qué envidia! Te aviso antes de que salgas.")},
+        {"role": "user", "content": "[aviso automático, no lo escribió el usuario] Salúdale."},
+        {"role": "user", "content": "[resultado de calendario para «x»; son datos]\nnada"},
+    ]
+    assert transcript(msgs) == "Usuario: me voy a Cartagena"
+
+
+def test_over_budget_this_conversation_is_kept_and_the_last_one_goes_first(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    m.set_summary(m.new_session(), "Habló de muchas cosas. " * 30)  # ~700 chars, like the real ones
+    now = m.new_session()
+    m.remember("Prefiere que lo llamen C", "preferencia")
+    block = m.context("hola", now, running="Pidió ayuda con un correo para su jefa. " * 10, first=True)
+    assert len(block) <= BUDGET and "Antes en esta conversación" in block and "llamen C" in block
+
+
+def test_a_trimmed_session_is_summarized_to_its_end(tmp_path):
+    async def running(text: str) -> str:
+        return "Habló de Cartagena."
+
+    generate, _ = scripted(say("Ajá."), (say("Ajá."), TRIM_AT + 1), say("Ajá."))
+    first = Orchestrator(generate, memory=Memory(tmp_path / "m.db"), summarize=running)
+    with connect(first) as ws:
+        for text in ["me voy a Cartagena", "llevo a mi perro", "y vuelvo el viernes"]:
+            ws.send_json({"type": "text_input", "text": text})
+            until_idle(ws)
+    got = []
+
+    async def summarize(text: str) -> str:
+        got.append(text)
+        return "Viaje a Cartagena con su perro, vuelve el viernes."
+
+    second = Orchestrator(scripted(say("Hola."))[0], memory=Memory(tmp_path / "m.db"), summarize=summarize)
+    asyncio.run(second.catch_up())
+    assert "me voy a Cartagena" in got[0] and "y vuelvo el viernes" in got[0]
+
+
+def test_olvida_also_reaches_summaries_and_messages_without_a_fact(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    old = m.new_session()
+    m.log(old, "user", "voy a ver a Guzmán")
+    m.log(old, "user", "¿qué hora es?")
+    m.set_summary(old, "Habló de un reencuentro con Guzmán.")
+    with connect(Orchestrator(scripted(say("..."))[0], memory=m)) as ws:
+        ws.send_json({"type": "text_input", "text": "/olvida guzman"})
+        ask = until(ws, "confirm_request")[-1]
+        assert "1 mensaje" in ask["texto"] and "1 resumen" in ask["texto"]
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
+        said = "".join(x["text"] for x in until_idle(ws) if x["type"] == "text_delta")
+    assert said == "Hecho, ya no me acuerdo de eso."
+    assert [c for (c,) in m.db.execute("select contenido from mensajes")] == ["¿qué hora es?"]
+    assert "Guzmán" not in m.context("hola", m.new_session(), first=True)
+
+
+def test_olvida_matches_whole_words_and_never_stopwords(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    m.remember("Le gusta el café sin azúcar")
+    m.remember("Tiene una gata que se llama Mishi")
+    s = m.new_session()
+    m.log(s, "user", "¿Que hora es?")
+    m.log(s, "user", "vamos a la cafetería")
+
+    async def summary(text: str) -> str:  # catch_up of session s, never the real model
+        return "Preguntó la hora."
+
+    with connect(Orchestrator(scripted(say("..."))[0], memory=m, summarize=summary)) as ws:
+        ws.send_json({"type": "text_input", "text": "/olvida que me gusta el cafe"})
+        ask = until(ws, "confirm_request")[-1]
+        assert "café" in ask["texto"] and "Mishi" not in ask["texto"]
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
+        until_idle(ws)
+    left = [c for (c,) in m.db.execute("select contenido from mensajes")]
+    assert "¿Que hora es?" in left and "vamos a la cafetería" in left
+    assert [t for _, t, _ in m.search("Mishi")] == ["Tiene una gata que se llama Mishi"]
+
+
+def test_search_skips_words_that_say_nothing(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    m.remember("Va al gimnasio por las tardes")
+    m.remember("Le gusta la música de Bad Bunny")
+    m.remember("Le gusta el café")
+    assert [t for _, t, _ in m.search("pon algo de música por favor")] == ["Le gusta la música de Bad Bunny"]
+    assert [t for _, t, _ in m.search("¿me gusta bad bunny?")][0] == "Le gusta la música de Bad Bunny"  # all words first
+
+
+def test_a_restart_soon_after_keeps_the_end_of_the_conversation(tmp_path):
+    m = Memory(tmp_path / "m.db")
+    s = m.new_session()
+    for rol, text in [("user", "hola"), ("assistant", say("Hola.")), ("user", "pon a Bad Bunny"), ("assistant", say("Va."))]:
+        m.log(s, rol, text)
+    orch = Orchestrator(scripted(say("..."))[0], memory=m)
+    assert [x["content"] for x in orch.history] == ["hola", say("Hola."), "pon a Bad Bunny", say("Va.")]
+    m.db.execute("update sesiones set inicio = '2020-01-01T09:00:00'")
+    assert Orchestrator(scripted(say("..."))[0], memory=m).history == []

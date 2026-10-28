@@ -7,7 +7,7 @@
 import re
 import sqlite3
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app import settings
@@ -86,16 +86,21 @@ class Memory:
             )
 
     def search(self, query: str, limit: int = MAX_FACTS) -> list[tuple[int, str, str]]:
-        """(id, texto, tipo) of the facts that best match any word of `query`."""
-        terms = words(query)
+        """(id, texto, tipo) of the facts that best match `query`: all its words if any fact has them, else any.
+        Words that say nothing ("por", "que") are left out: "por favor" brought up "va al gimnasio por las tardes"."""
+        terms = sorted(content_words(query))
         if not terms:
             return []
-        match = " OR ".join('"' + t.replace('"', "") + '"' for t in terms)
-        return self.db.execute(
-            "select r.id, r.texto, r.tipo from recuerdos_fts f join recuerdos r on r.id = f.rowid "
-            "where recuerdos_fts match ? order by bm25(recuerdos_fts) limit ?",
-            (match, limit),
-        ).fetchall()
+        quoted = ['"' + t.replace('"', "") + '"' for t in terms]
+        for match in dict.fromkeys((" AND ".join(quoted), " OR ".join(quoted))):
+            rows = self.db.execute(
+                "select r.id, r.texto, r.tipo from recuerdos_fts f join recuerdos r on r.id = f.rowid "
+                "where recuerdos_fts match ? order by bm25(recuerdos_fts) limit ?",
+                (match, limit),
+            ).fetchall()
+            if rows:
+                return rows
+        return []
 
     def preferences(self) -> list[str]:
         return [t for (t,) in self.db.execute("select texto from recuerdos where tipo = 'preferencia' order by id")]
@@ -111,16 +116,19 @@ class Memory:
             self.db.execute("delete from mensajes")
             self.db.execute("update sesiones set resumen = null")
 
-    def scrub(self, terms: list[str]) -> None:
+    def mentioning(self, terms: set[str]) -> tuple[list[int], list[int]]:
+        """Ids of the stored messages and of the sessions whose summary say any of `terms` (folded whole words)."""
+        says = lambda text: bool(terms & set(re.findall(r"\w+", fold(text))))  # noqa: E731
+        msgs = [i for i, c in self.db.execute("select id, contenido from mensajes") if says(c)]
+        sums = [i for i, r in self.db.execute("select id, resumen from sesiones where resumen != ''") if says(r)]
+        return msgs, sums
+
+    def scrub(self, terms: set[str]) -> None:
         """Drops stored messages and summaries mentioning any of `terms`, so a forgotten fact can't come back."""
-        folded = [fold(t) for t in terms]
+        msgs, sums = self.mentioning(terms)
         with self.db:
-            for mid, contenido in self.db.execute("select id, contenido from mensajes").fetchall():
-                if any(t in fold(contenido) for t in folded):
-                    self.db.execute("delete from mensajes where id = ?", (mid,))
-            for sid, resumen in self.db.execute("select id, resumen from sesiones where resumen != ''").fetchall():
-                if any(t in fold(resumen) for t in folded):
-                    self.db.execute("update sesiones set resumen = '' where id = ?", (sid,))  # '' = nothing to keep
+            self.db.executemany("delete from mensajes where id = ?", [(i,) for i in msgs])
+            self.db.executemany("update sesiones set resumen = '' where id = ?", [(i,) for i in sums])  # '' = nothing to keep
 
     # ---- sessions ----
 
@@ -142,6 +150,17 @@ class Memory:
             (before,),
         ).fetchone()
         return row[0] if row else None
+
+    def recent_tail(self, before: int, hours: float, n: int) -> list[dict]:
+        """The last turns of the previous session if it started less than `hours` ago (a restart mid-talk)."""
+        row = self.db.execute("select id, inicio from sesiones where id < ? order by id desc limit 1", (before,)).fetchone()
+        if not row or datetime.now() - datetime.fromisoformat(row[1]) > timedelta(hours=hours):
+            return []
+        msgs = [{"role": r, "content": c} for r, c in
+                self.db.execute("select rol, contenido from mensajes where sesion = ? order by id desc limit ?", (row[0], n))][::-1]
+        while msgs and (msgs[0]["role"] != "user" or msgs[0]["content"].startswith("[")):
+            msgs.pop(0)  # start where he spoke
+        return msgs
 
     def unsummarized(self, before: int) -> list[tuple[int, list[tuple[str, str]]]]:
         """Earlier sessions with messages but no summary yet (the app closed mid-session)."""
@@ -174,12 +193,16 @@ class Memory:
 
         def dated(ids: list[int]) -> list[str]:
             """Dated, and a "hoy" or "mañana" noted another day is left out: it already passed."""
-            rows = self.db.execute(f"select texto, creado from recuerdos where id in ({','.join('?' * len(ids))}) order by id", ids)
-            return [f"- {t} (anotado el {c[8:10]}/{c[5:7]})" for t, c in rows if c[:10] == today or not RELATIVE.search(t)]
+            rows = {i: (t, c) for i, t, c in self.db.execute(
+                f"select id, texto, creado from recuerdos where id in ({','.join('?' * len(ids))})", ids)}
+            pairs = [rows[i] for i in dict.fromkeys(ids) if i in rows]  # in the order given: the best match first
+            return [f"- {t} (anotado el {c[8:10]}/{c[5:7]})" for t, c in pairs if c[:10] == today or not RELATIVE.search(t)]
 
-        prefs = [i for (i,) in self.db.execute("select id from recuerdos where tipo = 'preferencia'")]
+        # Most important first, since what doesn't fit is cut from the end: this conversation, what he
+        # likes and the facts that match, then the last conversation.
+        parts = [f"Antes en esta conversación: {running}"] if running else []
+        prefs = [i for (i,) in self.db.execute("select id from recuerdos where tipo = 'preferencia' order by id")]
         lines = dated(prefs + [i for i, _, tipo in self.search(query) if tipo == "hecho"])
-        parts = []
         if lines:
             parts.append("Lo que recuerdas del usuario:\n" + "\n".join(lines))
         previous = None if own else self.last_summary(session)
@@ -188,7 +211,5 @@ class Memory:
         if previous and (first or stems(query) & stems(previous)):
             when = self.db.execute("select inicio from sesiones where resumen = ? order by id desc", (previous,)).fetchone()[0]
             parts.append(f"Vuestra última conversación, el {when[8:10]}/{when[5:7]} (ya pasó: no la retomes si él no la saca): {previous}")
-        if running:
-            parts.append(f"Antes en esta conversación: {running}")
         block = "\n".join(parts)
         return block if len(block) <= BUDGET else block[:BUDGET].rsplit("\n", 1)[0]

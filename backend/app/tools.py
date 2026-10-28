@@ -28,7 +28,7 @@ from app.settings import Settings
 MAX_RESULTS = 20
 MAX_SCANNED = 300_000  # files looked at per search
 SEARCH_S = 10  # seconds a file search may take
-MAX_TEXT = 4000  # chars of tool output handed to the model
+MAX_TEXT = 3000  # chars of tool output handed to the model (~800 tokens: one page read must not force a trim)
 
 SETUP_STEPS = (
     "El calendario no está configurado. Pasos para el usuario: en calendar.google.com, Configuración (rueda "

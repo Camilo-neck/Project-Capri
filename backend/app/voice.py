@@ -28,7 +28,6 @@ LEVEL_EVERY_S = 0.066  # the mic meter in camera mode, ~15 Hz
 LANGS = ("es", "en")
 # what Whisper writes over silence and noise
 HALLUCINATIONS = ("amara.org", "thanks for watching", "gracias por ver", "subtitulos", "subtítulos", "suscríbete", "like and subscribe")
-PROMPT = "Capri. Hey Capri. Oye Capri."
 
 
 class Segmenter:
@@ -126,7 +125,33 @@ def level(chunk: np.ndarray) -> float:
 
 def junk(text: str, avg_logprob: float, no_speech: float) -> bool:
     low = text.lower()
-    return len(text.strip()) < 2 or no_speech > 0.6 or avg_logprob < -1.2 or any(h in low for h in HALLUCINATIONS)
+    # a word or two ("Capri", "para") reads as likelier silence than a sentence does: a looser bar for them
+    bar = 0.8 if len(text.split()) <= 2 else 0.6
+    return len(text.strip()) < 2 or no_speech > bar or avg_logprob < -1.2 or any(h in low for h in HALLUCINATIONS)
+
+
+class Joiner:
+    """A sentence cut at a pause ("pon algo de…" / "bad bunny") is held a moment for the rest. Pure:
+    `add` takes what Whisper read and returns what is ready (or None to wait); `due` lets out what waited."""
+
+    def __init__(self, wait_s: float = 1.2):
+        self.wait = wait_s
+        self.held: str | None = None
+        self.at = 0.0
+
+    def add(self, text: str, now: float) -> str | None:
+        if self.held is not None:
+            text, self.held = f"{self.held} {text}", None
+        if spoken.dangling(text):
+            self.held, self.at = text, now
+            return None
+        return text
+
+    def due(self, now: float) -> str | None:
+        if self.held is None or now - self.at < self.wait:
+            return None
+        text, self.held = self.held, None
+        return text
 
 
 def cuda_dlls() -> None:
@@ -218,9 +243,18 @@ class Voice:
         self.gate.arm(time.monotonic())
         self._set("listening")
 
-    def _log(self, seconds: float, heard: tuple[str, str], decision: str, sent: str, stt: float) -> None:
-        if self.voice_log and loggable(heard[0], decision == "pasó", self.names):
-            self.voice_log.write(f"{time.strftime('%H:%M:%S')}  {seconds:.1f}s  {heard[1]}  [{decision}]  «{heard[0]}»"
+    def _pass(self, said: str, lang: str, seconds: float, stt: float) -> None:
+        """A whole sentence: through the gate and, if it was for her, to the avatar."""
+        text = self.gate.decide(said, time.monotonic())
+        texto = ""
+        if text:
+            texto = text if self.gate.chat else spoken.to_command(text)
+            self._emit(Heard(texto=texto, original=text, idioma=lang))
+        self._log(seconds, said, lang, "pasó" if text else "no", texto, stt)
+
+    def _log(self, seconds: float, said: str, lang: str, decision: str, sent: str, stt: float) -> None:
+        if self.voice_log and loggable(said, decision == "pasó", self.names):
+            self.voice_log.write(f"{time.strftime('%H:%M:%S')}  {seconds:.1f}s  {lang}  [{decision}]  «{said}»"
                                  f"  → «{sent}»  (stt {stt:.2f}s)")
 
     def _load(self):
@@ -236,7 +270,8 @@ class Voice:
     def transcribe(self, audio: np.ndarray) -> tuple[str, str] | None:
         """(text, language) of an utterance, Spanish or English; None for noise."""
         model = self._load()
-        opts = dict(beam_size=1, condition_on_previous_text=False, initial_prompt=PROMPT, vad_filter=False)
+        # hotwords, not a prompt: over music or noise Whisper wrote the prompt itself ("Capri. Hey Capri.")
+        opts = dict(beam_size=1, condition_on_previous_text=False, hotwords=" ".join(self.names), vad_filter=False)
         segments, info = model.transcribe(audio, language=None, **opts)
         if info.language not in LANGS:  # it only speaks these two: the likelier of them
             probs = dict(info.all_language_probs or [])
@@ -253,8 +288,8 @@ class Voice:
         try:
             self._set("loading")
             self._load()
-            vad, seg = SileroVad(), Segmenter(self.silence_ms)
-            level_at = 0.0
+            vad, seg, joiner = SileroVad(), Segmenter(self.silence_ms), Joiner()
+            level_at, lang, said_s, stt = 0.0, "es", 0.0, 0.0
             blocks: queue.Queue[np.ndarray] = queue.Queue()
             with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=CHUNK,
                                 callback=lambda data, *_: blocks.put(data[:, 0].copy())):
@@ -270,22 +305,26 @@ class Voice:
                         level_at = now
                         self._emit(Level(fuente="mic", valor=level(chunk)))
                     if audio is None:
-                        self._set("hearing" if seg.speaking else "listening" if self.gate.armed(now) else "idle")
-                        continue
-                    self._set("thinking")
-                    t = time.perf_counter()
-                    heard = self.transcribe(audio)
-                    stt = time.perf_counter() - t
-                    log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, stt, heard)
-                    text = heard and self.gate.decide(heard[0], time.monotonic())
-                    texto = ""
-                    if text:
-                        texto = text if self.gate.chat else spoken.to_command(text)
-                        self._emit(Heard(texto=texto, original=text, idioma=heard[1]))
-                    if heard:
-                        self._log(len(audio) / RATE, heard, "pasó" if text else "no", texto, stt)
+                        ready = None if seg.speaking else joiner.due(now)
+                        if ready is None:
+                            self._set("hearing" if seg.speaking else "listening" if self.gate.armed(now) else "idle")
+                            continue
+                    else:
+                        self._set("thinking")
+                        t = time.perf_counter()
+                        heard = self.transcribe(audio)
+                        stt = time.perf_counter() - t
+                        log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, stt, heard)
+                        if heard is None:
+                            ready = joiner.due(float("inf"))  # noise after a hanging part: the part goes as it was
+                        else:
+                            said_s = said_s + len(audio) / RATE if joiner.held else len(audio) / RATE
+                            lang = heard[1]
+                            ready = joiner.add(heard[0], time.monotonic())
+                    if ready:
+                        self._pass(ready, lang, said_s, stt)
                     # what piled up while it was reading stays queued: it's the next thing he said
-                    self._set("listening" if self.gate.armed(time.monotonic()) else "idle")
+                    self._set("listening" if self.gate.armed(time.monotonic()) or joiner.held else "idle")
         except Exception:
             log.exception("voice stopped")
         finally:

@@ -151,3 +151,22 @@ def test_the_gate_answers_to_her_other_names():
     g = Gate(names=("capri", "nova"))
     assert g.decide("nova", 0) is None
     assert g.armed(1)
+
+
+def test_a_sentence_cut_at_a_pause_is_joined_back():
+    from app.voice import Joiner
+
+    j = Joiner(wait_s=1.2)
+    assert j.add("pon algo de", 0) is None
+    assert j.add("bad bunny", 0.8) == "pon algo de bad bunny"
+    assert j.add("abre la", 2) is None
+    assert j.due(2.5) is None
+    assert j.due(3.3) == "abre la"  # nothing came: it goes as it was
+    assert j.due(4) is None
+    assert j.add("hola", 5) == "hola"  # a finished sentence goes at once
+
+
+def test_a_lone_short_word_is_not_noise():
+    assert not junk("Capri", -0.5, 0.7)
+    assert junk("Capri", -0.5, 0.85)
+    assert junk("abre spotify por favor ya", -0.5, 0.7)  # longer: the usual bar

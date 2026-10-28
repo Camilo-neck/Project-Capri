@@ -39,6 +39,20 @@ def strip_wake(text: str, names: Sequence[str] = (NAME,)) -> tuple[bool, str]:
     return False, text
 
 
+# words a sentence doesn't end on: cut there, it was a pause, not the end ("pon algo de… bad bunny")
+_HANGING = {"y", "de", "del", "que", "la", "el", "los", "las", "en", "a", "al", "con", "pon", "abre", "busca", "para", "por",
+            "un", "una", "the", "and", "to", "of", "play", "open"}
+
+
+def dangling(text: str) -> bool:
+    """A sentence left hanging: it ends on "…", a comma or a word nothing ends on."""
+    t = text.strip()
+    if t.endswith(("…", "...", ",")):
+        return True
+    words = plain(t).split()
+    return bool(words) and words[-1] in _HANGING
+
+
 # spoken phrase (plain text) -> slash command, whole utterance. "{}" takes the rest.
 _EXACT: list[tuple[str, str]] = [
     (r"escondete|ocultate|desaparece|hide|hide yourself|go away", "/escondete"),

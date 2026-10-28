@@ -106,3 +106,17 @@ def test_other_names_she_answers_to():
     assert strip_wake("oye cap, pon música", names=("capri", "cap")) == (True, "pon música")
     assert strip_wake("pon música, nova", names=("capri", "nova")) == (True, "pon música")
     assert strip_wake("oye cap, pon música")[0] is False  # only when it's in [voz] nombres
+
+
+@pytest.mark.parametrize("said", ["pon...", "pon…", "abre la", "busca el clima en", "play the", "pon algo de,"])
+def test_a_sentence_left_hanging(said):
+    from app.spoken import dangling
+
+    assert dangling(said)
+
+
+@pytest.mark.parametrize("said", ["abre spotify", "¿qué hora es?", "Capri", ""])
+def test_a_finished_sentence(said):
+    from app.spoken import dangling
+
+    assert not dangling(said)

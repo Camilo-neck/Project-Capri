@@ -136,3 +136,12 @@ def test_offers_tacked_on_are_dropped():
     shown = [drop_filler(full[:n]) for n in range(len(full) + 1)]
     assert all(b.startswith(a) for a, b in zip(shown, shown[1:]))
     assert shown[-1] == "Abierto.  Y ya."
+
+
+def test_every_tool_she_has_is_in_her_prompt_and_it_stays_short():
+    # a tool she isn't told about is one she never uses; a long prompt eats the 8192-token context
+    from app import tools
+    from app.llm.client import SYSTEM_PROMPT
+
+    assert [t for t in tools.TOOLS if f"`{t}`" not in SYSTEM_PROMPT] == []
+    assert len(SYSTEM_PROMPT) < 11_000

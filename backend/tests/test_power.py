@@ -114,6 +114,15 @@ def test_search_results_come_with_title_address_and_snippet():
     assert power.search("tauri", http) == "¿Qué es Tauri?\nhttps://tauri.app/\nUn framework & más"
 
 
+def test_a_blocked_search_is_not_taken_for_no_results():
+    # DuckDuckGo answered every search with a bot challenge; she told him the streamer's name was wrong
+    challenge = "<p>Unfortunately, bots use DuckDuckGo too. Please complete the following challenge</p><form class='anomaly'>"
+    http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(202, text=challenge)))
+    with pytest.raises(power.ToolError, match="bloque") as e:
+        power.search("westcol kick", http)
+    assert "no encontré" not in str(e.value) and "buscar" in str(e.value)  # she can still open it in his browser
+
+
 # ---- through the orchestrator: who asks, and how ----
 
 

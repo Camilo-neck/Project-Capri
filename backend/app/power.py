@@ -228,6 +228,9 @@ def search(query: str, http: httpx.Client | None = None) -> str:
     http = http or httpx.Client(timeout=12, headers=UA)
     r = http.post("https://html.duckduckgo.com/html/", data={"q": query}, follow_redirects=True)
     r.raise_for_status()
+    if r.status_code == 202 or "anomaly" in r.text:  # its bot challenge: not "nothing found"
+        raise ToolError("el buscador (DuckDuckGo) me está bloqueando con un captcha; no es que no exista. "
+                        "Ábrele la búsqueda en su navegador con `buscar` y díselo")
     links = re.findall(r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S)
     snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', r.text, re.S)
     rows = []

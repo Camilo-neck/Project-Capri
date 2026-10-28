@@ -51,9 +51,17 @@ def test_searches_open_fixed_sites_without_asking(opened):
 
 
 def test_a_search_on_any_other_site_goes_through_google(opened):
-    # "busca el stream de westcol en kick" was refused: only youtube, google and spotify were allowed
-    tools.web_search(tools.WebSearchArgs(sitio="Kick", consulta="westcol"), settings.Settings())
-    assert opened == ["https://www.google.com/search?q=westcol%20Kick"]
+    # "busca ideas en pinterest" was refused: only youtube, google and spotify were allowed
+    tools.web_search(tools.WebSearchArgs(sitio="pinterest", consulta="disfraces"), settings.Settings())
+    assert opened == ["https://www.google.com/search?q=disfraces%20pinterest"]
+
+
+def test_a_streamer_on_kick_or_twitch_opens_their_channel(opened):
+    # he had to paste kick.com/lacobraaa himself
+    tools.web_search(tools.WebSearchArgs(sitio="Kick", consulta="LACOBRAAA"), settings.Settings())
+    tools.web_search(tools.WebSearchArgs(sitio="kick.com", consulta="westcol"), settings.Settings())
+    tools.web_search(tools.WebSearchArgs(sitio="twitch", consulta="Auron Play"), settings.Settings())
+    assert opened == ["https://kick.com/lacobraaa", "https://kick.com/westcol", "https://www.twitch.tv/auronplay"]
 
 
 def test_media_keys(monkeypatch):

@@ -310,8 +310,15 @@ SEARCH_URLS = {
 }
 
 
+# a streamer "on Kick" is their channel: the address is the name, lowercase and without spaces
+CHANNEL_URLS = {"kick": "https://kick.com/{}", "twitch": "https://www.twitch.tv/{}"}
+
+
 def web_search(a: WebSearchArgs, s: Settings) -> str:
-    site = a.sitio.strip().lower()
+    site = a.sitio.strip().lower().split(".")[0]  # "kick.com" is kick
+    if site in CHANNEL_URLS:
+        os.startfile(CHANNEL_URLS[site].format(quote(re.sub(r"\s+", "", a.consulta.lower()))))  # noqa: S606  (fixed sites)
+        return f"Abrí el canal de «{a.consulta}» en {site.capitalize()}."
     url = SEARCH_URLS[site].format(quote(a.consulta)) if site in SEARCH_URLS else \
         SEARCH_URLS["google"].format(quote(f"{a.consulta} {a.sitio.strip()}"))
     os.startfile(url)  # noqa: S606  (fixed sites)

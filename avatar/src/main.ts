@@ -26,7 +26,8 @@ import { Doze, sleepy, WAKE_MS } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ResumeWatch, resumeLine, TICK_MS } from "./state/resume.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
-import { ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { canSit, ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { type Flight, type Hit, launch, step, Temper, thrown, Velocity } from "./state/throw.ts";
 import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget, type Zap } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
 
@@ -144,6 +145,11 @@ const latencies: number[] = [];
 let teleporting = false;
 let possessing: { since: number } | null = null; // the "peligro" eyes, before she dives in
 let falling: { vy: number } | null = null;
+let flying: Flight | null = null; // thrown: in the air (state/throw.ts)
+const velocity = new Velocity(); // the pointer while she's dragged: how hard she's thrown
+const temper = new Temper();
+let dizzyUntil = 0; // landed flat: seeing stars until then
+let madPending = false; // thrown once too often: she'll say so once she lands
 let press: { x: number; y: number; dx: number; dy: number } | null = null; // pointer down on her
 let dragging = false;
 const claudeTrack = new Tracker();
@@ -172,7 +178,8 @@ function wanderGap(): number {
 }
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const busy = () => teleporting || !!possessing || !!falling || dragging || doze.asleep || !!peek || hiding || intro.playing;
+const busy = () => teleporting || !!possessing || !!falling || !!flying || performance.now() < dizzyUntil || dragging || doze.asleep || !!peek
+  || hiding || intro.playing;
 const floor = () => innerHeight - BELOW;
 /** Room a ledge needs above it: her and the transmission, which stack above her feet. */
 const room = () => hud.offsetHeight - BELOW;
@@ -1166,7 +1173,7 @@ function headOnPage(): [number, number] {
 
 /** The show's art: hanging while dragged or falling, sitting on windows, the jaw while she talks. */
 function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [ClipFrame | null, number | null] {
-  if (dragging || falling) return [{ clip: "dangle", index: Math.floor(now / 100) % 24 }, null];
+  if (dragging || falling || flying) return [{ clip: "dangle", index: Math.floor(now / 100) % 24 }, null];
   if (possessing) return [{ clip: perch ? "perch_glitch" : "glitch", index: Math.min(9, Math.floor((now - possessing.since) / 90)) }, null];
   const mouth = talking ? mouthCell(avatar.mouth ?? "closed", base) : null;
   if (perch && base && PERCHED[base.clip]) return [{ clip: PERCHED[base.clip], index: base.index }, null];
@@ -1178,9 +1185,23 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 stage.addEventListener("pointerdown", (e) => {
   if (doze.asleep) return wakeUp(); // the feed showing her mask
   if (peek && !teleporting) return void hopPeek(null); // caught peeking: back to her spot
-  if (e.button !== 0 || busy()) return;
-  activeAt = performance.now();
+  if (e.button !== 0) return;
+  const now = performance.now();
+  if (!temper.canGrab(now) && !busy()) { // thrown once too often: hands off for a while
+    glitch.kick("poke", now);
+    zapCursor();
+    sayLocal({ texto: "¡Ni se te ocurra!", emocion: "molesta" });
+    return;
+  }
+  const caught = !!flying; // caught in the air: back in his hand
+  if (!caught && busy()) return;
+  flying = null;
+  activeAt = now;
   press = { x: e.clientX, y: e.clientY, dx: at.x - e.clientX, dy: at.y - e.clientY };
+  if (caught) {
+    dragging = true;
+    glitch.kick("change", now);
+  }
   stage.setPointerCapture(e.pointerId);
 });
 stage.addEventListener("pointerup", () => {
@@ -1189,12 +1210,85 @@ stage.addEventListener("pointerup", () => {
   press = null;
   dragging = false;
   if (dragged) {
-    drop();
+    const v = velocity.get(performance.now());
+    if (thrown(v) && !reducedMotion.matches) throwHer(v);
+    else drop();
     return;
   }
   pokeAt = performance.now();
   if (!teleporting) glitch.kick("poke", pokeAt);
 });
+
+/** Let go mid-swing: she flies off with the pointer's speed (state/throw.ts). */
+function throwHer(v: { vx: number; vy: number }): void {
+  const now = performance.now();
+  perch = null;
+  flying = launch(at, v);
+  const mood = temper.thrown(now);
+  if (mood === "mad") madPending = true;
+  else if (mood === "again") avatar.setEmotion("sorprendida");
+  else if (Math.random() < 0.5) sayLocal({ texto: Math.random() < 0.5 ? "¡Wiiii!" : "¡Allá voooy!", emocion: "emocionada" });
+}
+
+/** Where her feet can go while she flies, and the windows' top edges she can catch. */
+function flightBounds(): { left: number; right: number; top: number; floor: number } {
+  const half = hud.offsetWidth / 2 + EDGE;
+  return { left: half, right: innerWidth - half, top: body().size + EDGE, floor: floor() };
+}
+
+function flightLedges(): { id: number; x1: number; x2: number; y: number }[] {
+  return wins.wins.filter((w) => canSit(w, limits())).map((w) => ({ id: w.id, x1: w.x, x2: w.x + w.w, y: w.y }));
+}
+
+/** What she ran into in the air. */
+function onHit(h: Hit, now: number): void {
+  const b = body();
+  const clampX = (x: number) => Math.min(Math.max(x, flightBounds().left), flightBounds().right);
+  switch (h.kind) {
+    case "wall": { // the glass cracks where she slammed into it
+      const x = h.side === "left" ? EDGE : h.side === "right" ? innerWidth - EDGE : b.x;
+      fx.crack(x, h.side === "top" ? EDGE : b.y);
+      fx.impact(b.x, b.y);
+      glitch.kick("hurt", now);
+      break;
+    }
+    case "bounce":
+      fx.burst(h.x, h.y, 40, false);
+      glitch.kick("change", now);
+      break;
+    case "ledge": { // she caught it: she sits there
+      const seat = ledgeAt(wins, { x: h.x, y: h.y }, limits(), DROP_TOLERANCE);
+      const there = seat && seatOf(wins, seat, limits());
+      if (seat && there) {
+        perch = seat;
+        at = there;
+      } else falling = { vy: 0 };
+      glitch.kick("change", now);
+      break;
+    }
+    case "feet": // on her feet, a little skid
+      at = { x: clampX(h.x + h.vx * 90), y: floor() };
+      fx.burst(b.x, b.ground, b.size * 0.5, false);
+      glitch.kick("change", now);
+      break;
+    case "flat": // slid along the floor, lying there seeing stars a moment
+      at = { x: clampX(h.x + h.vx * 60), y: floor() };
+      dizzyUntil = now + 1300;
+      avatar.setEmotion("sorprendida");
+      glitch.kick("hurt", now);
+      fx.stars(() => {
+        const [x, y] = headOnPage();
+        return { x, y };
+      }, 1300);
+      break;
+  }
+  if (!flying && madPending) { // three times in a minute: enough
+    madPending = false;
+    avatar.setEmotion("molesta");
+    zapCursor();
+    sayLocal({ texto: "¡Ya basta! Un rato sin agarrarme.", emocion: "molesta" });
+  }
+}
 
 /** Let go after a drag: onto the ledge under her feet, if any; otherwise she falls to the taskbar. */
 function drop(): void {
@@ -1218,6 +1312,7 @@ stage.addEventListener("pointermove", (e) => {
       glitch.kick("change", performance.now());
     }
     if (dragging) {
+      velocity.push(e.clientX, e.clientY, performance.now());
       const half = hud.offsetWidth / 2 + EDGE;
       at = { x: Math.min(Math.max(e.clientX + press.dx, half), innerWidth - half), y: Math.min(e.clientY + press.dy, floor()) };
       placeHud();
@@ -1300,6 +1395,17 @@ pet.app.ticker.add((ticker) => {
   }
   if (!ended || typewriter.pending) lastTalk = now;
   petEnergy = Math.max(0, petEnergy - ticker.deltaMS * 0.08);
+  if (flying) {
+    const r = step(flying, Math.min(ticker.deltaMS, 50), flightBounds(), flightLedges(), now);
+    flying = r.flight;
+    if (r.flight) at = { x: r.flight.x, y: r.flight.y };
+    if (r.hit) onHit(r.hit, now);
+    placeHud();
+  }
+  if (dizzyUntil && now >= dizzyUntil) { // she springs back up and shakes it off
+    dizzyUntil = 0;
+    glitch.kick("change", now);
+  }
   if (falling) {
     falling.vy += GRAVITY * ticker.deltaMS;
     at.y += falling.vy * ticker.deltaMS;
@@ -1355,7 +1461,8 @@ pet.app.ticker.add((ticker) => {
   }
   pet.showClip(clipFrame, jaw);
   // on a window's left corner the show's art sits mirrored, legs hanging out to the left
-  const mirror = !peek && style === "original" && perch?.side === "left" ? "scaleX(-1)" : "";
+  const tilt = flying ? ` rotate(${((flying.rot * 180) / Math.PI).toFixed(1)}deg)` : now < dizzyUntil ? " rotate(90deg)" : "";
+  const mirror = (!peek && style === "original" && perch?.side === "left" ? "scaleX(-1)" : "") + tilt;
   if (!peek && petCanvas.style.transform !== mirror) petCanvas.style.transform = mirror;
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");

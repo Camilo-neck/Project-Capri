@@ -193,6 +193,44 @@ export class Fx {
     }
   }
 
+  /** The glass cracking where she slammed into it: jagged lines out from (x, y), white on their violet
+   *  copy, that hold a moment and then go in two steps. */
+  crack(x: number, y: number, life = 1400): void {
+    const rand = mulberry(Math.round(x * 7 + y * 13));
+    const lines = Array.from({ length: 8 }, (_, i) => {
+      const a = (i / 8) * Math.PI * 2 + rand() * 0.6, len = 40 + rand() * 90;
+      return jag({ x, y }, { x: x + Math.cos(a) * len, y: y + Math.sin(a) * len }, rand, 6, 0.18);
+    });
+    this.add(life, (g, t) => {
+      g.globalAlpha = t < 0.7 ? 1 : 0.45; // two steps, no smooth fade
+      g.lineJoin = "miter";
+      for (const [color, width, d] of [[VIOLET, 3, 2], [WHITE, 1.5, 0]] as const) {
+        g.strokeStyle = color;
+        g.lineWidth = width;
+        for (const pts of lines) {
+          g.beginPath();
+          pts.forEach(([px, py], i) => (i ? g.lineTo(px + d, py + d) : g.moveTo(px + d, py + d)));
+          g.stroke();
+        }
+      }
+      g.globalAlpha = 1;
+    });
+  }
+
+  /** Seeing stars: three little ones circling over `at` (her head) while she lies there. */
+  stars(at: () => Pt, life = 1300): void {
+    this.add(life, (g, t) => {
+      const c = at();
+      for (let i = 0; i < 3; i++) {
+        const a = t * Math.PI * 4 + (i * Math.PI * 2) / 3;
+        const x = snap(c.x + Math.cos(a) * 26), y = snap(c.y - 18 + Math.sin(a) * 8);
+        g.fillStyle = i === 1 ? RED : WHITE;
+        g.fillRect(x - PX, y - 3 * PX, 2 * PX, 6 * PX); // a pixel star: a plus sign
+        g.fillRect(x - 3 * PX, y - PX, 6 * PX, 2 * PX);
+      }
+    });
+  }
+
   /** A column of light from the top of the screen down to `ground` at x; `down`: it lands first. */
   beam(x: number, ground: number, down = false): void {
     const seg = 4 * PX;

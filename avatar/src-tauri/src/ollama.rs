@@ -3,7 +3,7 @@
 
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 const ADDR: &str = "127.0.0.1:11434";
@@ -23,13 +23,19 @@ fn no_window(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
-/// Starts Ollama's tray app (which starts the server) if nothing answers on its port.
+/// Starts Ollama's server, hidden, if nothing answers on its port. Not its tray app: newer versions
+/// open their window on every start.
 pub fn ensure() {
     if running() {
         return;
     }
-    let app = PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default()).join("Programs/Ollama/ollama app.exe");
-    let started = if app.exists() { Command::new(app).spawn() } else { no_window(Command::new("ollama").arg("serve")).spawn() };
+    let exe = PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default()).join("Programs/Ollama/ollama.exe");
+    let exe = if exe.exists() { exe } else { PathBuf::from("ollama") };
+    let started = no_window(Command::new(exe).arg("serve"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
     if let Err(e) = started {
         eprintln!("could not start Ollama: {e}");
     }

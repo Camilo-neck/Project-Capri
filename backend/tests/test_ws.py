@@ -160,3 +160,25 @@ def test_settings_panel_picks_her_brain(client, monkeypatch, tmp_path):
         assert info["nombre"] == "gemma3:12b" and unloaded == ["qwen3-vl:8b-instruct"]  # the old one leaves the GPU
         ws.send_json({"type": "model_set", "proveedor": "nube", "nombre": "x"})
         assert ws.receive_json()["error"]
+
+
+class FakeVoice:
+    state, autostart, on = "off", False, True
+
+    def __init__(self):
+        self.conversed = 0
+
+    def attach(self, loop, sink):
+        pass
+
+    def converse(self):
+        self.conversed += 1
+
+
+def test_the_end_of_a_turn_opens_the_conversation_window():
+    voice = FakeVoice()
+    client = TestClient(create_app(TOKEN, Orchestrator(demo_generate_factory(chunk_delay=0)), reminders=False, voice=voice))
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        receive_turn(ws)
+    assert voice.conversed == 1

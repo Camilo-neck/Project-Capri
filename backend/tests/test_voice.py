@@ -1,3 +1,4 @@
+import time
 import numpy as np
 
 from app.voice import CHUNK, Gate, Segmenter, junk, level
@@ -170,3 +171,27 @@ def test_a_lone_short_word_is_not_noise():
     assert not junk("Capri", -0.5, 0.7)
     assert junk("Capri", -0.5, 0.85)
     assert junk("abre spotify por favor ya", -0.5, 0.7)  # longer: the usual bar
+
+
+def test_after_her_answer_the_conversation_goes_on_without_her_name():
+    g = Gate()
+    g.converse(0)
+    assert g.decide("y súbele el volumen", 3) == "y súbele el volumen"
+    assert g.chat  # chat: a spoken slash command still needs her name
+    g.converse(10)
+    assert g.decide("hola", 19) is None  # 8 s of nothing: it closed
+    g.converse(20)
+    assert g.decide("Capri, mira la pantalla", 23) == "mira la pantalla"
+    assert not g.chat  # with her name, commands work
+
+
+def test_the_conversation_window_only_follows_a_spoken_exchange(monkeypatch):
+    from app import voice as v
+
+    vo = v.Voice()
+    monkeypatch.setattr(v.Voice, "on", property(lambda self: True))
+    vo.converse()
+    assert not vo.gate.armed(time.monotonic())  # nothing said by voice: typing doesn't open the mic to the room
+    vo.heard_at = time.monotonic()
+    vo.converse()
+    assert vo.gate.armed(time.monotonic())

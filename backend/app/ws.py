@@ -10,7 +10,7 @@ from app.orchestrator import Orchestrator, recover
 from app import launch, pcsense, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          PcEvent, Presence, Pressed, ServerMessage, TextInput, Voice as VoiceState, client_message)
+                          PcEvent, Presence, Pressed, ServerMessage, State, TextInput, Voice as VoiceState, client_message)
 from app.voice import Voice
 
 log = logging.getLogger(__name__)
@@ -68,7 +68,12 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             return
         await ws.accept()
 
+        # the tray's settings panel opens its own socket: no turns, reminders, broadcasts or voice for it
+        panel = ws.query_params.get("panel") == "1"
+
         async def send(msg: ServerMessage) -> None:
+            if voice and not panel and isinstance(msg, State) and msg.value == "idle":
+                voice.converse()  # her turn is over: a spoken exchange goes on without her name
             await ws.send_text(msg.model_dump_json())
 
         # Turns run as tasks, one at a time, so this loop keeps reading: a turn waiting on a
@@ -88,8 +93,6 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
             tasks.add(task)
             task.add_done_callback(tasks.discard)
 
-        # the tray's settings panel opens its own socket: no turns, reminders or broadcasts for it
-        panel = ws.query_params.get("panel") == "1"
         if not panel:
             clients.add(send)
             if orchestrator.dnd or not orchestrator.claude.enabled:  # the avatar starts assuming dnd is off and Claude mode on

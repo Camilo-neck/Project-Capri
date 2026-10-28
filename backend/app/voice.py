@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 RATE = 16_000
 CHUNK = 512  # what Silero takes at 16 kHz (32 ms)
 CONTEXT = 64
+SPOKEN_EXCHANGE_S = 120  # her answer reopens the window only if he spoke to her this recently
 LEVEL_EVERY_S = 0.066  # the mic meter in camera mode, ~15 Hz
 LANGS = ("es", "en")
 # what Whisper writes over silence and noise
@@ -78,6 +79,11 @@ class Gate:
 
     def arm(self, now: float) -> None:
         self.until, self.followup = now + self.window, False
+
+    def converse(self, now: float) -> None:
+        """She answered: what he says next is for her too, no name needed (as chat: commands still need it)."""
+        self.arm(now)
+        self.followup = True
 
     def armed(self, now: float) -> bool:
         return now < self.until
@@ -199,6 +205,7 @@ class Voice:
         self.voice_log = VoiceLog(log_path) if log_path else None
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
         self.gate = Gate(wake, names=self.names)
+        self.heard_at = -1e9  # when something said to her last went through (the exchange is a spoken one)
         self.state = "off"  # off | loading | idle | listening | hearing | thinking
         self._whisper = None
         self._thread: threading.Thread | None = None
@@ -236,6 +243,12 @@ class Voice:
     def toggle(self) -> None:
         self.stop() if self.on else self.start()
 
+    def converse(self) -> None:
+        """Her answer is over: if he was talking to her by voice, keep listening a while without her name."""
+        if self.on and time.monotonic() - self.heard_at < SPOKEN_EXCHANGE_S:
+            self.gate.converse(time.monotonic())
+            self._set("listening")
+
     def listen_now(self) -> None:
         """The hotkey: the next sentence is for her, no wake phrase needed."""
         if not self.on:
@@ -249,6 +262,7 @@ class Voice:
         texto = ""
         if text:
             texto = text if self.gate.chat else spoken.to_command(text)
+            self.heard_at = time.monotonic()
             self._emit(Heard(texto=texto, original=text, idioma=lang))
         self._log(seconds, said, lang, "pasó" if text else "no", texto, stt)
 

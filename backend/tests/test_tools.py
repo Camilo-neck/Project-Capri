@@ -125,6 +125,30 @@ def test_safe_tools_run_without_asking(tmp_path, monkeypatch):
     assert "Factura marzo.pdf" in results(calls)[0]
 
 
+def test_common_app_names_open(opened):
+    # "edge" and "Discord" failed: os.startfile only knows App Paths names
+    tools.open_app(tools.AppArgs(nombre="Edge"), settings.Settings())
+    assert opened == ["msedge"]
+
+
+def test_an_app_known_only_by_its_start_menu_shortcut_opens(monkeypatch, tmp_path):
+    (tmp_path / "Discord Inc").mkdir()
+    (tmp_path / "Discord Inc" / "Discord.lnk").write_text("")
+    log: list[str] = []
+
+    def startfile(target):
+        if not target.endswith(".lnk"):
+            raise FileNotFoundError(2, "El sistema no puede encontrar el archivo especificado")
+        log.append(target)
+
+    monkeypatch.setattr(tools.os, "startfile", startfile, raising=False)
+    monkeypatch.setattr(tools, "START_MENUS", [tmp_path])
+    assert tools.open_app(tools.AppArgs(nombre="discord"), settings.Settings()) == "Abrí discord."
+    assert log == [str(tmp_path / "Discord Inc" / "Discord.lnk")]
+    with pytest.raises(tools.ToolError, match="no encontré"):
+        tools.open_app(tools.AppArgs(nombre="nada parecido"), settings.Settings())
+
+
 def test_bad_args_are_reported_and_any_app_asks_for_a_click(opened):
     generate, calls = scripted(
         say("Abro.", {"nombre": "abrir_app", "args": {}}),

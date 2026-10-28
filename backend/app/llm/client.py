@@ -15,15 +15,17 @@ import time
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from pathlib import Path
+from typing import get_args
 
 from pydantic import ValidationError
 from pydantic_core import from_json
 
 from app.llm import providers
 from app.calendar_ics import DAYS
-from app.schema import FALLBACK_TEXT, Reply
+from app.schema import FALLBACK_TEXT, Emocion, Gesto, Reply
 
 log = logging.getLogger(__name__)
+EMOCIONES, GESTOS = set(get_args(Emocion)), set(get_args(Gesto))
 
 SYSTEM_PROMPT = (Path(__file__).parent.parent / "persona" / "system_prompt.md").read_text(encoding="utf-8")
 SCHEMA = Reply.model_json_schema()
@@ -171,7 +173,9 @@ async def stream_reply(chunks: AsyncIterator[str | int]) -> AsyncIterator[tuple]
         # Fields come in schema order, so once `texto` exists emocion and gesto are complete.
         if not started:
             started = True
-            yield ("start", partial.get("emocion"), partial.get("gesto"))
+            # a face she doesn't have ("sonreir", or texto came first) shows as neutral instead of breaking the turn
+            emocion, gesto = partial.get("emocion"), partial.get("gesto")
+            yield ("start", emocion if emocion in EMOCIONES else "neutral", gesto if gesto in GESTOS else "ninguno")
         text = partial["texto"]
         if isinstance(text, str):
             text = drop_filler(no_emoji(text))  # both prefix-stable, so deltas stay consistent
@@ -210,6 +214,11 @@ async def reply(
             return
         except ValidationError as e:
             log.warning("invalid reply (attempt %d): %s | raw=%r", attempt + 1, e, raw[:500])
+            # the same messages again tend to fail the same way: say what was wrong, before his words
+            err = e.errors()[0]
+            note = (f"[Tu respuesta anterior no era válida ({'.'.join(map(str, err['loc']))}: {err['msg']}). "
+                    "Responde con un único objeto JSON con emocion, gesto, accion y texto.]")
+            messages = [*messages[:-1], {**messages[-1], "content": f"{note}\n\n{messages[-1]['content']}"}]
             try:
                 last_text = from_json(raw, allow_partial="trailing-strings").get("texto") or last_text
             except (ValueError, AttributeError):

@@ -93,6 +93,25 @@ def test_utterance_end_reports_context_tokens():
         assert receive_turn(ws)[-2] == {"type": "utterance_end", "ctx": 1234}
 
 
+def test_a_turn_that_breaks_ends_and_she_can_go_on(tmp_path):
+    from app.memory import Memory
+
+    said = iter([None, DEMO[0].model_dump_json()])
+
+    async def flaky(messages):
+        text = next(said)
+        if text is None:
+            raise RuntimeError("boom")
+        yield text
+
+    app = create_app(TOKEN, Orchestrator(flaky, memory=Memory(tmp_path / "m.db")), reminders=False)
+    with TestClient(app).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "hola"})
+        assert receive_turn(ws)[-1] == {"type": "state", "value": "idle"}  # not left "thinking"
+        ws.send_json({"type": "text_input", "text": "¿sigues?"})
+        assert any(m["type"] == "text_delta" for m in receive_turn(ws))
+
+
 def ts_union(name: str) -> set[str]:
     body = re.search(rf"export type {name} =([^;]+);", TS).group(1)
     return set(re.findall(r'"(\w+)"', body))

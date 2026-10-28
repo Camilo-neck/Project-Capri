@@ -182,8 +182,11 @@ def to_claude_code(messages: list[dict]) -> tuple[str, dict]:
         if m["role"] == "user":
             return f"Usuario: {m['content']}"
         try:
-            return f"Capri: {jsonlib.loads(m['content'])['texto']}"
-        except (ValueError, KeyError, TypeError):
+            said = jsonlib.loads(m["content"])
+            act = said.get("accion") or {}
+            used = f" (usó {act['nombre']} {jsonlib.dumps(act.get('args') or {}, ensure_ascii=False)})" if act.get("nombre") else ""
+            return f"Capri{used}: {said['texto']}"
+        except (ValueError, KeyError, TypeError, AttributeError):
             return f"Capri: {m['content']}"
 
     text = last["content"]
@@ -209,7 +212,10 @@ async def _claude_code(messages: list[dict], model: str, effort: str, json: bool
     work = Path(tempfile.mkdtemp(prefix="capri-brain-"))  # an empty folder: no project, no CLAUDE.md of one
     (work / "system.md").write_text(system, encoding="utf-8")
     proc = await asyncio.create_subprocess_exec(
-        exe, "-p", "--system-prompt-file", str(work / "system.md"), "--tools", "", "--strict-mcp-config",
+        # --safe-mode: none of his CLAUDE.md, skills, plugins or hooks, whose injected text she once took for
+        # the user's message (checked by hand: only Claude Code's own environment block is left). --bare
+        # would skip them too but drops the plan's login.
+        exe, "-p", "--safe-mode", "--system-prompt-file", str(work / "system.md"), "--tools", "", "--strict-mcp-config",
         "--no-session-persistence", "--input-format", "stream-json", "--output-format", "stream-json",
         "--include-partial-messages", "--verbose", "--model", model, "--effort", effort,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,

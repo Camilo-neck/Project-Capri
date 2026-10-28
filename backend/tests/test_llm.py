@@ -82,6 +82,32 @@ def test_the_users_words_come_last_with_the_context_before_them():
     assert build_messages([])[-1]["content"].startswith("[Contexto")
 
 
+def test_a_face_the_avatar_does_not_have_never_stops_the_turn():
+    # a cloud model wrote "sonreir", or texto first: the start event broke turn() and she froze speaking
+    bad_gesture = '{"emocion":"feliz","gesto":"sonreir","accion":null,"texto":"hola"}'
+    assert collect(stream_reply(chunked(bad_gesture, [4] * 40)))[0] == ("start", "feliz", "ninguno")
+    text_first = '{"texto":"hola","emocion":"feliz","gesto":"guino","accion":null}'
+    assert collect(stream_reply(chunked(text_first, [4] * 40)))[0] == ("start", "neutral", "ninguno")
+
+
+def test_an_action_without_args_still_counts():
+    r = Reply.model_validate_json('{"emocion":"neutral","gesto":"ninguno","accion":{"nombre":"leer_portapapeles"},"texto":"x"}')
+    assert r.accion.nombre == "leer_portapapeles" and r.accion.args == {}
+
+
+def test_the_retry_is_told_what_was_wrong():
+    calls = []
+    attempts = iter(['{"emocion": "eufórica", "gesto": "ninguno", "accion": null, "texto": "x"}', VALID])
+
+    def generate(messages):
+        calls.append(messages)
+        return chunked(next(attempts), [5] * 50)
+
+    collect(reply([{"role": "user", "content": "hola"}], generate=generate, slang=False))
+    retry = calls[1][-1]["content"]
+    assert "emocion" in retry and retry.endswith("hola") and calls[0][-1]["content"].endswith("hola")
+
+
 def test_emoji_never_reach_the_subtitle():
     raw = json.dumps({"emocion": "feliz", "gesto": "ninguno", "accion": None, "texto": "¡Claro! 😄 Te ayudo 👍🏽"})
     events = collect(reply([], generate=lambda m: chunked(raw, [2] * 80)))

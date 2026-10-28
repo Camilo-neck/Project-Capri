@@ -135,8 +135,24 @@ class Tool:
 RUNNABLE = {".exe", ".bat", ".cmd", ".ps1", ".msi", ".vbs", ".js", ".scr", ".com", ".lnk"}
 
 
+# what people call them -> the name Windows knows them by (App Paths)
+APP_NAMES = {"edge": "msedge", "microsoft edge": "msedge", "word": "winword", "powerpoint": "powerpnt",
+             "vs code": "code", "vscode": "code", "visual studio code": "code", "terminal": "wt",
+             "explorador": "explorer", "explorador de archivos": "explorer", "bloc de notas": "notepad"}
+START_MENUS = [Path(os.environ.get(v, "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+               for v in ("APPDATA", "PROGRAMDATA") if os.environ.get(v)]
+
+
 def app_target(a: AppArgs, s: Settings) -> str:
-    return s.apps.get(a.nombre.lower(), a.nombre.strip())  # a name in the user's list, or whatever was asked
+    name = a.nombre.strip()  # a name in the user's list, a common one, or whatever was asked
+    return s.apps.get(name.lower(), APP_NAMES.get(name.lower(), name))
+
+
+def shortcut(name: str) -> Path | None:
+    """The Start menu shortcut whose name is or contains `name` (Discord isn't an App Paths name)."""
+    want = name.lower()
+    links = [p for d in START_MENUS if d.is_dir() for p in d.rglob("*.lnk")]
+    return next((p for p in links if p.stem.lower() == want), None) or next((p for p in links if want in p.stem.lower()), None)
 
 
 def app_risk(a: AppArgs, s: Settings) -> str:
@@ -147,10 +163,15 @@ def app_risk(a: AppArgs, s: Settings) -> str:
 
 
 def open_app(a: AppArgs, s: Settings) -> str:
+    target = app_target(a, s)
     try:
-        os.startfile(app_target(a, s))  # noqa: S606  (the user confirmed this exact name)
+        os.startfile(target)  # noqa: S606  (the user confirmed this exact name)
     except OSError as e:
-        raise ToolError(f"no pude abrir «{a.nombre}» ({e.strerror or e}); con su ruta completa sí podría") from e
+        link = None if "\\" in target or "/" in target else shortcut(target)
+        if link is None:
+            raise ToolError(f"no encontré «{a.nombre}» entre sus programas ({e.strerror or e}); pregúntale cómo se llama "
+                            "en el menú Inicio o su ruta") from e
+        os.startfile(str(link))  # noqa: S606  (the Start menu shortcut of the program he confirmed)
     return f"Abrí {a.nombre}."
 
 

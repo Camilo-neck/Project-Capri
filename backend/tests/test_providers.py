@@ -55,6 +55,41 @@ def test_claude_code_gets_one_message_with_the_conversation_as_a_transcript():
     assert "Usuario: hola\nCapri: ¡Hola!" in text["text"] and text["text"].endswith("respondes ahora:\n¿qué ves?")
 
 
+def test_claude_code_sees_what_she_did_before():
+    # without it, a "[resultado de buscar_web]" looked like something he found himself
+    from app.llm.providers import to_claude_code
+
+    _, msg = to_claude_code([
+        {"role": "system", "content": "persona"},
+        {"role": "user", "content": "busca el clima"},
+        {"role": "assistant", "content": '{"emocion":"neutral","gesto":"ninguno","accion":{"nombre":"buscar_web","args":{"consulta":"clima"}},"texto":"Busco."}'},
+        {"role": "user", "content": "[resultado de buscar_web para «busca el clima»]\nSoleado"},
+    ])
+    assert 'Capri (usó buscar_web {"consulta": "clima"}): Busco.' in msg["message"]["content"][0]["text"]
+
+
+def test_claude_code_runs_without_his_settings_hooks_or_plugins(monkeypatch):
+    from app.llm import providers
+
+    got = []
+
+    async def spawn(*args, **kw):
+        got.extend(args)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(providers.shutil, "which", lambda name: "claude")
+    monkeypatch.setattr(providers.asyncio, "create_subprocess_exec", spawn)
+
+    async def run():
+        return [p async for p in providers._claude_code([{"role": "user", "content": "hola"}], "haiku", "low", True)]
+
+    try:
+        asyncio.run(run())
+    except RuntimeError:
+        pass
+    assert "--safe-mode" in got  # no CLAUDE.md, skills, plugins or hooks of his; the plan's login still works
+
+
 def test_a_brain_that_fails_says_so_instead_of_freezing(monkeypatch):
     from app import settings
     from app.llm import providers

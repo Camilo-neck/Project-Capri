@@ -10,7 +10,7 @@ from app.orchestrator import Orchestrator
 from app import settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Presence, ServerMessage, TextInput, Voice as VoiceState, client_message)
+                          Presence, ServerMessage, State, TextInput, UtteranceEnd, Voice as VoiceState, client_message)
 from app.voice import Voice
 
 log = logging.getLogger(__name__)
@@ -78,7 +78,12 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
         def spawn(coro: Coroutine) -> None:
             async def locked() -> None:
                 async with orchestrator.lock:
-                    await coro
+                    try:
+                        await coro
+                    except Exception:  # a broken turn must not leave her "thinking" forever
+                        log.exception("turn failed")
+                        await send(UtteranceEnd())
+                        await send(State(value="idle"))
 
             task = asyncio.create_task(locked())
             tasks.add(task)

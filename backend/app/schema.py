@@ -13,7 +13,7 @@ Gesto = Literal["ninguno", "asentir", "ladear_cabeza", "guino", "saltar", "senal
 
 class Accion(BaseModel):
     nombre: ToolName  # a closed list, so Ollama's grammar can't invent tools
-    args: dict[str, Any]
+    args: dict[str, Any] = {}  # tools without arguments ("leer_portapapeles") often come without it
 
 
 class Reply(BaseModel):

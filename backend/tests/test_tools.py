@@ -125,6 +125,46 @@ def test_safe_tools_run_without_asking(tmp_path, monkeypatch):
     assert "Factura marzo.pdf" in results(calls)[0]
 
 
+SEARCH = {"nombre": "buscar_web", "args": {"consulta": "clima en Bogotá"}}
+
+
+def browser_search(monkeypatch, opened: list, ok: bool):
+    """A web search through his browser: what opened, what was captured, and the turn's messages."""
+    from app import vision
+
+    monkeypatch.setattr(vision, "foreground", lambda: (0, 0, 800, 600))
+    shots: list[tuple] = []
+
+    async def read(image: bytes, query: str) -> str:
+        return f"Clima en Bogotá: 18 °C, nublado (leído de {image!r} para «{query}»)"
+
+    generate, calls = scripted(say("Busco.", SEARCH), say("18 grados y nublado."))
+    orch = Orchestrator(generate, capture=lambda rect: shots.append(rect) or b"jpg", read=read, load_s=0)
+    with connect(orch) as ws:
+        ws.send_json({"type": "text_input", "text": "¿cómo está el clima en Bogotá?"})
+        ask = until(ws, "confirm_request")[-1]
+        before = list(shots) + list(opened)
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": ok})
+        msgs = until_idle(ws)
+    return ask, before, shots, msgs, calls
+
+
+def test_a_web_search_opens_in_his_browser_and_is_read_after_a_click(opened, monkeypatch):
+    # DuckDuckGo blocked every search from her; his own browser isn't a bot
+    ask, before, shots, msgs, calls = browser_search(monkeypatch, opened, ok=True)
+    assert "navegador" in ask["texto"] and "clima en Bogotá" in ask["texto"]
+    assert before == []  # nothing opened or captured before the click
+    assert opened == ["https://www.google.com/search?q=clima%20en%20Bogot%C3%A1"]
+    assert shots == [(0, 0, 800, 600)]  # only the browser window in front
+    assert {"type": "state", "value": "looking"} in msgs  # the capture indicator
+    assert "18 °C" in results(calls)[0]
+
+
+def test_a_web_search_said_no_opens_and_captures_nothing(opened, monkeypatch):
+    _, _, shots, _, calls = browser_search(monkeypatch, opened, ok=False)
+    assert opened == [] and shots == [] and "no lo autorizó" in results(calls)[0]
+
+
 def test_common_app_names_open(opened):
     # "edge" and "Discord" failed: os.startfile only knows App Paths names
     tools.open_app(tools.AppArgs(nombre="Edge"), settings.Settings())

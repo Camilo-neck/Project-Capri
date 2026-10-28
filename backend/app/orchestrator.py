@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pydantic import ValidationError
 
 from app import calendar_ics, claude_link, presence, settings, spoken, tools, vision
-from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
+from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import Action, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 Send = Callable[[ServerMessage], Awaitable[None]]
 Capture = Callable[[vision.Rect], bytes]
 Summarize = Callable[[str], Awaitable[str]]
+Read = Callable[[bytes, str], Awaitable[str]]
 
 LOOK_DEFAULT = "Mira mi pantalla y dime qué ves."
 MAX_ACTIONS = 5  # tool calls per turn
@@ -28,6 +29,7 @@ TRIM_AT = 6000  # context tokens (of 8192; the persona alone is ~3.8k): past thi
 TAIL_HOURS, TAIL_MESSAGES = 3, 6  # a restart within this keeps that many messages of the last conversation
 TRANSCRIPT_MAX = 12_000  # chars of a past session handed to the summarizer
 ASKED_MAX = 120  # chars of his request repeated with a tool result
+SEARCH_LOAD_S = 3  # a search opened in his browser gets this long to load before she reads it
 # What these bring in may be written by someone else (a page, a file, a program's output): once one
 # ran in a turn (or a command that wasn't plainly read-only), any action that asks for a click asks in red.
 EXTERNAL = {"leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
@@ -42,9 +44,12 @@ HELD_MIN = 30  # back from a fullscreen app, reminders of events that started th
 class Orchestrator:
     def __init__(self, generate: Generate = ollama_generate, capture: Capture = vision.capture,
                  confirm_s: float = CONFIRM_S, memory: Memory | None = None, summarize: Summarize = ollama_summarize,
-                 idle_s: Callable[[], float] = presence.idle_seconds, clock: Callable[[], datetime] = datetime.now):
+                 idle_s: Callable[[], float] = presence.idle_seconds, clock: Callable[[], datetime] = datetime.now,
+                 read: Read = read_results, load_s: float = SEARCH_LOAD_S):
         self.generate = generate
         self.capture = capture
+        self.read = read  # a capture of his browser's search, as text
+        self.load_s = load_s
         self.confirm_s = confirm_s
         self.summarize = summarize
         self.memory = memory or Memory()
@@ -230,6 +235,8 @@ class Orchestrator:
             self.memory.remember(args.texto, args.tipo)
             await send(Remembered(texto=args.texto))
             return "Guardado en tu memoria."
+        if accion.nombre == "buscar_web":
+            return await self.search_in_browser(args.consulta, send)
         if accion.nombre == "olvidar":
             return {"done": "Olvidado.", "none": "No había nada así en la memoria.",
                     "declined": "El usuario no quiso olvidarlo; sigue en la memoria."}[await self.forget(args.texto, send)]
@@ -263,6 +270,30 @@ class Orchestrator:
         if asks or tool.log:
             tools.audit({"accion": accion.nombre, "resultado": tools.clip(result)})
         self.external = self.external or (ok and (accion.nombre in EXTERNAL or (accion.nombre == "ejecutar_comando" and asks)))
+        return result
+
+    async def search_in_browser(self, query: str, send: Send) -> str:
+        """A web search in his own browser, like he'd do it (DuckDuckGo answered her with a bot challenge):
+        after his click it opens, and once it loaded she captures that window (indicator up) and reads it."""
+        what = f"Buscar «{query}» en tu navegador y leer los resultados de la pantalla (captura de esa ventana)"
+        ok = await self.ask(what, send)
+        tools.audit({"accion": "buscar_web", "args": {"consulta": query}, "pregunta": what, "confirmado": ok})
+        if not ok:
+            return DENIED
+        await send(Action(nombre="buscar_web", fase="inicio"))
+        start, done = time.monotonic(), False
+        try:
+            await asyncio.to_thread(tools.web_search, tools.WebSearchArgs(sitio="google", consulta=query), settings.load())
+            await asyncio.sleep(self.load_s)  # ponytail: a fixed wait for the page; a slow connection may need more
+            await send(State(value="looking"))
+            image = await asyncio.to_thread(self.capture, vision.foreground())
+            result, done = await self.read(image, query), True
+        except Exception as e:
+            log.exception("browser search failed")
+            result = f"Abrí la búsqueda en su navegador, pero no pude leer la pantalla ({type(e).__name__})."
+        await send(Action(nombre="buscar_web", fase="fin", ok=done, ms=round((time.monotonic() - start) * 1000)))
+        tools.audit({"accion": "buscar_web", "resultado": tools.clip(result)})
+        self.external = True  # what pages say is someone else's writing
         return result
 
     async def ask(self, what: str, send: Send, risk: str = "normal") -> bool:

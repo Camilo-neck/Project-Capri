@@ -13,10 +13,9 @@ import ipaddress
 import re
 import socket
 import subprocess
-from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -221,26 +220,3 @@ def get(url: str, http: httpx.Client | None = None) -> str:
             return text
         raise ToolError(f"eso no es una página de texto ({kind or 'tipo desconocido'})")
     raise ToolError("demasiadas redirecciones")
-
-
-def search(query: str, http: httpx.Client | None = None) -> str:
-    """Top web results (title, address, snippet) from DuckDuckGo's HTML page."""
-    http = http or httpx.Client(timeout=12, headers=UA)
-    r = http.post("https://html.duckduckgo.com/html/", data={"q": query}, follow_redirects=True)
-    r.raise_for_status()
-    if r.status_code == 202 or "anomaly" in r.text:  # its bot challenge: not "nothing found"
-        raise ToolError("el buscador (DuckDuckGo) me está bloqueando con un captcha; no es que no exista. "
-                        "Ábrele la búsqueda en su navegador con `buscar` y díselo")
-    links = re.findall(r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S)
-    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', r.text, re.S)
-    rows = []
-    for (href, title), snippet in zip(links, snippets):
-        if "uddg=" in href:  # DuckDuckGo's redirect wrapper
-            href = unquote(parse_qs(urlparse(href).query).get("uddg", [href])[0])
-        clean = lambda s: unescape(re.sub(r"<.*?>", "", s)).strip()  # noqa: E731
-        rows.append(f"{clean(title)}\n{href}\n{clean(snippet)}")
-        if len(rows) == 5:
-            break
-    if not rows:
-        raise ToolError(f"no encontré resultados para «{query}»")
-    return "\n\n".join(rows)

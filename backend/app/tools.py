@@ -249,12 +249,6 @@ def read_page(a: PageArgs, s: Settings) -> str:
         raise ToolError(f"no pude abrir la página: {e}") from e
 
 
-def web_results(a: QueryArgs, s: Settings) -> str:
-    try:
-        return power.search(a.consulta)
-    except httpx.HTTPError as e:
-        raise ToolError(f"no pude buscar en la web: {e}") from e
-
 
 def run_script(a: ScriptArgs, s: Settings) -> str:
     target = s.scripts.get(a.nombre.lower())
@@ -336,11 +330,12 @@ def play_youtube(a: YoutubeArgs, s: Settings) -> str:
                       headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36",
                                "Accept-Language": "es-CO,es;q=0.9"}, cookies={"CONSENT": "YES+1"}, follow_redirects=True)
         r.raise_for_status()
-    except httpx.HTTPError as e:
-        raise ToolError(f"no pude consultar YouTube: {e}") from e
-    m = FIRST_VIDEO.search(r.text)
-    if not m:
-        raise ToolError(f"no encontré ningún video para «{a.consulta}»")
+        m = FIRST_VIDEO.search(r.text)
+    except httpx.HTTPError:
+        m = None
+    if not m:  # YouTube didn't answer her, or the page changed: the search in his browser still works
+        os.startfile(SEARCH_URLS["youtube"].format(quote(a.consulta)))  # noqa: S606  (fixed site)
+        return f"No pude elegir el video yo sola: abrí la búsqueda de «{a.consulta}» en YouTube en su navegador; que le dé al primero."
     os.startfile(f"https://www.youtube.com/watch?v={m.group(1)}")  # noqa: S606  (a video id of the fixed site)
     return f"Abrí en YouTube: {json.loads(f'\"{m.group(2)}\"')}."
 
@@ -395,7 +390,7 @@ TOOLS: dict[str, Tool] = {
     "escribir_archivo": Tool(WriteArgs, True, write_file, describe_write, write_risk),
     "ejecutar_comando": Tool(CommandArgs, True, run_command, lambda a: f"Ejecutar en PowerShell: {a.comando}", command_risk, log=True),
     "leer_web": Tool(PageArgs, False, read_page, log=True),
-    "buscar_web": Tool(QueryArgs, False, web_results, log=True),
+    "buscar_web": Tool(QueryArgs, True, None),  # in his browser, after a click: Orchestrator.search_in_browser
     "leer_portapapeles": Tool(NoArgs, False, read_clipboard),
     "copiar_al_portapapeles": Tool(TextArgs, True, copy_text,
                                    lambda a: f"Copiar al portapapeles: «{a.texto[:80]}{'…' if len(a.texto) > 80 else ''}»"),

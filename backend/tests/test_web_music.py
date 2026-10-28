@@ -273,6 +273,13 @@ def test_youtube_opens_the_first_video_of_the_search(opened, monkeypatch):
     assert not tools.TOOLS["youtube"].effect
     msg = tools.play_youtube(tools.YoutubeArgs(consulta="nalguisima topboy"), settings.Settings())
     assert opened == ["https://www.youtube.com/watch?v=Cn_ydrQcB88"] and msg == "Abrí en YouTube: Topboy & co - NALGUISIMA."
+    # no video found, or YouTube unreachable: the search opens in his browser instead of an error
     monkeypatch.setattr(tools.httpx, "get", lambda *a, **k: httpx.Response(200, text="nada", request=httpx.Request("GET", "https://x")))
-    with pytest.raises(tools.ToolError):
-        tools.play_youtube(tools.YoutubeArgs(consulta="x"), settings.Settings())
+    msg = tools.play_youtube(tools.YoutubeArgs(consulta="lo-fi"), settings.Settings())
+
+    def offline(*a, **k):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(tools.httpx, "get", offline)
+    tools.play_youtube(tools.YoutubeArgs(consulta="lo-fi"), settings.Settings())
+    assert opened[1:] == ["https://www.youtube.com/results?search_query=lo-fi"] * 2 and "navegador" in msg

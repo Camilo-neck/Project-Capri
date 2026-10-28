@@ -1,11 +1,14 @@
 import asyncio
 import contextlib
 import logging
+import os
 import secrets
+import subprocess
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -42,6 +45,7 @@ ALARMS_CMD = "/recordatorios"
 SNOOZE = timedelta(minutes=10)
 LATE = timedelta(minutes=5)  # a reminder said this late was missed (she was closed, or kept quiet)
 BUTTON_SETS = 50  # button rows kept answerable; older ones stop doing anything
+FILE_BUTTONS = 3  # files found that get their Abrir and Carpeta de buttons
 CLAUDE_CMD = "/claude"
 ACTIVE_S = 120  # no keyboard or mouse for longer than this: the user isn't at the PC
 HELD_MIN = 30  # back from a fullscreen app, reminders of events that started this recently still get said
@@ -251,6 +255,21 @@ class Orchestrator:
         else:
             log.warning("pressed unknown button %r of %r", boton, id)
 
+    def file_buttons(self, files: list[Path]) -> Buttons:
+        """Under the files she found: open it, or show it in its folder (his click is the go-ahead)."""
+        def opener(p: Path, reveal: bool) -> Callable[[Send], Awaitable[None]]:
+            async def run(send: Send) -> None:
+                if reveal:
+                    subprocess.Popen(["explorer.exe", f"/select,{p}"], creationflags=0x0800_0000)
+                else:
+                    await asyncio.to_thread(os.startfile, p)  # noqa: S606  (one she found, and he clicked it)
+                tools.audit({"accion": "abrir_encontrado", "ruta": str(p), "carpeta": reveal})
+                await self.speak(f"Ahí tienes {p.name}{', en su carpeta' if reveal else ''}.", send)
+            return run
+
+        return self.buttons([opt for p in files[:FILE_BUTTONS]
+                             for opt in ((f"Abrir «{p.name}»", opener(p, False)), (f"Carpeta de «{p.name}»", opener(p, True)))])
+
     # ---- reminders ----
 
     def set_reminder(self, texto: str) -> str:
@@ -377,6 +396,8 @@ class Orchestrator:
         await send(Action(nombre=accion.nombre, fase="fin", ok=ok, ms=round((time.monotonic() - start) * 1000)))
         if asks or tool.log:
             tools.audit({"accion": accion.nombre, "resultado": tools.clip(result)})
+        if accion.nombre == "buscar_archivos" and ok and tools.found:
+            self.after.append(self.file_buttons(list(tools.found)))
         self.external = self.external or (ok and (accion.nombre in EXTERNAL or (accion.nombre == "ejecutar_comando" and asks)))
         return result
 

@@ -405,3 +405,21 @@ def test_calendar_tool_labels_every_day_and_says_when_one_is_empty(monkeypatch):
     )
     week = tools.calendar(tools.CalendarArgs(dias=4), s).splitlines()
     assert week[2] == "Martes (27/10): 16:30-17:00: Dentista" and week[3].startswith("Miércoles (28/10): 09:00")
+
+
+def test_files_she_finds_come_with_open_and_folder_buttons(monkeypatch, tmp_path):
+    monkeypatch.setattr(power, "HOME", tmp_path.resolve())
+    f = tmp_path.resolve() / "CV 2026.pdf"
+    f.write_text("x")
+    monkeypatch.setattr(tools, "indexed", lambda terms, exts: [str(f)])
+    opened, ran = [], []
+    monkeypatch.setattr(tools.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(tools.subprocess, "Popen", lambda args, **kw: ran.append(args))
+    generate, _ = scripted(say("Busco.", {"nombre": "buscar_archivos", "args": {"texto": "cv"}}), say("Aquí está."))
+    with connect(Orchestrator(generate)) as ws:
+        ws.send_json({"type": "text_input", "text": "busca mi cv"})
+        buttons = until(ws, "buttons")[-1]
+        assert [b["texto"] for b in buttons["botones"]] == ["Abrir «CV 2026.pdf»", "Carpeta de «CV 2026.pdf»"]
+        ws.send_json({"type": "pressed", "id": buttons["id"], "boton": buttons["botones"][1]["id"]})
+        until_idle(ws)
+    assert ran == [["explorer.exe", f"/select,{f}"]] and opened == []

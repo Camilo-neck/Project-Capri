@@ -133,3 +133,42 @@ def test_a_screenshot_is_saved_without_her(monkeypatch, tmp_path):
     assert saved == [((0, 0, 800, 600), tmp_path)] and "Capri 2026-10-28 153000.png" in msg
     assert tools.named_in(tools.TOOLS["captura"].named(tools.NoArgs()), "toma un pantallazo")
     assert tools.named_in(tools.TOOLS["captura"].named(tools.NoArgs()), "take a screenshot")
+
+
+# ---- finding his files ----
+
+def test_kinds_of_file_said_in_words():
+    assert "mp4" in tools.extensions("video") and "aep" in tools.extensions("proyecto de after effects")
+    assert tools.extensions("pdf") == ["pdf"] and tools.extensions("") == []
+
+
+def test_the_index_query_asks_his_folder_by_name_kind_and_contents():
+    home = r"C:\Users\c"
+    by_name, by_text = tools.index_queries(["factura", "marzo"], ["pdf"], home)
+    assert f"SCOPE='file:{home}'" in by_name and "System.FileName LIKE '%factura%'" in by_name
+    assert "System.FileExtension = '.pdf'" in by_name and "node_modules" in by_name and "ORDER BY System.DateModified DESC" in by_name
+    assert by_text is None  # a kind asked: names only
+    assert """CONTAINS(*, '"factura" AND "marzo"')""" in tools.index_queries(["factura", "marzo"], [], home)[1]
+    assert tools.index_queries(["o'brien"], [], home)[0].count("'") % 2 == 0  # nothing can close its quotes
+
+
+def test_the_index_answers_first_and_junk_never_shows(monkeypatch, tmp_path):
+    from app import power
+
+    monkeypatch.setattr(power, "HOME", tmp_path.resolve())
+    keep, junk = tmp_path / "Factura marzo.pdf", tmp_path / "node_modules" / "factura.js"
+    keep.write_text("x")
+    monkeypatch.setattr(tools, "indexed", lambda terms, exts: [str(junk), str(keep)])
+    out = tools.search_files(tools.SearchArgs(texto="factura"), settings.Settings())
+    assert "Factura marzo.pdf" in out and "node_modules" not in out and tools.found == [keep]
+
+
+def test_without_the_index_it_walks_his_folder_by_name_and_kind(monkeypatch, tmp_path):
+    from app import power
+
+    (tmp_path / "Videos").mkdir()
+    (tmp_path / "Videos" / "viaje.mp4").write_text("x")
+    (tmp_path / "Videos" / "viaje.txt").write_text("x")
+    monkeypatch.setattr(power, "HOME", tmp_path.resolve())
+    out = tools.search_files(tools.SearchArgs(texto="", tipo="video"), settings.Settings())
+    assert "viaje.mp4" in out and "viaje.txt" not in out

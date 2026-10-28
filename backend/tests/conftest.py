@@ -12,6 +12,7 @@ def isolated_config(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def no_real_apps(monkeypatch):
     """Tests never list (or start) the PC's real Start menu apps and games; a test that needs some sets them."""
-    from app import launch
+    from app import launch, tools
 
     monkeypatch.setattr(launch, "launchables", lambda: [])
+    monkeypatch.setattr(tools, "indexed", lambda terms, exts: None)  # nor Windows' search index: they walk

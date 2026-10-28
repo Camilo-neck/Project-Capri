@@ -15,14 +15,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
 from app import calendar_ics, launch, power, settings, spotify, vision
-from app.memory import content_words, fold
+from app.memory import STOPWORDS, content_words, fold
 from app.power import ToolError
 from app.settings import Settings
 
@@ -51,7 +51,8 @@ class FolderArgs(BaseModel):
 
 
 class SearchArgs(BaseModel):
-    texto: str = Field(min_length=2)
+    texto: str = ""  # words of its name (or what's in it)
+    tipo: str = ""  # what kind of file: "video", "pdf", "proyecto de after effects", extensions
     carpeta: str = ""  # where to look; empty = the user's whole folder
 
 
@@ -312,19 +313,94 @@ def screenshot(a: NoArgs, s: Settings) -> str:
 SKIP_DIRS = {"node_modules", "appdata", "$recycle.bin", "windows", "site-packages", "target", "__pycache__"}
 
 
-def search_files(a: SearchArgs, s: Settings) -> str:
-    """File names containing the text, in the user's folder (or the one asked, if allowed). Never contents."""
-    root = power.guard(a.carpeta)[0] if a.carpeta else power.HOME
-    needle, found, scanned, deadline = a.texto.lower(), [], 0, time.monotonic() + SEARCH_S
+# kinds of file said in words -> their extensions ("mi último video", "el proyecto de After Effects")
+KINDS = {
+    "video": "mp4 mov mkv avi webm wmv", "foto": "jpg jpeg png heic webp", "imagen": "jpg jpeg png gif webp heic bmp",
+    "audio": "mp3 wav flac m4a ogg", "cancion": "mp3 wav flac m4a", "musica": "mp3 wav flac m4a",
+    "documento": "docx doc pdf odt txt", "word": "docx doc", "excel": "xlsx xls csv", "hoja": "xlsx xls csv",
+    "presentacion": "pptx ppt key", "powerpoint": "pptx ppt", "comprimido": "zip rar 7z", "zip": "zip rar 7z",
+    "after effects": "aep", "premiere": "prproj", "photoshop": "psd", "illustrator": "ai", "blender": "blend",
+    "figma": "fig", "unity": "unity",
+}
+# never in the results: code dependencies, app data, git internals
+JUNK = ("node_modules", "\\appdata\\", "\\.git\\", "\\site-packages\\", "\\$recycle.bin\\")
+# what's in these is code or noise: a content search leaves them out
+CODE_EXTS = ("js", "mjs", "cjs", "ts", "tsx", "jsx", "json", "map", "lock", "yml", "yaml", "py", "css", "html", "md", "txt", "xml", "log")
+found: list[Path] = []  # the files the last search showed him (her buttons open these)
+
+
+def extensions(tipo: str) -> list[str]:
+    t = fold(tipo)
+    exts = [e for kind, es in KINDS.items() if kind in t for e in es.split()]
+    return exts or [w for w in re.findall(r"[a-z0-9]{2,8}", t) if w not in STOPWORDS and w not in {"archivo", "archivos", "file", "proyecto", "de"}]
+
+
+def index_queries(terms: list[str], exts: list[str], home: str) -> tuple[str, str | None]:
+    """Windows Search SQL: by name (every word, of those kinds if any), and by what's in documents (not
+    code) when no kind was asked. Words are letters and digits only: nothing can close their quotes."""
+    terms = [re.sub(r"[^\w.]", "", t) for t in terms]
+    exts = [re.sub(r"[^a-z0-9]", "", e) for e in exts]
+    not_junk = "NOT System.ItemUrl LIKE '%node_modules%' AND NOT System.ItemUrl LIKE '%/AppData/%' AND NOT System.ItemUrl LIKE '%/.git/%'"
+    of_kind = "(" + " OR ".join(f"System.FileExtension = '.{e}'" for e in exts) + ")" if exts else ""
+    query = lambda where: (f"SELECT TOP {MAX_RESULTS} System.ItemUrl FROM SYSTEMINDEX WHERE SCOPE='file:{home}' "  # noqa: E731
+                           f"AND {not_junk} AND {where} ORDER BY System.DateModified DESC")
+    by_name = " AND ".join([*(f"System.FileName LIKE '%{t}%'" for t in terms if t), *([of_kind] if of_kind else [])])
+    by_text = None
+    if terms and not exts:
+        words = " AND ".join(f'"{t}"' for t in terms if t)
+        by_text = f"CONTAINS(*, '{words}') AND " + " AND ".join(f"System.FileExtension <> '.{e}'" for e in CODE_EXTS)
+    return query(by_name), by_text and query(by_text)
+
+
+def indexed(terms: list[str], exts: list[str]) -> list[str] | None:
+    """Paths from Windows' search index (his whole folder, in a blink), newest first; None if it can't be asked."""
+    script = ["[Console]::OutputEncoding = [Text.Encoding]::UTF8", "$c = New-Object -ComObject ADODB.Connection",
+              "$c.Open(\"Provider=Search.CollatorDSO;Extended Properties='Application=Windows';\")"]
+    for q in filter(None, index_queries(terms, exts, str(power.HOME))):
+        script.append(f"$r = New-Object -ComObject ADODB.Recordset; $r.Open('{q.replace(chr(39), chr(39) * 2)}', $c); "
+                      "while (-not $r.EOF) { $r.Fields.Item('System.ItemUrl').Value; $r.MoveNext() }; $r.Close()")
+    try:
+        out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "; ".join(script)],
+                             capture_output=True, text=True, encoding="utf-8", timeout=10, creationflags=0x0800_0000)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode:
+        return None
+    paths = [unquote(line.strip()[5:]).replace("/", "\\") for line in out.stdout.splitlines() if line.strip().lower().startswith("file:")]
+    return list(dict.fromkeys(paths))
+
+
+def walked(root: Path, terms: list[str], exts: list[str]) -> list[str]:
+    """Without the index: a walk through his folder, by name and kind."""
+    out, scanned, deadline = [], 0, time.monotonic() + SEARCH_S
     for folder, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs if not d.startswith(".") and d.lower() not in SKIP_DIRS]
         for f in files:
             scanned += 1
-            if needle in f.lower() and not power.SENSITIVE.search(Path(folder, f).as_posix()):
-                found.append(str(Path(folder) / f))
-        if len(found) >= MAX_RESULTS or scanned >= MAX_SCANNED or time.monotonic() > deadline:
+            name = fold(f)
+            if all(t in name for t in terms) and (not exts or Path(f).suffix.lower().lstrip(".") in exts):
+                out.append(str(Path(folder) / f))
+        if len(out) >= MAX_RESULTS or scanned >= MAX_SCANNED or time.monotonic() > deadline:
             break
-    return "\n".join(found[:MAX_RESULTS]) if found else f"Ningún archivo con '{a.texto}' en {root}."
+    return out
+
+
+def search_files(a: SearchArgs, s: Settings) -> str:
+    """His files by name, kind and (in documents) contents: Windows' search index first, else a walk.
+    The newest first; never code dependencies, app data or anything private."""
+    terms, exts = [fold(w) for w in re.findall(r"[\w.]{2,}", a.texto)][:5], extensions(a.tipo)
+    if not terms and not exts:
+        raise ToolError("dime qué buscar: parte del nombre o qué tipo de archivo")
+    root = power.guard(a.carpeta)[0] if a.carpeta else power.HOME
+    paths = (indexed(terms, exts) if not a.carpeta else None) or walked(root, terms, exts)
+    def junk(p: Path) -> bool:  # judged inside his folder ("…\AppData\…" there), not by where his folder is
+        inside = "\\" + str(p.relative_to(power.HOME)) if p.is_relative_to(power.HOME) else str(p)
+        return any(j in inside.lower() for j in JUNK)
+
+    found[:] = [p for p in map(Path, paths) if not junk(p) and not power.SENSITIVE.search(p.as_posix()) and p.exists()][:MAX_RESULTS]
+    if not found:
+        return f"Ningún archivo con «{a.texto or a.tipo}» en {root}."
+    return "\n".join(f"{p.name} — en {p.parent} ({datetime.fromtimestamp(p.stat().st_mtime):%d/%m/%Y})" for p in found)
 
 
 def files_risk(a: PathArgs, s: Settings) -> str:

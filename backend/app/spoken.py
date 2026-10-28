@@ -3,6 +3,7 @@ commands in Spanish or English, turned into the slash commands she already has. 
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from difflib import SequenceMatcher
 
 NAME = "capri"
@@ -18,8 +19,9 @@ def plain(text: str) -> str:
     return " ".join(re.sub(r"[^\w\s']", " ", t).replace("_", " ").split())
 
 
-def _is_name(word: str) -> bool:
-    return SequenceMatcher(None, word, NAME).ratio() >= 0.74 or word in {"kapri", "capri", "cabri", "capry"}
+def is_name(word: str, names: Sequence[str] = (NAME,)) -> bool:
+    """A word (plain) that is one of her names as a speech model may write it ("Kapri", "Capry"...)."""
+    return any(SequenceMatcher(None, word, n).ratio() >= 0.74 for n in names) or (NAME in names and word in {"kapri", "capri", "cabri", "capry"})
 
 
 def strip_wake(text: str) -> tuple[bool, str]:
@@ -27,7 +29,7 @@ def strip_wake(text: str) -> tuple[bool, str]:
     first, or after a greeting or two ("eh, hey Capri"): Capri mentioned mid-sentence doesn't wake her."""
     words = text.strip().split()
     for i, head in enumerate(plain(w) for w in words[:3]):
-        if _is_name(head):
+        if is_name(head):
             return True, " ".join(words[i + 1:]).lstrip(" ,.;:!?¡¿-")
         if head and head not in GREETINGS:
             break

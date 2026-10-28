@@ -60,6 +60,7 @@ llamada = true            # solo hace caso a lo que empieza por "hey Capri" / "o
 silencio_ms = 900         # silencio que da por terminada una frase
 modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" gasta menos GPU)
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = caché de Hugging Face)
+registro = true           # voz.log (junto a esta config): lo que oyó y era para ella, para ver qué entendió; nunca el audio
 
 # Atajos globales. Si alguno choca con otra app, cámbialo aquí y reinicia Capri.
 # Formato: modificadores (Ctrl, Alt, Shift, Super) y una tecla, separados por "+".

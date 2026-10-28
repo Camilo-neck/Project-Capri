@@ -38,6 +38,7 @@ class Settings:
     voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
     voice_silence_ms: int = 900  # silence that ends a sentence (600 cut "pon... algo de Bad Bunny" in two)
     voice_wake: bool = True  # only what starts with "hey Capri" counts
+    voice_log: bool = True  # voz.log: what she heard that was meant for her
 
     def quiet_now(self, now: datetime) -> bool:
         if not self.quiet:
@@ -86,6 +87,7 @@ def load() -> Settings:
         voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),
         voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 900)),
         voice_wake=bool(data.get("voz", {}).get("llamada", True)),
+        voice_log=bool(data.get("voz", {}).get("registro", True)),
     )
 
 

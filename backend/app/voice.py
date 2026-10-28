@@ -11,7 +11,7 @@ import os
 import queue
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -99,6 +99,26 @@ class Gate:
         return said or None
 
 
+def loggable(text: str, passed: bool, names: Sequence[str]) -> bool:
+    """What voz.log may keep: what was meant for her, or what has her name somewhere (a call she missed).
+    Anything else she overheard is never written."""
+    return passed or any(spoken.is_name(w, names) for w in spoken.plain(text).split())
+
+
+class VoiceLog:
+    """voz.log: one line per sentence, the last `keep` of them."""
+
+    def __init__(self, path: Path, keep: int = 200):
+        self.path, self.keep = path, keep
+
+    def write(self, line: str) -> None:
+        try:
+            old = self.path.read_text(encoding="utf-8").splitlines() if self.path.exists() else []
+            self.path.write_text("\n".join([*old, line][-self.keep:]) + "\n", encoding="utf-8")
+        except OSError:
+            log.warning("could not write %s", self.path)
+
+
 def level(chunk: np.ndarray) -> float:
     """How loud a chunk is, 0-1 (RMS scaled so normal speech fills most of the meter)."""
     return min(1.0, float(np.sqrt(np.mean(chunk ** 2))) * 10)
@@ -147,8 +167,11 @@ class SileroVad:
 
 
 class Voice:
-    def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 900, wake: bool = True, autostart: bool = False):
+    def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 900, wake: bool = True, autostart: bool = False,
+                 log_path: Path | None = None):
         self.autostart = autostart
+        self.names: tuple[str, ...] = (spoken.NAME,)
+        self.voice_log = VoiceLog(log_path) if log_path else None
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
         self.gate = Gate(wake)
         self.state = "off"  # off | loading | idle | listening | hearing | thinking
@@ -194,6 +217,11 @@ class Voice:
             self.start()
         self.gate.arm(time.monotonic())
         self._set("listening")
+
+    def _log(self, seconds: float, heard: tuple[str, str], decision: str, sent: str, stt: float) -> None:
+        if self.voice_log and loggable(heard[0], decision == "pasó", self.names):
+            self.voice_log.write(f"{time.strftime('%H:%M:%S')}  {seconds:.1f}s  {heard[1]}  [{decision}]  «{heard[0]}»"
+                                 f"  → «{sent}»  (stt {stt:.2f}s)")
 
     def _load(self):
         if self._whisper is None:
@@ -247,11 +275,15 @@ class Voice:
                     self._set("thinking")
                     t = time.perf_counter()
                     heard = self.transcribe(audio)
-                    log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, time.perf_counter() - t, heard)
+                    stt = time.perf_counter() - t
+                    log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, stt, heard)
                     text = heard and self.gate.decide(heard[0], time.monotonic())
+                    texto = ""
                     if text:
                         texto = text if self.gate.chat else spoken.to_command(text)
                         self._emit(Heard(texto=texto, original=text, idioma=heard[1]))
+                    if heard:
+                        self._log(len(audio) / RATE, heard, "pasó" if text else "no", texto, stt)
                     # what piled up while it was reading stays queued: it's the next thing he said
                     self._set("listening" if self.gate.armed(time.monotonic()) else "idle")
         except Exception:

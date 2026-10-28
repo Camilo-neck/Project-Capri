@@ -127,3 +127,21 @@ def test_mic_level_is_zero_in_silence_and_tops_out_at_one():
     assert level(np.zeros(CHUNK, dtype="float32")) == 0.0
     assert level(np.ones(CHUNK, dtype="float32")) == 1.0
     assert 0 < level(np.full(CHUNK, 0.02, dtype="float32")) < 1
+
+
+def test_only_what_was_for_her_or_sounds_like_her_name_is_logged():
+    from app.voice import loggable
+
+    assert loggable("abre spotify", True, ["capri"])
+    assert loggable("y luego le dije que capri estaba", False, ["capri"])  # her name anywhere: a missed call
+    assert loggable("y luego le dije que kapri estaba", False, ["capri"])
+    assert not loggable("pásame la sal", False, ["capri"])  # overheard: never written
+
+
+def test_the_voice_log_keeps_the_last_lines(tmp_path):
+    from app.voice import VoiceLog
+
+    log = VoiceLog(tmp_path / "voz.log", keep=3)
+    for i in range(5):
+        log.write(f"line {i}")
+    assert (tmp_path / "voz.log").read_text(encoding="utf-8").splitlines() == ["line 2", "line 3", "line 4"]

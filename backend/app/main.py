@@ -49,7 +49,8 @@ def main() -> None:
     link_file.write_text(json.dumps({"port": PORT, "token": token}), encoding="utf-8")
     print(f"ws://{HOST}:{PORT}/ws?token={token}", flush=True)
     cfg = settings.load()
-    voice = None if args.demo else Voice(cfg.voice_model, cfg.voice_dir, cfg.voice_silence_ms, cfg.voice_wake, cfg.voice_on)
+    voice = None if args.demo else Voice(cfg.voice_model, cfg.voice_dir, cfg.voice_silence_ms, cfg.voice_wake, cfg.voice_on,
+                                         log_path=settings.path().parent / "voz.log" if cfg.voice_log else None)
     uvicorn.Server(uvicorn.Config(create_app(token, orchestrator, voice=voice), log_level="warning")).run(sockets=[sock])
 
 

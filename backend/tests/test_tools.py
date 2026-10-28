@@ -65,7 +65,7 @@ def results(calls) -> list[str]:
 def test_effect_runs_only_after_a_yes_with_the_right_id(opened):
     generate, calls = scripted(say("Te abro la calculadora.", OPEN), say("Listo."))
     with connect(Orchestrator(generate)) as ws:
-        ws.send_json({"type": "text_input", "text": "abre la calculadora"})
+        ws.send_json({"type": "text_input", "text": "tengo que hacer unas cuentas"})  # her idea: a click
         msgs = until(ws, "confirm_request")
         ask = msgs[-1]
         assert ask["texto"] == "Abrir Calculadora" and opened == []  # nothing before the click
@@ -85,7 +85,7 @@ def test_effect_runs_only_after_a_yes_with_the_right_id(opened):
 def test_a_no_runs_nothing(opened):
     generate, calls = scripted(say("¿La abro?", OPEN), say("Vale, no."))
     with connect(Orchestrator(generate)) as ws:
-        ws.send_json({"type": "text_input", "text": "abre la calculadora"})
+        ws.send_json({"type": "text_input", "text": "tengo que hacer unas cuentas"})  # her idea: a click
         ask = until(ws, "confirm_request")[-1]
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": False})
         until_idle(ws)
@@ -96,7 +96,7 @@ def test_a_no_runs_nothing(opened):
 def test_unanswered_confirmation_times_out_as_no(opened):
     generate, calls = scripted(say("¿La abro?", OPEN), say("Otra vez será."))
     with connect(Orchestrator(generate, confirm_s=0.1)) as ws:
-        ws.send_json({"type": "text_input", "text": "abre la calculadora"})
+        ws.send_json({"type": "text_input", "text": "tengo que hacer unas cuentas"})  # her idea: a click
         ask = until(ws, "confirm_request")[-1]
         until_idle(ws)
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})  # too late
@@ -106,7 +106,7 @@ def test_unanswered_confirmation_times_out_as_no(opened):
 def test_disconnecting_with_a_pending_confirmation_runs_nothing(opened):
     orch = Orchestrator(scripted(say("¿La abro?", OPEN), say("..."))[0])
     with connect(orch) as ws:
-        ws.send_json({"type": "text_input", "text": "abre la calculadora"})
+        ws.send_json({"type": "text_input", "text": "tengo que hacer unas cuentas"})  # her idea: a click
         until(ws, "confirm_request")
     assert opened == [] and orch.pending == {}
 
@@ -128,8 +128,9 @@ def test_safe_tools_run_without_asking(tmp_path, monkeypatch):
 SEARCH = {"nombre": "buscar_web", "args": {"consulta": "clima en Bogotá"}}
 
 
-def browser_search(monkeypatch, opened: list, ok: bool):
-    """A web search through his browser: what opened, what was captured, and the turn's messages."""
+def browser_search(monkeypatch, opened: list, ok: bool | None, text: str = "¿qué me pongo para salir?"):
+    """A web search through his browser: what opened, what was captured, and the turn's messages.
+    `ok` is his click; None when no button is expected (he asked for that search himself)."""
     from app import vision
 
     monkeypatch.setattr(vision, "foreground", lambda: (0, 0, 800, 600))
@@ -141,12 +142,70 @@ def browser_search(monkeypatch, opened: list, ok: bool):
     generate, calls = scripted(say("Busco.", SEARCH), say("18 grados y nublado."))
     orch = Orchestrator(generate, capture=lambda rect: shots.append(rect) or b"jpg", read=read, load_s=0)
     with connect(orch) as ws:
-        ws.send_json({"type": "text_input", "text": "¿cómo está el clima en Bogotá?"})
+        ws.send_json({"type": "text_input", "text": text})
+        if ok is None:
+            return None, [], shots, until_idle(ws), calls
         ask = until(ws, "confirm_request")[-1]
         before = list(shots) + list(opened)
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": ok})
         msgs = until_idle(ws)
     return ask, before, shots, msgs, calls
+
+
+def test_a_search_he_asked_for_needs_no_click(opened, monkeypatch):
+    _, _, shots, msgs, calls = browser_search(monkeypatch, opened, None, text="busca el clima en Bogotá")
+    assert "confirm_request" not in {m["type"] for m in msgs}
+    assert shots == [(0, 0, 800, 600)] and {"type": "state", "value": "looking"} in msgs and "18 °C" in results(calls)[0]
+
+
+def named_turn(text: str, accion: dict) -> list[dict]:
+    """One turn where she runs `accion` for `text`: the messages, stopping at a button or at the end."""
+    generate, _ = scripted(say("Va.", accion), say("Listo."))
+    with connect(Orchestrator(generate)) as ws:
+        ws.send_json({"type": "text_input", "text": text})
+        msgs = []
+        while not msgs or msgs[-1]["type"] != "confirm_request" and msgs[-1] != {"type": "state", "value": "idle"}:
+            msgs.append(ws.receive_json())
+        if msgs[-1]["type"] == "confirm_request":
+            ws.send_json({"type": "confirm_response", "id": msgs[-1]["id"], "ok": False})
+            until_idle(ws)
+    return msgs
+
+
+@pytest.mark.parametrize("text, accion", [
+    ("abre Discord", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}),
+    ("abre kick.com/westcol", {"nombre": "abrir_web", "args": {"url": "https://kick.com/westcol"}}),
+    ("ponme Netflix", {"nombre": "abrir_web", "args": {"url": "https://www.netflix.com"}}),
+    ("cópiame eso", {"nombre": "copiar_al_portapapeles", "args": {"texto": "hola"}}),
+])
+def test_what_he_named_runs_without_a_button(opened, monkeypatch, text, accion):
+    # a click to open a website took away the feeling that she's helping
+    monkeypatch.setattr(tools.pyperclip, "copy", lambda text: None)
+    msgs = named_turn(text, accion)
+    assert "confirm_request" not in {m["type"] for m in msgs}
+
+
+def test_her_own_turns_never_count_as_him_asking(opened):
+    generate, _ = scripted(say("Te lo abro.", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}), say("Vale."))
+    sent = []
+
+    async def send(msg):
+        sent.append(msg.model_dump())
+
+    orch = Orchestrator(generate, confirm_s=0.01)
+    asyncio.run(orch.own_turn("[aviso automático, no lo escribió el usuario] Discord tiene mensajes: ábrele Discord.", send))
+    assert any(m["type"] == "confirm_request" for m in sent) and opened == []
+
+
+@pytest.mark.parametrize("text, accion", [
+    ("estoy aburrido", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}),  # her idea
+    ("abre kick.com/westcol", {"nombre": "abrir_web", "args": {"url": "https://evil.example/x"}}),  # not what he said
+    ("abre regedit", {"nombre": "abrir_app", "args": {"nombre": "regedit"}}),  # the registry: always
+    ("ejecuta esto: Remove-Item notas.txt", {"nombre": "ejecutar_comando", "args": {"comando": "Remove-Item notas.txt"}}),
+])
+def test_her_ideas_and_anything_irreparable_still_ask(opened, text, accion):
+    msgs = named_turn(text, accion)
+    assert msgs[-1]["type"] == "confirm_request" and opened == []
 
 
 def test_a_web_search_opens_in_his_browser_and_is_read_after_a_click(opened, monkeypatch):
@@ -203,18 +262,18 @@ def test_a_start_menu_fallback_never_picks_an_uninstaller_or_installer(monkeypat
 def test_bad_args_are_reported_and_any_app_asks_for_a_click(opened):
     generate, calls = scripted(
         say("Abro.", {"nombre": "abrir_app", "args": {}}),
-        say("Abro.", {"nombre": "abrir_app", "args": {"nombre": "regedit"}}),
+        say("Abro.", {"nombre": "abrir_app", "args": {"nombre": "mspaint"}}),
         say("Listo."),
     )
     with connect(Orchestrator(generate)) as ws:
         ws.send_json({"type": "text_input", "text": "abre cosas"})
         ask = until(ws, "confirm_request")[-1]  # only the valid one asks; an app that isn't listed still can
-        assert ask["texto"] == "Abrir regedit" and ask["riesgo"] == "normal"
+        assert ask["texto"] == "Abrir mspaint" and ask["riesgo"] == "normal"
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
         until_idle(ws)
     first, second = results(calls)
-    assert "Argumentos no válidos" in first and "Abrí regedit" in second
-    assert opened == ["regedit"]
+    assert "Argumentos no válidos" in first and "Abrí mspaint" in second
+    assert opened == ["mspaint"]
 
 
 def test_actions_per_turn_are_capped():

@@ -1,7 +1,8 @@
 """What Capri may do beyond her fixed tools: files, PowerShell and the web. Four tiers:
 
 - free: reading and listing inside the user's folder, reading web pages, read-only commands
-- click: anything else (the button shows the exact path or command)
+- click: anything else (the button shows the exact path or command); opening apps and sites, creating
+  files and searching in his browser skip it when his own message named them (Orchestrator.act)
 - red click: deleting, installing, downloading to run, the registry, the system, anything outside the
   user's folder, and anything after she read content from outside (a page, a file) in the same turn
 - never: credentials, browser profiles, keys, and her own config and tokens

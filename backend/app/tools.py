@@ -22,6 +22,7 @@ import pyperclip
 from pydantic import BaseModel, Field
 
 from app import calendar_ics, power, settings, spotify
+from app.memory import content_words, fold
 from app.power import ToolError
 from app.settings import Settings
 
@@ -127,11 +128,27 @@ class Tool:
     describe: Callable[[BaseModel], str] = lambda a: ""  # what the confirmation asks
     risk: Callable[[BaseModel, Settings], str] | None = None  # "libre" | "normal" | "alto" for these args; may refuse
     log: bool = False  # also leave a line in the audit log when it runs without asking
+    # what he has to have named for it to run without a button (an app, a site...); None: always asks
+    named: Callable[[BaseModel], str] | None = None
 
     def level(self, args: BaseModel, s: Settings) -> str:
         return self.risk(args, s) if self.risk else ("normal" if self.effect else "libre")
 
 
+def named_in(target: str, message: str) -> bool:
+    """He asked for it himself: at least half the words of `target` (and one at least) are in his message."""
+    want, have = content_words(target), set(re.findall(r"\w+", fold(message)))
+    return bool(want) and 2 * len(want & have) >= len(want)
+
+
+def site(url: str) -> str:
+    """What he'd call a site: "https://www.kick.com/westcol" is kick."""
+    host = urlparse(url if "//" in url else f"//{url}").hostname or url
+    return host.removeprefix("www.").split(".")[0]
+
+
+# the registry, disks, boot and policies: one wrong click there can break Windows
+SYSTEM_APPS = {"regedit", "regedt32", "gpedit", "secpol", "diskpart", "diskmgmt", "msconfig", "services", "bcdedit"}
 RUNNABLE = {".exe", ".bat", ".cmd", ".ps1", ".msi", ".vbs", ".js", ".scr", ".com", ".lnk"}
 
 
@@ -164,6 +181,8 @@ def shortcut(name: str) -> Path | None:
 def app_risk(a: AppArgs, s: Settings) -> str:
     """A program by name or one from the list is a plain click; a file path that runs code is red."""
     t = app_target(a, s)
+    if Path(t).stem.lower() in SYSTEM_APPS:
+        return "alto"  # the registry and the system: always a red click, even when he named it
     pathlike = "\\" in t or "/" in t or t.startswith("~")
     return "alto" if a.nombre.lower() not in s.apps and pathlike and Path(t).suffix.lower() in RUNNABLE else "normal"
 
@@ -381,34 +400,37 @@ def connect_spotify(a: NoArgs, s: Settings) -> str:
 
 
 TOOLS: dict[str, Tool] = {
-    "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}", app_risk),
+    "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}", app_risk, named=lambda a: a.nombre),
     "buscar_archivos": Tool(SearchArgs, False, search_files, log=True),
     # Her hands on the PC. Reading inside the user's folder is free; writing, commands and anything
     # outside it wait for a click that shows exactly what happens (see power.py for the tiers).
     "leer_archivo": Tool(PathArgs, False, read_file, lambda a: f"Leer {a.ruta} (fuera de tu carpeta)", files_risk, log=True),
     "listar_carpeta": Tool(PathArgs, False, list_folder, lambda a: f"Ver la carpeta {a.ruta} (fuera de tu carpeta)", files_risk, log=True),
-    "escribir_archivo": Tool(WriteArgs, True, write_file, describe_write, write_risk),
+    "escribir_archivo": Tool(WriteArgs, True, write_file, describe_write, write_risk, named=lambda a: Path(a.ruta).stem),
     "ejecutar_comando": Tool(CommandArgs, True, run_command, lambda a: f"Ejecutar en PowerShell: {a.comando}", command_risk, log=True),
     "leer_web": Tool(PageArgs, False, read_page, log=True),
     "buscar_web": Tool(QueryArgs, True, None),  # in his browser, after a click: Orchestrator.search_in_browser
     "leer_portapapeles": Tool(NoArgs, False, read_clipboard),
-    "copiar_al_portapapeles": Tool(TextArgs, True, copy_text,
+    "copiar_al_portapapeles": Tool(TextArgs, False, copy_text,  # nothing breaks: never a button
                                    lambda a: f"Copiar al portapapeles: «{a.texto[:80]}{'…' if len(a.texto) > 80 else ''}»"),
     "ejecutar_script": Tool(ScriptArgs, True, run_script, lambda a: f"Ejecutar el script «{a.nombre}»"),
     "calendario": Tool(CalendarArgs, False, calendar),
-    "configurar_calendario": Tool(CalendarUrlArgs, True, configure_calendar, lambda a: "Guardar la dirección de tu calendario"),
+    "configurar_calendario": Tool(CalendarUrlArgs, True, configure_calendar, lambda a: "Guardar la dirección de tu calendario",
+                                    named=lambda a: a.url),
     # Memory: they need the memory store and the avatar, so the orchestrator runs them. Forgetting
     # deletes, so it confirms (with the list of what goes) like any action with effects.
     "recordar": Tool(RememberArgs, False, None),
     "olvidar": Tool(ForgetArgs, True, None),
-    # Web and music. Any address can be anything, so it confirms; searches on fixed sites, media
-    # keys and playing music change nothing that matters, so they don't.
-    "abrir_web": Tool(UrlArgs, True, open_url, lambda a: f"Abrir {urlparse(a.url).hostname or a.url} en el navegador"),
+    # Web and music. An address he didn't name could be anything, so it confirms; searches on fixed
+    # sites, media keys and playing music change nothing that matters, so they don't.
+    "abrir_web": Tool(UrlArgs, True, open_url, lambda a: f"Abrir {urlparse(a.url).hostname or a.url} en el navegador",
+                        named=lambda a: site(a.url)),
     "buscar": Tool(WebSearchArgs, False, web_search),
     "youtube": Tool(YoutubeArgs, False, play_youtube),
     "musica": Tool(MediaArgs, False, media),
     "spotify": Tool(SpotifyArgs, False, play_spotify),
-    "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)"),
+    "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)",
+                              named=lambda a: "spotify"),
 }
 
 ToolName = Literal[tuple(TOOLS)]  # type: ignore[valid-type]  # the grammar only lets the model pick these

@@ -143,7 +143,7 @@ def test_after_reading_outside_content_every_click_is_red(opened, monkeypatch):
         assert ask["riesgo"] == "alto" and ask["texto"].startswith("Después de leer contenido externo")
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": False})
         until_idle(ws)
-        ws.send_json({"type": "text_input", "text": "ahora abre la calculadora"})  # a new turn: back to normal
+        ws.send_json({"type": "text_input", "text": "ahora haz unas cuentas"})  # a new turn: back to normal
         assert until(ws, "confirm_request")[-1]["riesgo"] == "normal"
     assert opened == []
 

@@ -58,6 +58,7 @@ class Orchestrator:
         self.history: list[dict] = self.memory.recent_tail(self.session, TAIL_HOURS, TAIL_MESSAGES)
         self.running = ""  # summary of the part of this conversation trimmed off the history
         self.spoke = False  # he has written to her in this session (her own turns don't count)
+        self.request = ""  # his message this turn ("" on her own): what he names there runs without a button
         self.ctx = 0  # context tokens of the last reply
         self.lock = asyncio.Lock()  # one turn at a time (user turns, looks and reminders)
         self.pending: dict[str, asyncio.Future[bool]] = {}  # confirmation id -> answer
@@ -129,6 +130,7 @@ class Orchestrator:
             return
         # The history never keeps the image (~900 tokens): only a mark, and the reply describes it.
         self.external = False
+        self.request = "" if own or image else text  # what's on screen never counts as him asking
         self.add("user", f"[captura de pantalla] {text}" if image else text)
         await send(State(value="thinking"))
         denied = False
@@ -246,6 +248,10 @@ class Orchestrator:
             return f"No se pudo: {e}"
         # Effects wait for a click unless the call is plainly harmless; anything red does, even a read.
         asks = (tool.effect and level != "libre") or level == "alto"
+        if asks and level != "alto" and tool.named and tools.named_in(tool.named(args), self.request):
+            # he asked for it in so many words ("abre Discord"): a button would only get in the way
+            asks = False
+            tools.audit({"accion": accion.nombre, "args": args.model_dump(), "pedido": self.request[:200]})
         if asks:
             if self.external:
                 level = "alto"
@@ -275,11 +281,14 @@ class Orchestrator:
     async def search_in_browser(self, query: str, send: Send) -> str:
         """A web search in his own browser, like he'd do it (DuckDuckGo answered her with a bot challenge):
         after his click it opens, and once it loaded she captures that window (indicator up) and reads it."""
-        what = f"Buscar «{query}» en tu navegador y leer los resultados de la pantalla (captura de esa ventana)"
-        ok = await self.ask(what, send)
-        tools.audit({"accion": "buscar_web", "args": {"consulta": query}, "pregunta": what, "confirmado": ok})
-        if not ok:
-            return DENIED
+        if tools.named_in(query, self.request):  # "busca el clima en Bogotá": he asked, no button
+            tools.audit({"accion": "buscar_web", "args": {"consulta": query}, "pedido": self.request[:200]})
+        else:
+            what = f"Buscar «{query}» en tu navegador y leer los resultados de la pantalla (captura de esa ventana)"
+            ok = await self.ask(what, send)
+            tools.audit({"accion": "buscar_web", "args": {"consulta": query}, "pregunta": what, "confirmado": ok})
+            if not ok:
+                return DENIED
         await send(Action(nombre="buscar_web", fase="inicio"))
         start, done = time.monotonic(), False
         try:

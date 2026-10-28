@@ -148,11 +148,17 @@ def app_target(a: AppArgs, s: Settings) -> str:
     return s.apps.get(name.lower(), APP_NAMES.get(name.lower(), name))
 
 
+# shortcuts that install, uninstall or repair: "abre bittorrent" opened "Desinstalar qBittorrent" under a plain click
+NOT_THE_APP = re.compile(r"install|uninst|desinstal|setup|remove|repair|reparar|quitar", re.I)
+
+
 def shortcut(name: str) -> Path | None:
-    """The Start menu shortcut whose name is or contains `name` (Discord isn't an App Paths name)."""
+    """The Start menu shortcut for `name` (Discord isn't an App Paths name): the same name, else one that
+    starts with it, else the shortest that contains it. Never one that installs or uninstalls."""
     want = name.lower()
-    links = [p for d in START_MENUS if d.is_dir() for p in d.rglob("*.lnk")]
-    return next((p for p in links if p.stem.lower() == want), None) or next((p for p in links if want in p.stem.lower()), None)
+    links = [p for d in START_MENUS if d.is_dir() for p in d.rglob("*.lnk") if not NOT_THE_APP.search(p.stem)]
+    fits = [p for p in links if want in p.stem.lower()]
+    return min(fits, key=lambda p: (p.stem.lower() != want, not p.stem.lower().startswith(want), len(p.stem)), default=None)
 
 
 def app_risk(a: AppArgs, s: Settings) -> str:

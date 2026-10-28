@@ -149,6 +149,17 @@ def test_an_app_known_only_by_its_start_menu_shortcut_opens(monkeypatch, tmp_pat
         tools.open_app(tools.AppArgs(nombre="nada parecido"), settings.Settings())
 
 
+def test_a_start_menu_fallback_never_picks_an_uninstaller_or_installer(monkeypatch, tmp_path):
+    # "abre bittorrent" opened "Desinstalar qBittorrent" under a plain "Abrir bittorrent" click
+    for name in ["Desinstalar qBittorrent", "qBittorrent", "Install Additional Tools for Node.js", "Node.js command prompt"]:
+        (tmp_path / f"{name}.lnk").write_text("")
+    monkeypatch.setattr(tools, "START_MENUS", [tmp_path])
+    assert tools.shortcut("bittorrent") == tmp_path / "qBittorrent.lnk"
+    assert tools.shortcut("node") == tmp_path / "Node.js command prompt.lnk"
+    (tmp_path / "qBittorrent.lnk").unlink()
+    assert tools.shortcut("bittorrent") is None
+
+
 def test_bad_args_are_reported_and_any_app_asks_for_a_click(opened):
     generate, calls = scripted(
         say("Abro.", {"nombre": "abrir_app", "args": {}}),

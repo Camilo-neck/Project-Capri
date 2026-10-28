@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import secrets
 import time
@@ -10,7 +11,7 @@ from pydantic import ValidationError
 
 from app import calendar_ics, claude_link, presence, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, reply
-from app.memory import Memory, content_words, fold
+from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import Action, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta, UtteranceEnd, UtteranceStart
 from app.schema import Accion, Reply
 
@@ -299,9 +300,9 @@ class Orchestrator:
                     where = f" en {e.place}" if e.place else ""
                     when = "empezó" if e.start < self.clock() else "empieza"
                     async with self.lock:  # never on top of a turn in progress
-                        await self.turn(
+                        await self.own_turn(
                             f"[aviso automático, no lo escribió el usuario] Avísale de que «{e.title}» "
-                            f"{when} a las {e.start:%H:%M}{where}.", send, own=True)
+                            f"{when} a las {e.start:%H:%M}{where}.", send)
             await asyncio.sleep(every_s)
 
     async def chatter(self, send: Send, every_s: float = 60) -> None:
@@ -326,7 +327,15 @@ class Orchestrator:
                 continue
             self.chatted.append(t)
             async with self.lock:
-                await self.turn(f"[aviso automático, no lo escribió el usuario] {prompt}", send, own=True)
+                await self.own_turn(f"[aviso automático, no lo escribió el usuario] {prompt}", send)
+
+    async def own_turn(self, text: str, send: Send) -> None:
+        """Something she brings up herself; one that breaks must not end her reminders or leave her speaking."""
+        try:
+            await self.turn(text, send, own=True)
+        except Exception:
+            log.exception("her own turn failed")
+            await recover(send)
 
     # ---- modes ----
 
@@ -365,9 +374,9 @@ class Orchestrator:
         if everything:
             what = "Olvidar todo lo que recuerdo de ti (recuerdos y resúmenes)"
         else:
-            said = [f"{len(msgs)} mensaje{'s' if len(msgs) != 1 else ''}"] * bool(msgs) + \
+            counts = [f"{len(msgs)} mensaje{'s' if len(msgs) != 1 else ''}"] * bool(msgs) + \
                    [f"{len(sums)} resumen{'es' if len(sums) != 1 else ''}"] * bool(sums)
-            where = f"lo que dicen {' y '.join(said)} de conversaciones" if said else ""
+            where = f"lo que dicen {' y '.join(counts)} de conversaciones" if counts else ""
             what = (f"Olvidar {len(matches)} recuerdo{'s' if len(matches) > 1 else ''}: " + "; ".join(f"«{t}»" for _, t, _ in matches)
                     + (f" (y {where})" if where else "") if matches else f"Olvidar {where} sobre «{query.strip()}»")
         ok = await self.ask(what, send)
@@ -381,8 +390,8 @@ class Orchestrator:
             return "done"
         self.memory.forget([i for i, _, _ in matches])
         self.memory.scrub(terms)
-        self.history = [m for m in self.history if not terms & content_words(m["content"])]
-        if terms & content_words(self.running):
+        self.history = [m for m in self.history if not mentions(terms, said(m["role"], m["content"]))]
+        if mentions(terms, self.running):
             self.running = ""
         return "done"
 
@@ -423,6 +432,13 @@ class Orchestrator:
                 self.memory.set_summary(sid, await self.summarize(text))
             except Exception:
                 log.exception("could not summarize session %d", sid)
+
+
+async def recover(send: Send) -> None:
+    """After a turn broke: the avatar stops speaking or thinking (unless it's the avatar that went away)."""
+    with contextlib.suppress(Exception):
+        await send(UtteranceEnd())
+        await send(State(value="idle"))
 
 
 def transcript(messages: list[dict]) -> str:

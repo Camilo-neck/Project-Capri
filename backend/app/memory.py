@@ -4,6 +4,7 @@
 - mensajes / sesiones: every conversation as it happens, and a summary per session.
 """
 
+import json
 import re
 import sqlite3
 import unicodedata
@@ -62,6 +63,21 @@ def content_words(text: str) -> set[str]:
     return {w for w in re.findall(r"\w+", fold(text)) if len(w) >= 3 and w not in STOPWORDS}
 
 
+def mentions(terms: set[str], text: str) -> bool:
+    """`text` says every one of `terms` (folded whole words)."""
+    return bool(terms) and terms <= set(re.findall(r"\w+", fold(text)))
+
+
+def said(rol: str, content: str) -> str:
+    """What a stored message says: her replies by their texto, not their JSON ("neutral", "accion"...)."""
+    if rol != "assistant":
+        return content
+    try:
+        return str(json.loads(content).get("texto", ""))
+    except (ValueError, AttributeError):
+        return content
+
+
 def fold(text: str) -> str:
     """Lowercase without accents, to match like FTS5's remove_diacritics."""
     return "".join(c for c in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(c) != "Mn")
@@ -117,9 +133,10 @@ class Memory:
             self.db.execute("update sesiones set resumen = null")
 
     def mentioning(self, terms: set[str]) -> tuple[list[int], list[int]]:
-        """Ids of the stored messages and of the sessions whose summary say any of `terms` (folded whole words)."""
-        says = lambda text: bool(terms & set(re.findall(r"\w+", fold(text))))  # noqa: E731
-        msgs = [i for i, c in self.db.execute("select id, contenido from mensajes") if says(c)]
+        """Ids of the stored messages and of the sessions whose summary say all of `terms` (folded whole
+        words): any of them took "Me gusta el rock" for "/olvida que me gusta el café"."""
+        says = lambda text: mentions(terms, text)  # noqa: E731
+        msgs = [i for i, rol, c in self.db.execute("select id, rol, contenido from mensajes") if says(said(rol, c))]
         sums = [i for i, r in self.db.execute("select id, resumen from sesiones where resumen != ''") if says(r)]
         return msgs, sums
 

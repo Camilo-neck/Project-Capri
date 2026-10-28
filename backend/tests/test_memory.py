@@ -350,6 +350,34 @@ def test_olvida_matches_whole_words_and_never_stopwords(tmp_path):
     assert [t for _, t, _ in m.search("Mishi")] == ["Tiene una gata que se llama Mishi"]
 
 
+def test_olvida_takes_from_conversations_only_what_says_all_of_it(tmp_path):
+    # "/olvida que me gusta el café" also took "Me gusta el rock"; "/olvida neutral" matched every reply's JSON
+    m = Memory(tmp_path / "m.db")
+    s = m.new_session()
+    for rol, text in [("user", "Me gusta el rock"), ("user", "me gusta el café con leche"),
+                      ("assistant", say("Anotado."))]:
+        m.log(s, rol, text)
+    msgs, _ = m.mentioning({"gusta", "cafe"})
+    assert [c for (i, c) in m.db.execute("select id, contenido from mensajes") if i in msgs] == ["me gusta el café con leche"]
+    assert m.mentioning({"neutral"}) == ([], [])
+
+
+def test_her_own_turns_that_break_end_idle(tmp_path):
+    # a reminder whose reply broke killed the reminders task and left her "speaking"
+    async def broken(messages):
+        raise RuntimeError("boom")
+        yield ""
+
+    sent = []
+
+    async def send(msg):
+        sent.append(msg.model_dump())
+
+    orch = Orchestrator(broken, memory=Memory(tmp_path / "m.db"))
+    asyncio.run(orch.own_turn("[aviso automático, no lo escribió el usuario] Salúdale.", send))
+    assert sent[-1] == {"type": "state", "value": "idle"}
+
+
 def test_search_skips_words_that_say_nothing(tmp_path):
     m = Memory(tmp_path / "m.db")
     m.remember("Va al gimnasio por las tardes")

@@ -88,7 +88,7 @@ def test_what_is_said_while_she_transcribes_is_not_thrown_away(monkeypatch):
     monkeypatch.setitem(sys.modules, "sounddevice", types.SimpleNamespace(InputStream=Stream))
     monkeypatch.setattr(voice, "SileroVad", lambda: lambda chunk: float(chunk[0]))
     v = voice.Voice()
-    said = iter(["Hey Capri, uno", "Hey Capri, dos"])
+    said = iter(["Hey Capri, uno", "mira esto"])  # the second only got through the follow-up window
 
     def transcribe(audio):
         text = next(said, None)
@@ -102,4 +102,22 @@ def test_what_is_said_while_she_transcribes_is_not_thrown_away(monkeypatch):
 
     threading.Timer(1, v.stop).start()  # the loop ends once the queue has been idle a moment
     v._run()
-    assert [m.texto for m in sent if isinstance(m, Heard)] == ["uno", "dos"]
+    assert [m.texto for m in sent if isinstance(m, Heard)] == ["uno", "mira esto"]  # as chat: no screenshot
+
+
+def test_after_a_sentence_the_window_takes_chat_not_commands():
+    # overheard "ya, mira esto" right after "hey Capri, pon música" took a screenshot
+    g = Gate(wake=True)
+    g.decide("Hey Capri, pon música", 0)
+    assert g.decide("ya, mira esto", 2) == "ya, mira esto" and g.chat
+    g.decide("Hey Capri", 3)  # just her name, or the hotkey: what comes next may be a command
+    assert g.decide("mira esto", 4) == "mira esto" and not g.chat
+    g.arm(5)
+    assert g.decide("escóndete", 6) == "escóndete" and not g.chat
+
+
+def test_with_the_hotkey_only_her_name_does_not_open_the_window():
+    g = Gate(wake=False)
+    g.arm(0)
+    assert g.decide("Capri, pon música", 1) == "pon música"
+    assert not g.armed(2)

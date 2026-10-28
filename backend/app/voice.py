@@ -73,9 +73,11 @@ class Gate:
     def __init__(self, wake: bool = True, window_s: float = 8):
         self.wake, self.window = wake, window_s
         self.until = 0.0
+        self.followup = False  # the window was opened by a whole sentence to her, not a bare name or the hotkey
+        self.chat = False  # what decide() let through came only from such a window: chat, never a command
 
     def arm(self, now: float) -> None:
-        self.until = now + self.window
+        self.until, self.followup = now + self.window, False
 
     def armed(self, now: float) -> bool:
         return now < self.until
@@ -85,12 +87,14 @@ class Gate:
         if self.armed(now):
             self.until = 0.0
             said = (rest if called else text).strip()
+            self.chat = self.followup and not called  # overheard "mira esto" must not take a screenshot
         elif self.wake and called:
-            said = rest.strip()
+            said, self.chat = rest.strip(), False
         else:
             return None
-        if called:
+        if called and self.wake:  # with the hotkey only ([voz] llamada = false), her name opens nothing
             self.arm(now)
+            self.followup = bool(said)
         return said or None
 
 
@@ -236,7 +240,8 @@ class Voice:
                     log.info("voice: %.2f s of audio read in %.2f s: %r", len(audio) / RATE, time.perf_counter() - t, heard)
                     text = heard and self.gate.decide(heard[0], time.monotonic())
                     if text:
-                        self._emit(Heard(texto=spoken.to_command(text), original=text, idioma=heard[1]))
+                        texto = text if self.gate.chat else spoken.to_command(text)
+                        self._emit(Heard(texto=texto, original=text, idioma=heard[1]))
                     # what piled up while it was reading stays queued: it's the next thing he said
                     self._set("listening" if self.gate.armed(time.monotonic()) else "idle")
         except Exception:

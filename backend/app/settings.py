@@ -41,7 +41,8 @@ class Settings:
     voice_names: tuple[str, ...] = ("capri",)  # what she answers to (compared loosely: "Kapri", "Capry")
     voice_log: bool = True  # voz.log: what she heard that was meant for her
     speak: bool = True  # with the voice on, she answers out loud
-    tts_voice: str = "capri"  # a tuned style in tts_dir (scripts/tune_voice.py), a Kokoro voice, or "" for the stock ones
+    tts_engine: str = "qwen"  # qwen: her cloned voice on the GPU (Kokoro if it fails); kokoro: on the CPU
+    tts_voice: str = "capri"  # qwen/<it>.wav + .txt for Qwen; for Kokoro a tuned style (scripts/tune_voice.py), one of its voices or "" for the stock ones
     tts_dir: str = r"D:\capri-models\tts"  # Kokoro's model (and tuned voices)
     tts_speed: float = 1.0
     tts_robot: float = 0.0  # her metallic touch, 0-1
@@ -97,6 +98,7 @@ def load() -> Settings:
         voice_names=tuple(n.lower() for n in data.get("voz", {}).get("nombres", ["capri"]) if n.strip()) or ("capri",),
         voice_log=bool(data.get("voz", {}).get("registro", True)),
         speak=bool(data.get("voz", {}).get("hablar", True)),
+        tts_engine="kokoro" if data.get("voz", {}).get("motor") == "kokoro" else "qwen",
         tts_voice=str(data.get("voz", {}).get("voz_tts", "capri")),
         tts_dir=str(data.get("voz", {}).get("carpeta_tts", r"D:\capri-models\tts")),
         tts_speed=min(1.5, max(0.7, float(data.get("voz", {}).get("velocidad", 1.0)))),

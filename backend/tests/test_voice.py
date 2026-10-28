@@ -300,3 +300,17 @@ def test_hotkey_only_mode_opens_no_conversation_window(monkeypatch):
     vo.heard_at = time.monotonic()
     vo.converse()
     assert not vo.gate.armed(time.monotonic())
+
+
+def test_turning_the_voice_off_frees_whisper(monkeypatch):
+    from app import voice as v
+
+    vo = v.Voice()
+    vo._whisper = object()  # loaded: ~1 GB of the GPU
+
+    def broken():
+        raise RuntimeError("no microphone")
+
+    monkeypatch.setattr(vo, "_load", broken)
+    vo._run()
+    assert vo._whisper is None and vo.state == "off"

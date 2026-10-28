@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from app.speech import Sentences, clean, echo, fx, lang_of
 
@@ -67,13 +68,14 @@ class Card:
     def __init__(self, delay=0.0):
         self.out, self.delay = [], delay
 
-    def __call__(self, audio, rate, block):
-        for i in range(0, len(audio), rate // 20):
-            b = block(audio[i:i + rate // 20])
-            if b is None:
-                return
-            self.out.append(b)
-            time.sleep(self.delay)
+    def __call__(self, chunks, rate, block):
+        for audio in chunks:
+            for i in range(0, len(audio), rate // 20):
+                b = block(audio[i:i + rate // 20])
+                if b is None:
+                    return
+                self.out.append(b)
+                time.sleep(self.delay)
 
 
 def speaker(card=None, fail=False, seconds=0.2):
@@ -229,3 +231,120 @@ def test_empty_audio_from_the_voice_is_skipped():
     reply(sp, "Nada. Algo.")
     done(sp)
     assert sp.enabled and not sp.playing and sp.recent() == ["Algo."]
+
+
+def test_a_streamed_sentence_plays_its_chunks_in_order():
+    def synth(text, lang, speed=1.0):
+        return (np.full(100, v, dtype="float32") for v in (0.1, 0.2, 0.3)), RATE
+
+    card = Card()
+    sp = Speaker(synth=synth, play=card)
+    reply(sp, "Hola.")
+    done(sp)
+    out = np.concatenate(card.out)
+    assert len(out) == 300 and list(out[::100]) == pytest.approx([0.1, 0.2, 0.3])
+    assert sp.recent() == ["Hola."]
+
+
+def test_stopping_cuts_a_sentence_still_being_made():
+    closed = threading.Event()
+
+    def synth(text, lang, speed=1.0):
+        def chunks():
+            try:
+                for _ in range(100):  # 5 s of her, made slowly
+                    time.sleep(0.02)
+                    yield np.full(50, 0.5, dtype="float32")
+            finally:
+                closed.set()
+        return (chunks() if text == "Larga." else iter([np.full(50, 0.5, dtype="float32")])), RATE
+
+    card = Card(delay=0.01)
+    sp = Speaker(synth=synth, play=card)
+    reply(sp, "Larga.")
+    time.sleep(0.6)  # it started playing (0.4 s buffered first)
+    assert card.out
+    sp.stop()
+    assert closed.wait(1), "the voice model kept making the cut sentence"
+    reply(sp, "Corta.")
+    done(sp)
+    assert sp.recent()[-1] == "Corta."
+
+
+def test_releasing_her_voice_frees_the_model():
+    closed = []
+
+    def synth(text, lang, speed=1.0):
+        return np.full(100, 0.5, dtype="float32"), RATE
+
+    synth.close = lambda: closed.append(1)
+    sp = Speaker(synth=synth, play=Card())
+    sp.release()
+    assert closed == [1] and not sp.playing
+
+
+def test_when_the_cloned_voice_fails_she_goes_on_with_the_backup():
+    from app.speech import fallback
+
+    calls = []
+
+    def qwen(text, lang, speed=1.0):
+        calls.append(text)
+        raise RuntimeError("no GPU")
+
+    def kokoro(text, lang, speed=1.0):
+        return np.full(10, 0.5, dtype="float32"), 24000
+
+    synth = fallback(qwen, kokoro)
+    assert synth("Hola.", "es", 1.0)[1] == 24000
+    assert synth("Otra.", "es", 1.0)[1] == 24000
+    assert calls == ["Hola."]  # tried once, then Kokoro for good
+
+
+FAKE_WORKER = r'''
+import json, struct, sys
+out = sys.stdout.buffer
+def frame(b):
+    out.write(struct.pack("<i", len(b)) + b)
+    out.flush()
+frame(b"")  # ready
+n = 0
+for line in sys.stdin:
+    req = json.loads(line)
+    if "stop" in req:
+        continue
+    n += 1
+    if req["text"] == "Rompe.":
+        out.write(struct.pack("<i", -1)); out.flush()
+        continue
+    for _ in range(3):
+        frame(struct.pack("<240f", *([float(n)] * 240)))
+    frame(b"")
+'''
+
+
+def qwen_fake(tmp_path):
+    import sys
+
+    from app.speech import qwen
+
+    worker = tmp_path / "worker.py"
+    worker.write_text(FAKE_WORKER, encoding="utf-8")
+    return qwen(str(tmp_path), "capri", cmd=[sys.executable, "-I", str(worker)])
+
+
+def test_the_cloned_voice_streams_from_its_own_process(tmp_path):
+    synth = qwen_fake(tmp_path)
+    try:
+        chunks, rate = synth("Hola.", "es", 1.0)
+        chunks = list(chunks)
+        assert rate == 24000 and len(chunks) == 3 and all(c.dtype == np.float32 and c[0] == 1 for c in chunks)
+        first, _ = synth("Larga.", "es", 1.0)
+        next(first)
+        first.close()  # cut after one chunk: the rest is dropped, not mixed into the next sentence
+        assert [c[0] for c in synth("Otra.", "es", 1.0)[0]] == [3, 3, 3]
+        with pytest.raises(RuntimeError):
+            list(synth("Rompe.", "es", 1.0)[0])
+    finally:
+        synth.close()
+    assert synth.proc.poll() is not None  # gone: its VRAM is free

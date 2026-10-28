@@ -61,8 +61,10 @@ llamada = true            # solo hace caso a lo que la llama por su nombre (fals
 silencio_ms = 900         # silencio que da por terminada una frase
 modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" gasta menos GPU)
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = caché de Hugging Face)
-hablar = true             # con la voz activa, te contesta en voz alta (Kokoro, en CPU)
-voz_tts = "capri"         # su voz: la afinada con scripts/tune_voice.py (capri.npy en carpeta_tts), una de Kokoro ("ef_dora") o "" (las de serie)
+hablar = true             # con la voz activa, te contesta en voz alta
+motor = "qwen"            # "qwen": su voz clonada de su grabación (GPU, ~2,7 GB; si falla, Kokoro); "kokoro": en CPU, sin clonar
+voz_tts = "capri"         # su voz. Qwen: qwen/capri.wav (~10 s de ella) + qwen/capri.txt (lo que dice) en carpeta_tts.
+                          # Kokoro: la afinada con scripts/tune_voice.py (capri.npy), una de Kokoro ("ef_dora") o "" (las de serie)
 carpeta_tts = 'D:\capri-models\tts'
 velocidad = 1.0           # 0.7 a 1.5
 robot = 0.0               # su toque metálico, 0 a 1 (también en el panel)

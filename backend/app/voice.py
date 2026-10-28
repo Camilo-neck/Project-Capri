@@ -399,4 +399,5 @@ class Voice:
             log.exception("voice stopped")
         finally:
             self._stop.set()
+            self._whisper = None  # its GPU memory back while the voice is off (it loads again in ~2 s)
             self._set("off")

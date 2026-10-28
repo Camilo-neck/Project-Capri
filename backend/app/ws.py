@@ -185,13 +185,15 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                     case Hotkey(name="voz") if voice:
                         voice.toggle()
                         if speaker and not voice.on:
-                            speaker.stop()
+                            speaker.release()  # her voice model leaves the GPU too
                         elif speaker and speaker.enabled:
                             tasks.add(asyncio.create_task(asyncio.to_thread(speaker.warm)))  # her voice ready for the first reply
                     case Hotkey(name="hablar") if speaker:
                         speaker.enabled = orchestrator.hablar = not speaker.enabled
                         if not speaker.enabled:
-                            speaker.stop()
+                            speaker.release()
+                        elif voice and voice.on:
+                            tasks.add(asyncio.create_task(asyncio.to_thread(speaker.warm)))
                         settings.set_value("voz", "hablar", speaker.enabled)
                         await broadcast(orchestrator.mode())
                     case Say(texto=texto) if talks() and not panel:

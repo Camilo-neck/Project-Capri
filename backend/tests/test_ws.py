@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from pathlib import Path
 from typing import get_args
 
@@ -177,6 +178,9 @@ class FakeVoice:
     def listen_now(self):
         self.listened = getattr(self, "listened", 0) + 1
 
+    def toggle(self):
+        self.on = not self.on
+
 
 def test_the_end_of_a_turn_opens_the_conversation_window():
     voice = FakeVoice()
@@ -189,7 +193,7 @@ def test_the_end_of_a_turn_opens_the_conversation_window():
 
 class FakeSpeaker:
     def __init__(self):
-        self.seen, self.said, self.stops, self.afters = [], [], 0, []
+        self.seen, self.said, self.stops, self.afters, self.releases, self.warms = [], [], 0, [], 0, 0
         self.enabled, self.playing, self.lang = True, False, "es"
         self.speed, self.robot, self.glitch = 1.0, 0.0, 0.0
         self.emit, self.on_first_audio = None, None
@@ -207,7 +211,10 @@ class FakeSpeaker:
         self.afters.append(cb)
 
     def warm(self):
-        pass
+        self.warms += 1
+
+    def release(self):
+        self.releases += 1
 
 
 def talking_app(voice_on=True):
@@ -273,8 +280,35 @@ def test_talking_out_loud_toggles_and_is_kept(monkeypatch, tmp_path):
         while (m := ws.receive_json())["type"] != "mode":
             pass
         assert m["hablar"] is False
-    assert not speaker.enabled and speaker.stops >= 1
+    assert not speaker.enabled and speaker.releases == 1  # her voice model leaves the GPU
     assert settings.load().speak is False
+
+
+def test_turning_talking_back_on_gets_her_voice_ready(monkeypatch, tmp_path):
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    client, voice, speaker = talking_app()
+    speaker.enabled = False
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        warms = speaker.warms
+        ws.send_json({"type": "hotkey", "name": "hablar"})
+        while (m := ws.receive_json())["type"] != "mode":
+            pass
+        assert m["hablar"] is True
+        for _ in range(50):
+            if speaker.warms > warms:
+                break
+            time.sleep(0.02)
+    assert speaker.warms == warms + 1
+
+
+def test_turning_the_voice_off_frees_her_voice_model():
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "hotkey", "name": "voz"})
+        ws.send_json({"type": "voice_get"})
+        while ws.receive_json()["type"] != "voice_info":
+            pass
+    assert not voice.on and speaker.releases == 1
 
 
 def test_the_panel_tunes_her_voice(monkeypatch, tmp_path):

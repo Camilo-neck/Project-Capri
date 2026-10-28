@@ -18,7 +18,7 @@ from app import settings
 from app.demo import demo_generate_factory
 from app.memory import Memory
 from app.orchestrator import Orchestrator
-from app.speech import Speaker, kokoro
+from app.speech import Speaker, fallback, kokoro, qwen
 from app.voice import Voice
 from app.ws import create_app
 
@@ -54,7 +54,10 @@ def main() -> None:
                                          log_path=settings.path().parent / "voz.log" if cfg.voice_log else None, names=cfg.voice_names)
     speaker = None
     if voice:
-        speaker = Speaker(kokoro(cfg.tts_dir, cfg.tts_voice))
+        synth = kokoro(cfg.tts_dir, cfg.tts_voice)
+        if cfg.tts_engine == "qwen":
+            synth = fallback(qwen(cfg.tts_dir, cfg.tts_voice), synth)
+        speaker = Speaker(synth)
         speaker.enabled, speaker.speed, speaker.robot, speaker.glitch = cfg.speak, cfg.tts_speed, cfg.tts_robot, cfg.tts_glitch
     uvicorn.Server(uvicorn.Config(create_app(token, orchestrator, voice=voice, speaker=speaker), log_level="warning")).run(sockets=[sock])
 

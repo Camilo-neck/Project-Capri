@@ -2,14 +2,17 @@
 language, with her robotic touches; and telling her own voice (coming back through the speakers) apart
 from his. Pure functions here; `Speaker` plays them."""
 
+import json
 import logging
 import queue
 import re
+import struct
+import subprocess
 import threading
 import time
 import unicodedata
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -125,6 +128,7 @@ def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: 
 
 
 STOCK = {"es": "ef_dora", "en": "af_heart"}  # Kokoro's voices when no tuned one is set
+PREBUFFER_S = 0.4  # a streamed sentence starts once this much is made: with the LLM busy too, it's about real time
 
 
 def kokoro(folder: str, voice: str = "") -> Callable[[str, str, float], tuple[np.ndarray, int]]:
@@ -148,18 +152,98 @@ def kokoro(folder: str, voice: str = "") -> Callable[[str, str, float], tuple[np
     return synth
 
 
-def sound_card(audio: np.ndarray, rate: int, block: Callable[[np.ndarray], np.ndarray | None]) -> None:
-    """Plays in 50 ms blocks, each through `block` (volume, level); None from it cuts the sound at once."""
+def qwen(folder: str, voice: str = "capri", cmd: list[str] | None = None) -> Callable[..., tuple[Iterator[np.ndarray], int]]:
+    """Her cloned voice (Qwen3-TTS) in its own process with its own Python (torch, CUDA graphs): app/qwen_worker.py
+    with <folder>/qwen/env, the 0.6B model and her recording, <folder>/qwen/<voice>.wav + .txt (what it says).
+    Started on first use; the audio streams in chunks; `synth.close()` ends it and frees its GPU memory."""
+    root = Path(folder) / "qwen"
+    cmd = cmd or [str(root / "env" / "Scripts" / "python.exe"), "-I", str(Path(__file__).with_name("qwen_worker.py")),
+                  str(root / "Qwen3-TTS-12Hz-0.6B-Base"), str(root / f"{voice}.wav"), str(root / f"{voice}.txt")]
+
+    def read(n: int) -> bytes:
+        b = synth.proc.stdout.read(n)
+        if len(b) < n:
+            raise RuntimeError("her voice's process died (see qwen/worker.log)")
+        return b
+
+    def size() -> int:
+        return struct.unpack("<i", read(4))[0]
+
+    def send(msg: dict) -> None:
+        synth.proc.stdin.write((json.dumps(msg) + "\n").encode())
+        synth.proc.stdin.flush()
+
+    def synth(text: str, lang: str, speed: float = 1.0) -> tuple[Iterator[np.ndarray], int]:
+        if synth.proc is None or synth.proc.poll() is not None:
+            err = open(root / "worker.log", "ab") if root.is_dir() else subprocess.DEVNULL
+            synth.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
+                                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if size() != 0:  # it says it's ready once the model is loaded and its graphs captured
+                raise RuntimeError("her voice didn't load (see qwen/worker.log)")
+
+        def chunks() -> Iterator[np.ndarray]:
+            send({"text": text, "lang": lang})
+            ended = False
+            try:
+                while (n := size()) > 0:
+                    yield np.frombuffer(read(n), dtype="<f4")
+                ended = True
+                if n < 0:
+                    raise RuntimeError(f"her voice couldn't say {text!r} (see qwen/worker.log)")
+            finally:
+                if not ended and synth.proc.poll() is None:  # cut: it stops, and the rest isn't mixed into the next
+                    send({"stop": True})
+                    while (n := size()) > 0:
+                        read(n)
+
+        return chunks(), 24000
+
+    def close() -> None:
+        if synth.proc is not None and synth.proc.poll() is None:
+            synth.proc.kill()
+            synth.proc.wait()
+
+    synth.proc, synth.close = None, close
+    return synth
+
+
+def fallback(primary: Callable, backup: Callable) -> Callable:
+    """`primary` until it fails once (no model, no GPU memory), then `backup` for good."""
+    failed = []
+
+    def synth(text: str, lang: str, speed: float = 1.0):
+        if not failed:
+            try:
+                return primary(text, lang, speed)
+            except Exception:
+                log.exception("speech: her cloned voice failed, Kokoro from now on")
+                failed.append(True)
+                synth.close()
+        return backup(text, lang, speed)
+
+    synth.close = getattr(primary, "close", lambda: None)
+    return synth
+
+
+def _until_none(q: queue.Queue) -> Iterator[np.ndarray]:
+    while (c := q.get()) is not None:
+        yield c
+
+
+def sound_card(chunks: Iterable[np.ndarray], rate: int, block: Callable[[np.ndarray], np.ndarray | None]) -> None:
+    """Plays the chunks as they come in 50 ms blocks, each through `block` (volume, level); None from it cuts the
+    sound at once."""
     import sounddevice as sd
 
     n = rate // 20
     with sd.OutputStream(samplerate=rate, channels=1, dtype="float32", blocksize=n) as out:
-        for i in range(0, len(audio), n):
-            b = block(audio[i:i + n])
-            if b is None:
-                out.abort()  # drop what's buffered: she stops now, not in a second
-                return
-            out.write(np.ascontiguousarray(b, dtype="float32").reshape(-1, 1))
+        for audio in chunks:
+            for i in range(0, len(audio), n):
+                b = block(audio[i:i + n])
+                if b is None:
+                    out.abort()  # drop what's buffered: she stops now, not in a second
+                    return
+                out.write(np.ascontiguousarray(b, dtype="float32").reshape(-1, 1))
 
 
 class Speaker:
@@ -240,6 +324,12 @@ class Speaker:
         for cb in waiters:
             cb()
 
+    def release(self) -> None:
+        """Stops her and frees her voice model (the cloned one's GPU memory) until she speaks again."""
+        self.stop()
+        if close := getattr(self.synth, "close", None):
+            close()
+
     def duck(self, on: bool) -> None:
         self._gain = self.DUCK if on else 1.0
 
@@ -287,35 +377,65 @@ class Speaker:
         if self.on_disabled:
             self.on_disabled()
 
+    def _hand(self, gen: int, held: list[np.ndarray], rate: int, text: str) -> queue.Queue | None:
+        """The sentence goes to the play thread with what's made of it so far (None if she was stopped meanwhile)."""
+        stream: queue.Queue = queue.Queue()
+        for c in held:
+            stream.put(c)
+        while gen == self._gen:  # the play queue holds two: wait, but not past a stop
+            try:
+                self._audio.put((gen, stream, rate, text), timeout=0.1)
+                self._spoke = True
+                return stream
+            except queue.Full:
+                pass
+        return None
+
     def _synth_loop(self) -> None:
         while True:
             gen, text, lang = self._text.get()
             if gen != self._gen:
                 continue
+            stream, chunks = None, None  # stream: the chunks on their way to the play thread, once it has the sentence
             try:
                 audio, rate = self.synth(text, lang, self.speed)
-                audio = fx(np.asarray(audio, dtype="float32"), rate, self.robot, self.glitch)
+                chunks = iter([audio]) if isinstance(audio, np.ndarray) else iter(audio)
+                held, have = [], 0
+                for c in chunks:
+                    if gen != self._gen:
+                        break
+                    c = fx(np.asarray(c, dtype="float32"), rate, self.robot, self.glitch)
+                    if not c.size:
+                        continue
+                    if stream is not None:
+                        stream.put(c)
+                        continue
+                    held.append(c)
+                    have += c.size
+                    if have >= PREBUFFER_S * rate:
+                        stream = self._hand(gen, held, rate, text)
+                if stream is None and held and gen == self._gen:  # a short sentence: all of it at once
+                    stream = self._hand(gen, held, rate, text)
+                if stream is None and gen == self._gen:  # nothing to say in it
+                    self._done(gen)
             except Exception:
-                if not self._spoke:  # never worked: no model
+                if gen != self._gen or stream is not None:  # stopped meanwhile, or it broke off mid-sentence
+                    log.exception("speech: %r broke off", text)
+                elif not self._spoke:  # never worked: no model
                     self._fail("synthesis")
                 else:  # this sentence only ("-" has no phonemes): skip it
                     log.exception("speech: couldn't say %r", text)
                     self._done(gen)
-                continue
-            if not audio.size:
-                self._done(gen)
-                continue
-            self._spoke = True
-            while gen == self._gen:  # the play queue holds two: wait, but not past a stop
-                try:
-                    self._audio.put((gen, audio, rate, text), timeout=0.1)
-                    break
-                except queue.Full:
-                    pass
+            finally:
+                if close := getattr(chunks, "close", None):
+                    close()  # cut: the voice model stops making the rest
+                if stream is not None:
+                    stream.put(None)
 
     def _play_loop(self) -> None:
         while True:
-            gen, audio, rate, text = self._audio.get()
+            gen, stream, rate, text = self._audio.get()
+            audio = _until_none(stream)
             if gen != self._gen:
                 continue
             if self._started_at is not None:

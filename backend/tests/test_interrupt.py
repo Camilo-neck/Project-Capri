@@ -66,3 +66,31 @@ def test_a_confirmation_waiting_on_his_click_is_not_interrupted():
         await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(run())
+
+
+
+def test_trimming_the_context_after_her_reply_cant_be_interrupted():
+    async def run():
+        async def generate(messages):
+            yield '{"emocion":"feliz","gesto":"ninguno","accion":null,"texto":"Listo."}'
+
+        orch, sent, during = Orchestrator(generate, memory=Memory(":memory:")), [], []
+
+        async def trim():
+            during.append(orch.interrupt())
+
+        orch.trim = trim
+        orch.ctx = 10_000
+
+        async def send(m):
+            sent.append(m)
+
+        async def turn():
+            async with orch.lock:
+                orch.current = asyncio.current_task()
+                await orch.turn("hola", send)
+
+        await asyncio.create_task(turn())
+        assert during == [False]
+
+    asyncio.run(run())

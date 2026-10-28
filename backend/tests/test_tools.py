@@ -158,11 +158,12 @@ def test_a_search_he_asked_for_needs_no_click(opened, monkeypatch):
     assert shots == [(0, 0, 800, 600)] and {"type": "state", "value": "looking"} in msgs and "18 °C" in results(calls)[0]
 
 
-def named_turn(text: str, accion: dict) -> list[dict]:
-    """One turn where she runs `accion` for `text`: the messages, stopping at a button or at the end."""
+def named_turn(text: str, accion: dict, charla: bool = False) -> list[dict]:
+    """One turn where she runs `accion` for `text`: the messages, stopping at a button or at the end.
+    `charla`: it came by voice without her name (the conversation window)."""
     generate, _ = scripted(say("Va.", accion), say("Listo."))
-    with connect(Orchestrator(generate)) as ws:
-        ws.send_json({"type": "text_input", "text": text})
+    with connect(Orchestrator(generate, capture=lambda rect: b"jpg", read=lambda *a: "x", load_s=0)) as ws:
+        ws.send_json({"type": "text_input", "text": text, "charla": charla})
         msgs = []
         while not msgs or msgs[-1]["type"] != "confirm_request" and msgs[-1] != {"type": "state", "value": "idle"}:
             msgs.append(ws.receive_json())
@@ -423,3 +424,22 @@ def test_files_she_finds_come_with_open_and_folder_buttons(monkeypatch, tmp_path
         ws.send_json({"type": "pressed", "id": buttons["id"], "boton": buttons["botones"][1]["id"]})
         until_idle(ws)
     assert ran == [["explorer.exe", f"/select,{f}"]] and opened == []
+
+
+
+@pytest.mark.parametrize("text, accion", [
+    ("toma una captura", {"nombre": "captura", "args": {}}),
+    ("busca el clima en Bogotá", SEARCH),
+])
+def test_voice_chat_without_her_name_never_captures_without_a_click(opened, monkeypatch, text, accion):
+    # what the mic hears in the conversation window may be the room, not him: screens stay behind a click
+    from app import vision
+
+    monkeypatch.setattr(vision, "foreground", lambda: (0, 0, 800, 600))
+    msgs = named_turn(text, accion, charla=True)
+    assert msgs[-1]["type"] == "confirm_request"
+
+
+def test_voice_chat_without_her_name_still_opens_what_he_names(opened):
+    msgs = named_turn("abre Discord", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}, charla=True)
+    assert "confirm_request" not in {m["type"] for m in msgs}

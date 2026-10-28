@@ -71,6 +71,7 @@ export interface Heard {
   texto: string;
   original: string;
   idioma: string;
+  charla: boolean; // heard without her name: may be the room, so the backend keeps the screen behind a click
 }
 
 /** Her brain, for the tray's settings panel. */
@@ -129,6 +130,7 @@ export interface ClaudeEvent {
 export interface TextInput {
   type: "text_input";
   text: string;
+  charla: boolean; // heard without her name (Heard.charla): never enough to capture the screen without a click
 }
 
 /** Look at the screen: capture `rect` (monitor, physical px: left, top, right, bottom) and answer `text` about it. */

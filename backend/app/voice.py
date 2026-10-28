@@ -27,6 +27,7 @@ CHUNK = 512  # what Silero takes at 16 kHz (32 ms)
 CONTEXT = 64
 BARGE_MS = 300  # this much voice over her and she turns down to hear him
 SPOKEN_EXCHANGE_S = 120  # her answer reopens the window only if he spoke to her this recently
+MAX_FOLLOWUPS = 6  # name-less sentences in a row before her name is needed again (the room can't keep it going)
 LEVEL_EVERY_S = 0.066  # the mic meter in camera mode, ~15 Hz
 LANGS = ("es", "en")
 # what Whisper writes over silence and noise
@@ -74,9 +75,10 @@ class Segmenter:
 
 
 class Gate:
-    """Who is she being talked to? With the wake phrase on, only what starts with "hey Capri" gets through,
-    and the sentence right after it (the rest after a pause, or his answer to her); the hotkey opens the
-    same window. Only her name opens it, so overheard talk can't keep it open."""
+    """Who is she being talked to? With the wake phrase on, only what calls her by name gets through ("Capri",
+    "oye Capri, ...", "..., Capri"), and what comes in the window after it (the rest after a pause, or what he
+    says once she answered: `converse`); the hotkey opens the same window. Voice.converse bounds the name-less
+    follow-ups (MAX_FOLLOWUPS), so overheard talk can't keep it open."""
 
     def __init__(self, wake: bool = True, window_s: float = 8, names: Sequence[str] = (spoken.NAME,)):
         self.wake, self.window, self.names = wake, window_s, tuple(names)
@@ -216,6 +218,7 @@ class Voice:
         self.model_name, self.model_dir, self.silence_ms = model, model_dir or None, silence_ms
         self.gate = Gate(wake, names=self.names)
         self.heard_at = -1e9  # when something said to her last went through (the exchange is a spoken one)
+        self.followups = 0  # name-less sentences that went through since he last called her
         self.speaker = None  # her voice out loud (speech.Speaker), to talk over her
         self.on_interrupt: Callable[[], None] | None = None  # cancels her turn (runs from this thread)
         self.state = "off"  # off | loading | idle | listening | hearing | thinking
@@ -255,9 +258,15 @@ class Voice:
     def toggle(self) -> None:
         self.stop() if self.on else self.start()
 
+    def talking_to_her(self) -> bool:
+        """He's in a spoken exchange with her: he called her (or used the hotkey) lately, and not too many name-less
+        sentences ago. What only the room says never keeps this true."""
+        return time.monotonic() - self.heard_at < SPOKEN_EXCHANGE_S and self.followups < MAX_FOLLOWUPS
+
     def converse(self) -> None:
-        """Her answer is over: if he was talking to her by voice, keep listening a while without her name."""
-        if self.on and time.monotonic() - self.heard_at < SPOKEN_EXCHANGE_S:
+        """Her answer is over: if he was talking to her by voice, keep listening a while without her name
+        (never with [voz] llamada = false: then only the hotkey opens her ears)."""
+        if self.on and self.gate.wake and self.talking_to_her():
             self.gate.converse(time.monotonic())
             self._set("listening")
 
@@ -275,7 +284,8 @@ class Voice:
         if text:
             texto = text if self.gate.chat else spoken.to_command(text)
             self.heard_at = time.monotonic()
-            self._emit(Heard(texto=texto, original=text, idioma=lang))
+            self.followups = self.followups + 1 if self.gate.chat else 0
+            self._emit(Heard(texto=texto, original=text, idioma=lang, charla=self.gate.chat))
         self._log(seconds, said, lang, "pasó" if text else "no", texto, stt)
 
     def _over_her(self, heard: tuple[str, str] | None, seconds: float, stt: float) -> tuple[str, str] | None:
@@ -284,10 +294,12 @@ class Voice:
         sp = self.speaker
         text, lang = heard or ("", "")
         verdict = barge(heard and text, sp.recent(), self.names)
-        if verdict == "echo":
+        called = self.gate.wake and spoken.strip_wake(text, self.names)[0]
+        if verdict == "echo" or not (called or self.talking_to_her()):
+            # her own voice, noise, or the room (music, a video): she goes on; only her name is ever written down
             sp.duck(False)
-            if heard:
-                self._log(seconds, text, lang, "eco", "", stt)
+            if heard and loggable(text, False, self.names):
+                self._log(seconds, text, lang, "eco" if verdict == "echo" else "no", "", stt)
             return None
         sp.stop()
         sp.duck(False)

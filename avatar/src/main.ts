@@ -729,7 +729,7 @@ const link = connect(
         break;
       case "heard":
         wakeUp();
-        submit(msg.texto, msg.original);
+        submit(msg.texto, msg.original, msg.charla);
         break;
       case "remembered":
         txMem.hidden = false;
@@ -1278,7 +1278,7 @@ const OWN: Record<string, () => void> = {
 };
 
 /** What was typed or said, as a message or one of her own commands; `shown` is what to display for a spoken command. Returns whether it was taken. */
-function submit(text: string, shown = ""): boolean {
+function submit(text: string, shown = "", charla = false): boolean {
   const command = OWN[text.toLowerCase()];
   if (command) {
     if (!/^\/(cierra|quit)$/i.test(text)) setInputOpen(false);
@@ -1290,7 +1290,7 @@ function submit(text: string, shown = ""): boolean {
     void look(mira[1]);
     return true;
   }
-  if (!text || !link.send({ type: "text_input", text })) return false;
+  if (!text || !link.send({ type: "text_input", text, charla })) return false;
   startTurn(shown || text);
   return true;
 }

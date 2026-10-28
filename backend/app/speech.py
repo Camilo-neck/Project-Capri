@@ -62,7 +62,7 @@ def clean(text: str) -> str:
     """What's said of a text: no markdown, no emojis, links as "el enlace"."""
     t = _MARKS.sub("", _URL.sub("el enlace", text))
     t = "".join(c for c in t if unicodedata.category(c) not in ("So", "Cs", "Co", "Cn") and c not in "️‍")
-    return " ".join(t.split())
+    return " ".join(t.split()) if any(c.isalnum() for c in t) else ""  # "-", "* * *": nothing to say
 
 
 _EN = {"the", "you", "i", "it", "to", "and", "is", "for", "what", "my", "your", "that", "this", "of", "in", "want",
@@ -94,7 +94,7 @@ def echo(heard: str, said: list[str]) -> bool:
 
 def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: int | None = None) -> np.ndarray:
     """Her digital touches, 0-1 each: `robot` rings and combs the voice (metallic), `glitch` stutters bits of it."""
-    if robot <= 0 and glitch <= 0:
+    if (robot <= 0 and glitch <= 0) or not audio.size:
         return audio
     x = audio.astype("float32")
     if robot > 0:
@@ -177,6 +177,8 @@ class Speaker:
         self.lang = "es"  # what he spoke last (set by the voice)
         self.speed, self.robot, self.glitch = 1.0, 0.0, 0.0
         self.on_first_audio: Callable[[float], None] | None = None  # seconds from the reply's start to her voice
+        self.on_disabled: Callable[[], None] | None = None  # her voice failed for good (no model, no sound card)
+        self._spoke = False  # a sentence came out once: the voice works, a failure after that is that sentence's
         self._lock = threading.Lock()
         self._gen = 0
         self._pending = 0  # sentences queued and not played yet
@@ -224,17 +226,17 @@ class Speaker:
             log.exception("speech: the voice model didn't load")
 
     def stop(self) -> None:
-        with self._lock:
+        with self._lock:  # drained inside the lock: a sentence queued right after the stop must survive it
             self._gen += 1
             self._pending = 0
             waiters, self._waiters = self._waiters, []
+            for q in (self._text, self._audio):
+                while True:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        break
         self._sentences = Sentences()
-        for q in (self._text, self._audio):
-            while True:
-                try:
-                    q.get_nowait()
-                except queue.Empty:
-                    break
         for cb in waiters:
             cb()
 
@@ -282,6 +284,8 @@ class Speaker:
         log.exception("speech: %s failed, back to text only", what)
         self.enabled = False
         self.stop()
+        if self.on_disabled:
+            self.on_disabled()
 
     def _synth_loop(self) -> None:
         while True:
@@ -290,10 +294,18 @@ class Speaker:
                 continue
             try:
                 audio, rate = self.synth(text, lang, self.speed)
+                audio = fx(np.asarray(audio, dtype="float32"), rate, self.robot, self.glitch)
             except Exception:
-                self._fail("synthesis")
+                if not self._spoke:  # never worked: no model
+                    self._fail("synthesis")
+                else:  # this sentence only ("-" has no phonemes): skip it
+                    log.exception("speech: couldn't say %r", text)
+                    self._done(gen)
                 continue
-            audio = fx(audio, rate, self.robot, self.glitch)
+            if not audio.size:
+                self._done(gen)
+                continue
+            self._spoke = True
             while gen == self._gen:  # the play queue holds two: wait, but not past a stop
                 try:
                     self._audio.put((gen, audio, rate, text), timeout=0.1)

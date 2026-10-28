@@ -64,6 +64,12 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                 speaker.emit = lambda m: asyncio.run_coroutine_threadsafe(broadcast(m), loop)
                 speaker.on_first_audio = first_audio
                 voice.speaker = speaker  # so he can talk over her
+
+                async def voice_failed() -> None:  # no model or no sound card: the panel shows her voice off
+                    orchestrator.hablar = False
+                    await broadcast(orchestrator.mode())
+
+                speaker.on_disabled = lambda: asyncio.run_coroutine_threadsafe(voice_failed(), loop)
                 voice.on_interrupt = lambda: loop.call_soon_threadsafe(orchestrator.interrupt)
             if voice.autostart:
                 voice.start()
@@ -160,10 +166,10 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                     log.warning("invalid client message: %s", e)
                     continue
                 match msg:
-                    case TextInput(text=text):
+                    case TextInput(text=text, charla=charla):
                         if speaker and not panel:
                             speaker.stop()  # a new message of his: she stops talking and listens
-                        spawn(orchestrator.turn(text, send))
+                        spawn(orchestrator.turn(text, send, charla=charla))
                     case Look(text=text, rect=rect):
                         spawn(orchestrator.look(text, rect, send))
                     case Pressed(id=id, boton=boton):

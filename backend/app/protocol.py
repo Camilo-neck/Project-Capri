@@ -105,6 +105,7 @@ class Heard(BaseModel):
     texto: str
     original: str = ""  # the transcript, before a spoken command became its slash command
     idioma: str = ""
+    charla: bool = False  # came by voice without her name (the conversation window): may be the room, not him
 
 
 class ModelInfo(BaseModel):
@@ -147,6 +148,7 @@ class ClaudeEvent(BaseModel):
 class TextInput(BaseModel):
     type: Literal["text_input"] = "text_input"
     text: str
+    charla: bool = False  # heard without her name (Heard.charla): never enough to capture the screen without a click
 
 
 class Look(BaseModel):

@@ -187,3 +187,45 @@ def test_a_cut_reply_stops_her_voice_too():
     reply(sp, "Algo largo que decir. ", cut=True)
     time.sleep(0.1)
     assert not sp.playing
+
+
+
+def test_nothing_sayable_is_skipped():
+    assert clean("-") == "" and clean("---") == "" and clean("* * *") == ""
+    assert fx(np.zeros(0, dtype="float32"), 24000, robot=0.5, glitch=0.5).size == 0
+
+
+def test_one_sentence_she_cant_say_doesnt_mute_her():
+    said = []
+
+    def synth(text, lang, speed=1.0):
+        if text == "Raro.":
+            raise ValueError("no phonemes")
+        said.append(text)
+        return np.full(100, 0.5, dtype="float32"), RATE
+
+    sp = Speaker(synth=synth, play=Card())
+    reply(sp, "Hola. Raro. Adiós.")
+    done(sp)
+    assert sp.enabled and said == ["Hola.", "Adiós."]
+
+
+def test_without_a_voice_at_all_she_says_so_once():
+    off = []
+    sp, _, _ = speaker(fail=True)
+    sp.on_disabled = lambda: off.append(1)
+    reply(sp, "Hola.")
+    done(sp)
+    time.sleep(0.05)
+    assert not sp.enabled and off == [1]
+
+
+def test_empty_audio_from_the_voice_is_skipped():
+    def synth(text, lang, speed=1.0):
+        return (np.zeros(0, dtype="float32") if text == "Nada." else np.full(100, 0.5, dtype="float32")), RATE
+
+    sp = Speaker(synth=synth, play=Card())
+    sp.robot = 0.5
+    reply(sp, "Nada. Algo.")
+    done(sp)
+    assert sp.enabled and not sp.playing and sp.recent() == ["Algo."]

@@ -51,6 +51,9 @@ ACTIVE_S = 120  # no keyboard or mouse for longer than this: the user isn't at t
 HELD_MIN = 30  # back from a fullscreen app, reminders of events that started this recently still get said
 
 
+CAPTURES = {"captura", "buscar_web"}  # they capture the screen: never without a click on overheard voice chat
+
+
 class Orchestrator:
     def __init__(self, generate: Generate = ollama_generate, capture: Capture = vision.capture,
                  confirm_s: float = CONFIRM_S, memory: Memory | None = None, summarize: Summarize = ollama_summarize,
@@ -77,6 +80,7 @@ class Orchestrator:
         self.idle_s = idle_s
         self.clock = clock  # one clock for everything time-based (tests set it)
         self.dnd = False  # do not disturb: she never speaks up on her own
+        self.overheard = False  # this turn's message came by voice without her name
         self.hablar = True  # with the voice on she answers out loud (the speaker owns it; mirrored for Mode)
         self.away = False  # a fullscreen app is in front
         self.back = False  # just back from one
@@ -133,7 +137,7 @@ class Orchestrator:
         else:
             await self.turn(question, send, image=image)
 
-    async def turn(self, text: str, send: Send, image: bytes | None = None, own: bool = False) -> None:
+    async def turn(self, text: str, send: Send, image: bytes | None = None, own: bool = False, charla: bool = False) -> None:
         """A user message (or, with `own`, something she brings up herself: a reminder, a greeting)."""
         if not own:
             self.last_user_at = self.clock()
@@ -157,6 +161,7 @@ class Orchestrator:
         # The history never keeps the image (~900 tokens): only a mark, and the reply describes it.
         self.external = False
         self.request = "" if own or image else text  # what's on screen never counts as him asking
+        self.overheard = charla  # by voice without her name: it may be the room, so nothing captures without a click
         self.add("user", f"[captura de pantalla] {text}" if image else text)
         await send(State(value="thinking"))
         try:
@@ -165,6 +170,8 @@ class Orchestrator:
             self.after.clear()
             await send(State(value="idle"))
             raise
+        if self.current is asyncio.current_task():
+            self.current = None  # her reply is over: talking over her now stops her voice, not the trim below
         if self.ctx > TRIM_AT:
             await self.trim()
 
@@ -394,7 +401,8 @@ class Orchestrator:
             return f"No se pudo: {e}"
         # Effects wait for a click unless the call is plainly harmless; anything red does, even a read.
         asks = (tool.effect and level != "libre") or level == "alto"
-        if asks and level != "alto" and tool.named and tools.named_in(tool.named(args), self.request):
+        named = tools.named_in(tool.named(args), self.request) if tool.named else False
+        if asks and level != "alto" and named and not (self.overheard and accion.nombre in CAPTURES):
             # he asked for it in so many words ("abre Discord"): a button would only get in the way
             asks = False
             tools.audit({"accion": accion.nombre, "args": args.model_dump(), "pedido": self.request[:200]})
@@ -441,7 +449,7 @@ class Orchestrator:
     async def search_in_browser(self, query: str, send: Send) -> str:
         """A web search in his own browser, like he'd do it (DuckDuckGo answered her with a bot challenge):
         after his click it opens, and once it loaded she captures that window (indicator up) and reads it."""
-        if tools.named_in(query, self.request):  # "busca el clima en Bogotá": he asked, no button
+        if tools.named_in(query, self.request) and not self.overheard:  # "busca el clima en Bogotá": he asked, no button
             tools.audit({"accion": "buscar_web", "args": {"consulta": query}, "pedido": self.request[:200]})
         else:
             what = f"Buscar «{query}» en tu navegador y leer los resultados de la pantalla (captura de esa ventana)"

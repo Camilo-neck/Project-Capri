@@ -244,6 +244,7 @@ def test_over_her_a_stop_word_only_stops_her():
 
     vo, cut = v.Voice(), []
     vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    vo.heard_at = time.monotonic()  # he's talking to her
     assert vo._over_her(("para", "es"), 0.5, 0.2) is None
     assert vo.speaker.stopped == 1 and cut == [1]
 
@@ -253,6 +254,49 @@ def test_over_her_something_new_cuts_her_and_goes_through_without_her_name():
 
     vo, cut = v.Voice(), []
     vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    vo.heard_at = time.monotonic()  # he's talking to her
     assert vo._over_her(("mejor pon youtube", "es"), 1.0, 0.2) == ("mejor pon youtube", "es")
     assert vo.speaker.stopped == 1 and cut == [1]
     assert vo.gate.armed(time.monotonic())  # the window is open: the gate lets it through
+
+
+
+def test_over_her_overheard_talk_without_her_name_is_not_him(tmp_path):
+    # music or a video playing while she talks must not cut her off and become his message
+    from app import voice as v
+
+    vo, cut = v.Voice(log_path=tmp_path / "voz.log"), []
+    vo.speaker, vo.on_interrupt = Talking(), lambda: cut.append(1)
+    assert vo._over_her(("y entonces le dije a mi jefe que no pienso volver", "es"), 2.0, 0.2) is None
+    assert vo.speaker.stopped == 0 and cut == [] and vo.speaker.gain == [False]
+    assert not (tmp_path / "voz.log").exists()  # overheard: never written
+    assert vo._over_her(("Capri, mejor pon youtube", "es"), 1.0, 0.2) is not None  # her name: it's him
+    assert vo.speaker.stopped == 1 and cut == [1]
+
+
+def test_overheard_chat_cant_keep_the_conversation_going(monkeypatch):
+    from app import voice as v
+
+    vo = v.Voice()
+    monkeypatch.setattr(v.Voice, "on", property(lambda self: True))
+    vo._pass("Capri, qué hora es", "es", 1.0, 0.1)
+    for _ in range(v.MAX_FOLLOWUPS):
+        vo.converse()
+        assert vo.gate.armed(time.monotonic())
+        vo._pass("y algo más", "es", 1.0, 0.1)  # passes as chat, without her name
+    vo.gate.until = 0
+    vo.converse()
+    assert not vo.gate.armed(time.monotonic())  # enough: her name again
+    vo._pass("Capri, sigue", "es", 1.0, 0.1)
+    vo.converse()
+    assert vo.gate.armed(time.monotonic())
+
+
+def test_hotkey_only_mode_opens_no_conversation_window(monkeypatch):
+    from app import voice as v
+
+    vo = v.Voice(wake=False)
+    monkeypatch.setattr(v.Voice, "on", property(lambda self: True))
+    vo.heard_at = time.monotonic()
+    vo.converse()
+    assert not vo.gate.armed(time.monotonic())

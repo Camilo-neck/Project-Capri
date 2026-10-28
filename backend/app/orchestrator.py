@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app import calendar_ics, claude_link, presence, reminders, settings, spoken, tools, vision
+from app import calendar_ics, claude_link, launch, presence, reminders, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta,
@@ -398,6 +398,15 @@ class Orchestrator:
             tools.audit({"accion": accion.nombre, "resultado": tools.clip(result)})
         if accion.nombre == "buscar_archivos" and ok and tools.found:
             self.after.append(self.file_buttons(list(tools.found)))
+        if accion.nombre == "cerrar_app" and ok and tools.unclosed:
+            item = tools.unclosed.pop()
+
+            async def force(send: Send) -> None:
+                await asyncio.to_thread(launch.force, item)
+                tools.audit({"accion": "forzar_cierre", "app": item.id})
+                await self.speak(f"Listo, cerré {item.name} a la fuerza.", send)
+
+            self.after.append(self.buttons([(f"Forzar cierre de {item.name} (se pierde lo no guardado)", force)]))
         self.external = self.external or (ok and (accion.nombre in EXTERNAL or (accion.nombre == "ejecutar_comando" and asks)))
         return result
 

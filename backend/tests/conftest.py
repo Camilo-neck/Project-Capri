@@ -15,4 +15,5 @@ def no_real_apps(monkeypatch):
     from app import launch, tools
 
     monkeypatch.setattr(launch, "launchables", lambda: [])
+    monkeypatch.setattr(launch, "window_processes", lambda: [])  # nor the windows open on it (closing one)
     monkeypatch.setattr(tools, "indexed", lambda terms, exts: None)  # nor Windows' search index: they walk

@@ -172,3 +172,44 @@ def test_without_the_index_it_walks_his_folder_by_name_and_kind(monkeypatch, tmp
     monkeypatch.setattr(power, "HOME", tmp_path.resolve())
     out = tools.search_files(tools.SearchArgs(texto="", tipo="video"), settings.Settings())
     assert "viaje.mp4" in out and "viaje.txt" not in out
+
+
+# ---- closing an app ----
+
+ROWS = [{"id": 11, "name": "Discord", "label": "Discord"}, {"id": 12, "name": "Discord", "label": "Discord"},
+        {"id": 20, "name": "AMMusic", "label": "AM Music"}, {"id": 30, "name": "explorer", "label": "Windows Explorer"},
+        {"id": 31, "name": "claude", "label": "Claude"}, {"id": 32, "name": "ollama app", "label": "Ollama"},
+        {"id": 33, "name": "avatar", "label": "Capri"}]
+
+
+def test_open_apps_by_name_never_windows_pieces_claude_ollama_or_her(monkeypatch):
+    monkeypatch.setattr(launch, "window_processes", lambda: ROWS)
+    names = {i.id for i in launch.open_apps()}
+    assert names == {"Discord", "AMMusic"}
+    assert launch.match(launch.open_apps(), "cierra discord").id == "Discord"
+    assert launch.match(launch.open_apps(), "cierra am music").id == "AMMusic"
+    assert launch.match(launch.open_apps(), "cierra el explorador") is None
+
+
+def test_closing_always_asks_and_offers_force_if_it_stays(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.orchestrator import Orchestrator
+    from app.ws import create_app
+    from tests.test_tools import ORIGIN, TOKEN, say, scripted, until, until_idle
+
+    monkeypatch.setattr(launch, "window_processes", lambda: ROWS)
+    closed, forced = [], []
+    monkeypatch.setattr(launch, "close", lambda item: closed.append(item.id) or False)  # it hid in the tray
+    monkeypatch.setattr(launch, "force", lambda item: forced.append(item.id))
+    generate, calls = scripted(say("La cierro.", {"nombre": "cerrar_app", "args": {"nombre": "Discord"}}), say("Se quedó en la bandeja."))
+    with TestClient(create_app(TOKEN, Orchestrator(generate), reminders=False)).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "cierra Discord"})  # named, and still a click: it can lose work
+        ask = until(ws, "confirm_request")[-1]
+        assert ask["texto"].startswith("Cerrar Discord")
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
+        buttons = until(ws, "buttons")[-1]
+        assert [b["texto"] for b in buttons["botones"]] == ["Forzar cierre de Discord (se pierde lo no guardado)"]
+        ws.send_json({"type": "pressed", "id": buttons["id"], "boton": buttons["botones"][0]["id"]})
+        until_idle(ws)
+    assert closed == ["Discord"] and forced == ["Discord"]

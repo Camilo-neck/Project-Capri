@@ -292,6 +292,26 @@ def open_folder(a: FolderArgs, s: Settings) -> str:
     return f"Abrí {a.nombre}."
 
 
+unclosed: list[launch.Item] = []  # an app the last cerrar_app couldn't close (her button forces it)
+
+
+def app_to_close(nombre: str) -> launch.Item:
+    item = launch.match(launch.open_apps(), nombre)
+    if not item:
+        raise ToolError(f"no veo abierta ninguna app llamada «{nombre}» (las de Windows, Claude, Ollama y yo no se cierran desde aquí)")
+    return item
+
+
+def close_app(a: AppArgs, s: Settings) -> str:
+    item = app_to_close(a.nombre)
+    unclosed.clear()
+    if launch.close(item):
+        return f"Cerré {item.name}."
+    unclosed.append(item)
+    return (f"{item.name} no se cerró del todo (seguramente se quedó en la bandeja, o te está preguntando si guardas): "
+            "abajo tiene un botón para forzar el cierre.")
+
+
 def screenshots_folder() -> Path:
     """Pictures › Screenshots, wherever Windows keeps his Pictures."""
     try:
@@ -597,6 +617,9 @@ def connect_spotify(a: NoArgs, s: Settings) -> str:
 TOOLS: dict[str, Tool] = {
     "abrir_app": Tool(AppArgs, True, open_app, lambda a: f"Abrir {a.nombre}", app_risk, named=lambda a: a.nombre),
     "abrir_carpeta": Tool(FolderArgs, True, open_folder, lambda a: f"Abrir {folder_target(a.nombre)}", folder_risk, named=lambda a: a.nombre),
+    # closing can lose unsaved work: always a click, even when he named it
+    "cerrar_app": Tool(AppArgs, True, close_app, lambda a: f"Cerrar {app_to_close(a.nombre).name} (como su X: si tiene algo sin guardar, te lo pregunta)",
+                       lambda a, s: app_to_close(a.nombre) and "normal"),
     "captura": Tool(NoArgs, True, screenshot, lambda a: "Tomar una captura de tu pantalla (sin mí) y guardarla en Imágenes",
                     named=lambda a: "captura|pantallazo|screenshot|screen shot"),
     "buscar_archivos": Tool(SearchArgs, False, search_files, log=True),

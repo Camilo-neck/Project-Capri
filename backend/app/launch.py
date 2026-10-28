@@ -180,3 +180,54 @@ def roblox(query: str) -> str | None:
     # "[💀] Steal a Brainrot" is "Steal a Brainrot"
     name = re.sub(r"\[[^\]]*\]\s*", "", str(games[0].get("name", ""))).strip()
     return "".join(c for c in name if unicodedata.category(c) != "So").strip() or str(games[0].get("name"))
+
+
+# ---- closing an app he names (always after his click: it can lose unsaved work) ----
+
+# never these: the desktop and Windows' own pieces, her (avatar, her backend, her webview), Claude
+# (she watches it) and Ollama (her brain)
+KEEP = {"explorer", "applicationframehost", "textinputhost", "shellexperiencehost", "startmenuexperiencehost", "searchhost",
+        "searchapp", "lockapp", "dwm", "taskmgr", "avatar", "python", "pythonw", "msedgewebview2", "claude", "codex",
+        "ollama", "ollama app"}
+
+
+def powershell(script: str, timeout: float = 15) -> str:
+    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                          f"[Console]::OutputEncoding = [Text.Encoding]::UTF8; {script}"],
+                         capture_output=True, text=True, encoding="utf-8", timeout=timeout, creationflags=0x0800_0000)
+    return out.stdout.strip()
+
+
+def window_processes() -> list[dict]:
+    """[{id, name, label}] of the processes with a window open."""
+    out = powershell("Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { "
+                     "[pscustomobject]@{ id = $_.Id; name = $_.ProcessName; label = $_.Description } } | ConvertTo-Json -Compress")
+    rows = json.loads(out or "[]")
+    return rows if isinstance(rows, list) else [rows]
+
+
+def open_apps() -> list[Item]:
+    """The apps with a window open, one per program: by its description ("AM Music"), else its process name."""
+    apps: dict[str, Item] = {}
+    for r in window_processes():
+        name = r.get("name") or ""
+        if name and name.lower() not in KEEP and name not in apps:
+            apps[name] = Item(r.get("label") or name, "proc", name)
+    return list(apps.values())
+
+
+def _quoted(name: str) -> str:
+    return "'" + name.replace("'", "''") + "'"
+
+
+def close(item: Item) -> bool:
+    """Closes it the way its own close button does (it can still ask to save). False if it's still running
+    a few seconds later (it hid in the tray, or it's asking)."""
+    left = powershell(f"Get-Process -Name {_quoted(item.id)} -ErrorAction SilentlyContinue | ForEach-Object {{ [void]$_.CloseMainWindow() }}; "
+                      f"Start-Sleep -Seconds 3; @(Get-Process -Name {_quoted(item.id)} -ErrorAction SilentlyContinue).Count", timeout=20)
+    return left.strip() in ("", "0")
+
+
+def force(item: Item) -> None:
+    """Ends it for good (what wasn't saved is lost): only on his click."""
+    powershell(f"Stop-Process -Name {_quoted(item.id)} -Force -ErrorAction SilentlyContinue")

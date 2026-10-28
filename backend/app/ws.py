@@ -7,10 +7,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import launch, settings
+from app import launch, pcsense, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Presence, Pressed, ServerMessage, TextInput, Voice as VoiceState, client_message)
+                          PcEvent, Presence, Pressed, ServerMessage, TextInput, Voice as VoiceState, client_message)
 from app.voice import Voice
 
 log = logging.getLogger(__name__)
@@ -102,6 +102,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                 tasks.add(asyncio.create_task(orchestrator.reminders(send)))
                 tasks.add(asyncio.create_task(orchestrator.chatter(send)))
                 tasks.add(asyncio.create_task(orchestrator.alarm_loop(send)))
+                tasks.add(asyncio.create_task(pcsense.watch(lambda tipo, detalle: send(PcEvent(tipo=tipo, detalle=detalle)),
+                                                            lambda: settings.load().pc_react)))
 
         async def pull(name: str) -> None:
             try:

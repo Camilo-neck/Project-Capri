@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
-import type { Action, Buttons, ClaudeEvent, Emocion, ServerMessage, VoiceState } from "./net/protocol.ts";
+import type { Action, Buttons, ClaudeEvent, Emocion, PcEvent, ServerMessage, VoiceState } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
 import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Style } from "./pet/clips.ts";
@@ -15,6 +15,7 @@ import { Fx, type Rect } from "./render/fx.ts";
 import { IntroView } from "./render/intro.ts";
 import { Portrait } from "./render/portrait.ts";
 import { cutinFor, faceSquare, portraitFor } from "./state/faces.ts";
+import { reaction as pcReaction } from "./state/pc.ts";
 import { CameraView } from "./render/camera.ts";
 import { MASK_BOX, MaskView, type MaskLook } from "./render/mask.ts";
 import { createPet, SCALE } from "./render/pet.ts";
@@ -105,6 +106,7 @@ const camView = new CameraView($<HTMLCanvasElement>("cam-feed"));
 const portrait = new Portrait($<HTMLCanvasElement>("tx-face")); // her face by what she says
 let faceMoving = false; // its glitch is still playing: keep redrawing it
 let lastCutin = -Infinity;
+let gameHid = false; // she put herself away for his game: she comes back when it's over
 const camPlayer = new CameraPlayer();
 let camera = false; // camera mode: her close-ups in a transmission frame instead of her body
 
@@ -665,6 +667,9 @@ const link = connect(
         ctx = msg.ctx ?? ctx;
         updateMeta();
         break;
+      case "pc":
+        void onPc(msg);
+        break;
       case "buttons":
         showButtons(msg);
         break;
@@ -863,6 +868,47 @@ async function cutin(shot: ShotName): Promise<void> {
   const dir = b.x > innerWidth / 2 ? -1 : 1;
   const x = Math.min(Math.max(b.x + dir * 190, 140), innerWidth - 140);
   fx.cutin(x, Math.max(90, b.y - 140), still, dir);
+}
+
+/** Something she felt in the PC (state/pc.ts): the effect on her, then her word about it. A game
+ *  puts her away while he plays and brings her back after; on do-not-disturb, only that. */
+async function onPc(e: PcEvent): Promise<void> {
+  const r = pcReaction(e);
+  if (!r) return;
+  if (r.hide && !hiding) {
+    gameHid = true;
+    if (!dnd && !fullscreen) sayLocal(r);
+    await sleep(2500);
+    hide();
+    return;
+  }
+  if (r.unhide && gameHid) {
+    gameHid = false;
+    unhide();
+  }
+  if (dnd || fullscreen || hiding || busy()) return;
+  const now = performance.now();
+  const b = body();
+  const tray = { x: innerWidth - 60, y: innerHeight - 12 }; // by the clock, where things get plugged in
+  avatar.setEmotion(r.emocion);
+  if (r.fx === "heat") fx.heat(() => {
+    const [x, y] = headOnPage();
+    return { x, y };
+  });
+  else if (r.fx === "bolt" && !reducedMotion.matches) fx.bolt(() => body(), () => tray);
+  else if (r.fx === "sag" || r.fx === "hurt") {
+    glitch.kick("hurt", now);
+    if (r.fx === "hurt") fx.impact(b.x, b.y);
+  } else if (r.fx === "dive" && !reducedMotion.matches) { // into the stick by the clock, a rummage, and back
+    glitch.kick("vanish", now);
+    fx.streak(b.x, b.y, tray.x, tray.y);
+    stage.style.visibility = "hidden";
+    await sleep(1600);
+    stage.style.visibility = "";
+    glitch.kick("arrive", performance.now());
+    fx.burst(b.x, b.y, b.size, true);
+  }
+  sayLocal(r);
 }
 
 /** Her portrait by what she says, glitching into the face of how she feels now. */

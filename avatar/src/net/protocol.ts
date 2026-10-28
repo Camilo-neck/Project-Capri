@@ -81,6 +81,12 @@ export interface ConfirmRequest {
   riesgo: "normal" | "alto";
 }
 export type Button = { id: string; texto: string };
+// something she felt in the PC (backend pcsense.py): she reacts. Never sent to the model.
+export interface PcEvent {
+  type: "pc";
+  tipo: "caliente" | "cargador" | "bateria" | "red" | "usb" | "dispositivo" | "juego";
+  detalle: string;
+}
 // buttons under what she just said that hold nothing up (cancel a reminder, done, 10 min more...)
 export interface Buttons {
   type: "buttons";
@@ -147,7 +153,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Heard | ModelInfo | ModelProgress;
 // the tray's settings panel: her brain
 export interface ModelGet {
   type: "model_get";

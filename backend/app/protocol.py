@@ -64,6 +64,14 @@ class Buttons(BaseModel):
     botones: list[Button]
 
 
+class PcEvent(BaseModel):
+    """Something she felt in the PC (pcsense.py): the avatar reacts. Read locally; never sent to the model."""
+
+    type: Literal["pc"] = "pc"
+    tipo: Literal["caliente", "cargador", "bateria", "red", "usb", "dispositivo", "juego"]
+    detalle: str = ""  # cargador on|off · bateria 20|10 · red caida|vuelve · usb her verdict · dispositivo kind:name · juego inicio|fin:name
+
+
 class Voice(BaseModel):
     """The microphone: off, loading the model, idle (waiting for "hey Capri"), hearing someone, listening (the next sentence is for her) or reading what was said."""
 
@@ -166,7 +174,7 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
-ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | Action | ClaudeEvent
+ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
                  | Voice | Heard | ModelInfo | ModelProgress)
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"

@@ -217,6 +217,30 @@ export class Fx {
     });
   }
 
+  /** Overheating: wavy red and white heat rising off her mane, over `at` (her head). */
+  heat(at: () => Pt, life = 2600): void {
+    const rand = mulberry(7);
+    const waves = Array.from({ length: 6 }, (_, i) => ({ dx: (i - 2.5) * 12 + rand() * 6, delay: rand() * 0.5, len: 30 + rand() * 20 }));
+    this.add(life, (g, t) => {
+      const c = at();
+      for (const [i, w] of waves.entries()) {
+        const k = ((t * 2.2 + w.delay) % 1); // each wisp rises and starts over
+        const y0 = c.y - 20 - k * 60;
+        g.globalAlpha = k < 0.7 ? 0.9 : 0.4;
+        g.strokeStyle = i % 3 === 0 ? WHITE : RED;
+        g.lineWidth = PX;
+        g.beginPath();
+        for (let s = 0; s <= 6; s++) {
+          const y = y0 - (s / 6) * w.len, x = c.x + w.dx + Math.sin(s * 1.3 + t * 18 + i) * 4;
+          if (s) g.lineTo(snap(x), snap(y));
+          else g.moveTo(snap(x), snap(y));
+        }
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+    });
+  }
+
   /** Seeing stars: three little ones circling over `at` (her head) while she lies there. */
   stars(at: () => Pt, life = 1300): void {
     this.add(life, (g, t) => {

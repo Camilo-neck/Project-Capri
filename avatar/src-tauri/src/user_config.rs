@@ -23,11 +23,13 @@ pub struct Avatar {
     pub dormir_min: u32,
     /// Camera mode: her close-ups from the show in a transmission frame instead of her whole body.
     pub camara: bool,
+    /// She reacts to the PC: processor, charger, battery, network, USB sticks, devices, games (the backend reads it).
+    pub reaccionar_pc: bool,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true }
     }
 }
 

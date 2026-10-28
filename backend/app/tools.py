@@ -324,6 +324,8 @@ def press_key(vk: int) -> None:
 def media(a: MediaArgs, s: Settings) -> str:
     for _ in range(5 if "volumen" in a.accion else 1):  # one volume step is barely audible
         press_key(MEDIA_KEYS[a.accion])
+    if "volumen" in a.accion:  # keys only step it: she can't know the level, so she mustn't claim one
+        return f"{'Subí' if a.accion == 'subir_volumen' else 'Bajé'} el volumen unos pasos (no sé en qué nivel quedó)."
     return "Hecho."
 
 
@@ -332,6 +334,14 @@ def play_spotify(a: SpotifyArgs, s: Settings) -> str:
         return spotify.Spotify().play(a.consulta, a.tipo)
     except spotify.SpotifyError as e:
         raise ToolError(str(e)) from e
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise ToolError("Spotify no aceptó la conexión: usa conectar_spotify otra vez") from e
+        raise ToolError(f"Spotify no respondió bien (error {e.response.status_code}); prueba en un momento") from e
+    except httpx.HTTPError as e:
+        raise ToolError("Spotify no respondió (¿sin internet?); prueba en un momento") from e
+    except OSError as e:  # the spotify: link needs the desktop app
+        raise ToolError("no pude abrir la app de Spotify (¿está instalada?)") from e
 
 
 def connect_spotify(a: NoArgs, s: Settings) -> str:

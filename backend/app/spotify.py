@@ -34,12 +34,16 @@ KINDS = {"cancion": "track", "playlist": "playlist", "album": "album", "artista"
 LOGIN_S = 180  # how long the one-shot callback server waits for the user to authorize
 
 
-FILLER = {"de", "del", "la", "el", "by", "artist"}
+# what the model copies from "ponme X en Spotify" that isn't the song
+ASKING = re.compile(r"^\s*(?:pon(?:me|le)?|reproduce|toca|play|quiero escuchar|escuchemos)\s+|\s+(?:en|on|in)\s+spotify\s*$", re.I)
+SOMETHING_BY = re.compile(r"^\s*(?:algo|una canci[oó]n|canciones|m[uú]sica|something|a song|songs|music)\s+(?:de|del|by)\s+", re.I)
+DECORATION = re.compile(r"\s+-\s+.*$|\s*[(\[].*?[)\]]")  # " - Remastered 2011", "(feat. X)", "[Live]"
 
 
-def words(text: str) -> set[str]:
+def compact(text: str) -> str:
+    """Lowercase letters and digits only, no accents or spaces: "Top Boy" and "topboy" are the same."""
     plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
-    return set(re.findall(r"\w+", plain))
+    return re.sub(r"[\W_]+", "", plain)
 
 
 class SpotifyError(Exception):
@@ -179,16 +183,32 @@ class Spotify:
         items = [i for i in r.json()[f"{t}s"]["items"] if i]
         if not items:
             raise SpotifyError(f"no encontré nada en Spotify para «{query}»")
-        want = words(query) - FILLER
-        return max(items, key=lambda i: len(want & words(i["name"] + " " + " ".join(a["name"] for a in i.get("artists", [])))))
+        # Spotify's ranking stays unless a later item's title (and then artist) is in the query and the first's
+        # isn't. Counting shared words picked "Top Boy" by Boy Pablo for "Nalguisima de Top Boy".
+        want = compact(query)
 
-    def playing(self) -> bool:
+        def fits(i: dict) -> tuple[bool, bool]:
+            title = compact(DECORATION.sub("", i["name"])) or compact(i["name"])
+            return title in want, any(compact(a["name"]) in want for a in i.get("artists", []) if a.get("name"))
+
+        return max(items, key=fits)  # max keeps the first of equals: Spotify's order
+
+    def playing(self, uri: str) -> bool:
+        """That item is what's playing (not something already on, here or on another device)."""
         r = self.call("GET", "/me/player")
-        return r.status_code == 200 and bool(r.content) and bool(r.json().get("is_playing"))
+        if r.status_code != 200 or not r.content:
+            return False
+        j = r.json()
+        return bool(j.get("is_playing")) and (j.get("item") or {}).get("uri") == uri
 
     def play(self, query: str, kind: str = "cancion") -> str:
+        query = ASKING.sub("", query).strip() or query
         if kind == "artista":  # a song by them, the way "pon algo de Shakira" means it
-            item = self.find(f'artist:"{query}"', "cancion")
+            artist = SOMETHING_BY.sub("", query).strip() or query
+            try:
+                item = self.find(f'artist:"{artist}"', "cancion")
+            except SpotifyError:  # "Bad Bunny y J Balvin" isn't one artist's name
+                item = self.find(artist, "cancion")
             kind = "cancion"
         else:
             item = self.find(query, kind)
@@ -198,6 +218,6 @@ class Spotify:
             return f"Abrí {name} en Spotify. Dale play ahí; desde aquí no puedo empezarla sola."
         for _ in range(6):  # the app takes a moment to start
             self.sleep(1)
-            if self.playing():
+            if self.playing(item["uri"]):
                 return f"Sonando en Spotify: {name}."
         return f"Abrí {name} en Spotify; si no suena, dale play ahí."

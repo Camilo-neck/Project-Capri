@@ -103,8 +103,10 @@ def test_connecting_opens_consent_and_saves_tokens_from_the_redirect(monkeypatch
 class FakeSpotify:
     """Spotify's API as a MockTransport: records requests, answers from a few knobs."""
 
-    def __init__(self, plays=True):
+    def __init__(self, plays=True, current=None, found=True):
         self.plays = plays  # what /me/player says: is something playing
+        self.current = current  # and what (None: what was just opened)
+        self.found = found  # does an artist:"..." search find anything
         self.requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -115,9 +117,10 @@ class FakeSpotify:
         if path.endswith("/search"):
             t = request.url.params["type"]
             item = {"name": "Bohemian Rhapsody", "uri": f"spotify:{t}:1", "artists": [{"name": "Queen"}]}
-            return httpx.Response(200, json={f"{t}s": {"items": [item]}})
+            found = self.found or "artist:" not in request.url.params["q"]
+            return httpx.Response(200, json={f"{t}s": {"items": [item] if found else []}})
         if path.endswith("/me/player"):
-            return httpx.Response(200, json={"is_playing": self.plays})
+            return httpx.Response(200, json={"is_playing": self.plays, "item": {"uri": self.current or "spotify:track:1"}})
         return httpx.Response(404)
 
 
@@ -187,6 +190,72 @@ def test_the_result_with_the_most_words_of_the_query_wins():
 
     sp = spotify.Spotify(http=httpx.Client(transport=httpx.MockTransport(fake)), open_url=lambda u: None)
     assert sp.find("Nalguisima de topboy", "cancion")["uri"] == "spotify:track:2"
+
+
+def find_among(items: list[dict], query: str) -> str:
+    connect()
+    sp = spotify.Spotify(http=httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"tracks": {"items": items}}))), open_url=lambda u: None)
+    return sp.find(query, "cancion")["uri"]
+
+
+def test_spotifys_first_result_wins_unless_another_matches_better():
+    # the model split "topboy": "Top Boy" by Boy Pablo had more words of the query than the song asked for
+    nalguisima = {"name": "NALGUISIMA", "uri": "spotify:track:1", "artists": [{"name": "Topboy TGR"}]}
+    top_boy = {"name": "Top Boy", "uri": "spotify:track:2", "artists": [{"name": "Boy Pablo"}]}
+    assert find_among([nalguisima, top_boy], "Nalguisima de Top Boy") == "spotify:track:1"
+    remix = {"name": "Love On Myself (Play Remix)", "uri": "spotify:track:3", "artists": [{"name": "X"}]}
+    song = {"name": "In Love With Myself", "uri": "spotify:track:4", "artists": [{"name": "Y"}]}
+    assert find_among([remix, song], "in love with myself") == "spotify:track:4"
+
+
+def test_verbs_and_spotify_are_left_out_of_the_search():
+    connect()
+    fake = FakeSpotify()
+    client(fake, []).play("Play in love with myself on Spotify")
+    client(fake, []).play("ponme Bohemian Rhapsody en spotify")
+    qs = [r.url.params["q"] for r in fake.requests if r.url.path.endswith("/search")]
+    assert qs == ["in love with myself", "Bohemian Rhapsody"]
+
+
+def test_something_of_an_artist_said_any_way():
+    connect()
+    fake = FakeSpotify()
+    client(fake, []).play("algo de Bad Bunny", "artista")
+    assert [r.url.params["q"] for r in fake.requests if r.url.path.endswith("/search")] == ['artist:"Bad Bunny"']
+    fake = FakeSpotify(found=False)
+    opened: list[str] = []
+    client(fake, opened).play("Bad Bunny y J Balvin", "artista")  # the filter finds nothing: a plain search
+    assert [r.url.params["q"] for r in fake.requests if r.url.path.endswith("/search")] == \
+        ['artist:"Bad Bunny y J Balvin"', "Bad Bunny y J Balvin"] and opened == ["spotify:track:1"]
+
+
+def test_another_song_playing_is_not_taken_for_the_one_asked():
+    connect()
+    msg = client(FakeSpotify(current="spotify:track:other"), []).play("bohemian rhapsody")
+    assert "Sonando" not in msg and "dale play" in msg
+
+
+@pytest.mark.parametrize("error, says", [
+    (httpx.HTTPStatusError("401", request=httpx.Request("GET", "https://x"), response=httpx.Response(401)), "conectar_spotify"),
+    (httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503)), "Spotify no respondió"),
+    (httpx.ConnectError("offline"), "Spotify no respondió"),
+    (FileNotFoundError("spotify:track:1"), "app de Spotify"),
+])
+def test_spotify_failures_reach_her_in_plain_words(monkeypatch, error, says):
+    def fail(self, *a):
+        raise error
+
+    monkeypatch.setattr(spotify.Spotify, "play", fail)
+    with pytest.raises(tools.ToolError, match=says) as e:
+        tools.play_spotify(tools.SpotifyArgs(consulta="algo"), settings.Settings())
+    assert "Error" not in str(e.value) and "https://" not in str(e.value)
+
+
+def test_the_volume_result_does_not_claim_a_level(monkeypatch):
+    monkeypatch.setattr(tools, "press_key", lambda vk: None)
+    msg = tools.media(tools.MediaArgs(accion="subir_volumen"), settings.Settings())
+    assert "nivel" in msg and msg != "Hecho."
 
 
 def test_youtube_opens_the_first_video_of_the_search(opened, monkeypatch):

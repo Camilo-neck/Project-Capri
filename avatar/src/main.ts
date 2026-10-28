@@ -18,7 +18,8 @@ import { createPet, SCALE } from "./render/pet.ts";
 import { AvatarState, POSE_MS } from "./state/avatar.ts";
 import { bigJob, panelFor, reaction, SPARK_GAP_MS, sparkFor, Tracker, type Panel } from "./state/claude.ts";
 import { CameraPlayer, shotFor, tagFor } from "./state/camera.ts";
-import { Doze, sleepy } from "./state/doze.ts";
+import { AwayWatch, backLine, speaksOnBack } from "./state/away.ts";
+import { Doze, sleepy, WAKE_MS } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ResumeWatch, resumeLine, TICK_MS } from "./state/resume.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
@@ -457,11 +458,36 @@ function back(now: number): void {
   lastTalk = Math.max(lastTalk, now - LINGER_MS); // awake and idle, not straight back to her nap
 }
 
-// Once in a while: how long the PC has been idle, and the setting (edits apply without a restart).
+// Once in a while: the sleep setting (edits apply without a restart).
 setInterval(async () => {
-  pcIdle = await invoke<number>("idle_ms");
   sleepAfter = (await invoke<AvatarSettings>("avatar_settings")).dormir_min * 60_000;
 }, 10_000);
+
+// Every second: how long the PC has been idle. Him touching it again after a while away wakes her
+// (she used to stay a mask until the pointer came close) and gets a word about it.
+const awayWatch = new AwayWatch();
+let lastBack = "";
+let claudeDone: { project: string; at: number } | null = null; // Claude finished while he may have been away
+setInterval(async () => {
+  pcIdle = await invoke<number>("idle_ms");
+  const gone = awayWatch.tick(pcIdle);
+  if (gone) onBack(gone);
+}, 1000);
+
+function quiet(): boolean {
+  return !speaksOnBack({ hiding, dnd, fullscreen, moving: teleporting || !!possessing || !!falling || dragging,
+    down: linkStatus === "down" });
+}
+
+function onBack(gone: number): void {
+  const done = claudeDone && claudeDone.at >= Date.now() - gone ? claudeDone.project : null;
+  claudeDone = null;
+  greetBack(() => {
+    const line = backLine(gone, new Date().getHours(), done, lastBack);
+    lastBack = line.texto.split(" Ah, y Claude")[0];
+    return line;
+  });
+}
 
 // Back from sleep: the window is fitted and raised again, the drawing is checked, and she says so.
 const resumeWatch = new ResumeWatch(Date.now());
@@ -475,15 +501,27 @@ async function onResume(gap: number): Promise<void> {
   const now = performance.now();
   activeAt = now; // whoever woke the PC is at it: no instant nap
   pcIdle = 0;
-  wakeUp();
-  if (hiding || dnd || busy() || linkStatus === "down") return;
-  glitch.kick("arrive", now);
-  if (!reducedMotion.matches) {
-    const b = body();
-    fx.burst(b.x, b.y, b.size, true);
+  awayWatch.reset(); // this absence gets the wake-from-sleep line, not the "you're back" one
+  greetBack(() => resumeLine(gap));
+}
+
+/** He's back (from away, or the PC woke): she wakes if asleep and, unless she must keep quiet, arrives
+ * with her glitch and says `line` (asleep, once she's back together). */
+function greetBack(line: () => { texto: string; emocion: Emocion }): void {
+  const now = performance.now();
+  activeAt = now;
+  const wasAsleep = doze.asleep;
+  wakeUp(); // asleep: her eyes snap open, then back() brings her together with the glitch
+  if (quiet()) return;
+  if (!wasAsleep) {
+    glitch.kick("arrive", now);
+    if (!reducedMotion.matches) {
+      const b = body();
+      fx.burst(b.x, b.y, b.size, true);
+    }
+    greetAt = now;
   }
-  greetAt = now;
-  sayLocal(resumeLine(gap));
+  setTimeout(() => sayLocal(line()), wasAsleep ? WAKE_MS + 150 : 0);
 }
 
 /** A line of hers that no model wrote: shown and typed like a reply. */
@@ -624,6 +662,7 @@ const link = connect(
 /** Claude mode: the ticker follows the session that moved last; she reacts and shows Claude's words unless hiding or on do-not-disturb. */
 function onClaude(msg: ClaudeEvent, now: number): void {
   claudeTrack.push(msg, now);
+  if (msg.estado === "termino") claudeDone = { project: msg.project, at: Date.now() };
   const react = reaction(msg);
   const free = !hiding && !dnd && !teleporting && !possessing && !falling && !dragging && !peek;
   if (react && free) {

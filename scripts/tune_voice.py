@@ -23,11 +23,15 @@ import numpy as np
 LINES = [
     ("en-us", "Come on, let's be friends! Yesterday was so much fun."),
     ("en-us", "Nobody can hear me, nobody can see me. Nobody besides you."),
+    ("en-us", "Hey, don't look at me like that. I'm just trying to help!"),
+    ("en-us", "What does that matter? I had a total blast, so you did too."),
     ("es", "¡Oye, no me ignores! Ya te abrí Spotify, ¿qué quieres escuchar?"),
+    ("es", "Jajaja, ¿en serio? Bueno, déjame ver qué encuentro."),
 ]
-# held out: only to check that what it found isn't fitted to the three lines above
+# held out: what the walk keeps is chosen on these, so it doesn't just fit the lines above
 CHECK = [
     ("en-us", "So they created me! Powerful like an AI, but born of humans."),
+    ("en-us", "I tried? Doesn't mean I actually did."),
     ("es", "Mmm… hoy en Bogotá está nublado. ¿Salimos igual?"),
 ]
 
@@ -102,25 +106,32 @@ def main() -> None:
     rng = np.random.default_rng(args.seed)
     scale, accepted = 0.10, 0
     out = root / f"{args.name}.npy"
+    kept, kept_check = best, similarity(best, CHECK)  # what's saved: the best on the held-out lines
+    print(f"held-out lines at the start: {kept_check:.3f}")
     for step in range(1, args.steps + 1):
         cand = np.clip(best + rng.standard_normal(best.shape) * spread * scale, lo, hi)
         if (s := similarity(cand)) > best_score:
             best_score, best, accepted = s, cand, accepted + 1
-            np.save(out, best.astype("float32"))
         if step % 25 == 0:
-            scale = scale * 1.2 if accepted >= 3 else max(scale * 0.7, 0.01)  # bolder while it keeps finding better
-            print(f"step {step}: {best_score:.3f} (scale {scale:.3f}, {accepted} better in the last 25)")
+            if accepted and (c := similarity(best, CHECK)) > kept_check:
+                kept, kept_check = best, c
+                np.save(out, kept.astype("float32"))
+            scale = scale * 1.2 if accepted >= 3 else max(scale * 0.8, 0.02)  # bolder while it keeps finding better
+            print(f"step {step}: {best_score:.3f}, held-out {kept_check:.3f} (scale {scale:.3f}, {accepted} better)")
             accepted = 0
-    np.save(out, best.astype("float32"))
+    np.save(out, kept.astype("float32"))
+    print(f"\nheld-out lines: {kept_check:.3f} (closest stock voice {top[0][1]}: {similarity(top[0][2], CHECK):.3f})")
 
-    held = similarity(best, CHECK)
-    base = similarity(top[0][2], CHECK)
-    print(f"\nheld-out lines: {held:.3f} (closest stock voice {top[0][1]}: {base:.3f})")
+    # her Spanish with a Spanish voice in the mix: a little less like the recording, maybe a better accent
+    dora = 0.7 * kept + 0.3 * k.voices["ef_dora"]
+    np.save(root / f"{args.name}-dora.npy", dora.astype("float32"))
+    print(f"{args.name}-dora (70 % + 30 % ef_dora): held-out {similarity(dora, CHECK):.3f}")
     (root / "bench").mkdir(exist_ok=True)
-    for i, (lang, text) in enumerate(CHECK + LINES):
-        audio, rate = k.create(text, voice=best.astype("float32"), speed=1.0, lang=lang)
-        save(root / "bench" / f"{args.name}-{i}-{lang[:2]}.wav", np.asarray(audio), rate)
-    print(f"saved {out} and samples in {root / 'bench'} ({time.perf_counter() - t0:.0f} s)")
+    for style, tag in ((kept, args.name), (dora, f"{args.name}-dora")):
+        for i, (lang, text) in enumerate(CHECK + LINES[-2:]):
+            audio, rate = k.create(text, voice=style.astype("float32"), speed=1.0, lang=lang)
+            save(root / "bench" / f"{tag}-{i}-{lang[:2]}.wav", np.asarray(audio), rate)
+    print(f"saved {out}, {args.name}-dora.npy and samples in {root / 'bench'} ({time.perf_counter() - t0:.0f} s)")
 
 
 if __name__ == "__main__":

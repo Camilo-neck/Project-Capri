@@ -13,6 +13,7 @@ import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Styl
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
 import { IntroView } from "./render/intro.ts";
+import { PixelIntroView } from "./render/pixelintro.ts";
 import { Portrait } from "./render/portrait.ts";
 import { cutinFor, faceSquare, portraitFor } from "./state/faces.ts";
 import { reaction as pcReaction } from "./state/pc.ts";
@@ -89,11 +90,17 @@ const pet = await createPet(stage);
 const fxCanvas = $<HTMLCanvasElement>("fx");
 const fx = new Fx(fxCanvas);
 // her intro when she starts: her close-up grabs the screen, says hi and dives down to her spot
-const intro = new IntroView($<HTMLCanvasElement>("intro"), {
-  burst: (x, y, size) => fx.burst(x, y, size, false),
-  crackle: (x, y, r, life) => fx.crackle(() => ({ x, y, r }), () => true, life),
-  rush: (x, y) => fx.rush(x, y),
-});
+const introHooks = {
+  burst: (x: number, y: number, size: number) => fx.burst(x, y, size, false),
+  crackle: (x: number, y: number, r: number, life: number) => fx.crackle(() => ({ x, y, r }), () => true, life),
+  rush: (x: number, y: number) => fx.rush(x, y),
+};
+const showIntro = new IntroView($<HTMLCanvasElement>("intro"), introHooks); // the show's close-up (Original)
+const pixelIntro = new PixelIntroView($<HTMLCanvasElement>("intro"), introHooks); // her own pixels (Pixel)
+const intro = { // whichever is on
+  get playing() { return showIntro.playing || pixelIntro.playing; },
+  skip() { showIntro.skip(); pixelIntro.skip(); },
+};
 const director = new Director();
 type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean };
 const settings = await invoke<AvatarSettings>("avatar_settings");
@@ -1745,9 +1752,10 @@ pet.app.ticker.add((ticker) => {
 /** Her intro when she starts (not with a fullscreen app in front): when her face lands on her spot, her
  * body comes in there with the usual glitch. Without the drawings, she just appears. */
 async function playIntro(): Promise<void> {
-  if (!fullscreen && (await intro.load())) {
+  const view = style === "pixel" ? pixelIntro : showIntro;
+  if (!fullscreen && (await view.load())) {
     const [x, y] = headOnPage();
-    await intro.play({ to: { x, y, size: body().size * 0.45 }, label: "¡HOLA!", caption: "CAPRI · PROJECT CAPRICORN",
+    await view.play({ to: { x, y, size: body().size * 0.45 }, label: "¡HOLA!", caption: "CAPRI · PROJECT CAPRICORN",
       still: reducedMotion.matches });
   }
   stage.style.visibility = "";

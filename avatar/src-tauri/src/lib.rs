@@ -217,6 +217,7 @@ pub fn run() {
             user_config::avatar_settings,
             user_config::save_style,
             user_config::save_camera,
+            user_config::save_cam_width,
             user_config::shortcuts,
             ollama::quit,
             tray::tray_check,

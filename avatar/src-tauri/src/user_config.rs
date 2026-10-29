@@ -27,11 +27,13 @@ pub struct Avatar {
     pub reaccionar_pc: bool,
     /// With several screens, she follows the pointer to the one it stays on.
     pub seguir_pantallas: bool,
+    /// Camera mode's frame width, CSS px (resized from its corners; the avatar keeps it within its limits).
+    pub camara_ancho: u32,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true, seguir_pantallas: true }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true, seguir_pantallas: true, camara_ancho: 336 }
     }
 }
 
@@ -129,6 +131,12 @@ pub fn save_style(estilo: String) -> Result<(), String> {
         return Err(format!("unknown style {estilo:?}"));
     }
     save("estilo", toml_edit::value(estilo))
+}
+
+/// Camera mode's frame width after resizing it, for next time.
+#[tauri::command]
+pub fn save_cam_width(ancho: u32) -> Result<(), String> {
+    save("camara_ancho", toml_edit::value(i64::from(ancho.clamp(240, 600))))
 }
 
 /// Camera mode on or off (its shortcut), for next time.

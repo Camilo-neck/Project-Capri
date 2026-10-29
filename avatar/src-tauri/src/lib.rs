@@ -185,17 +185,10 @@ pub fn run() {
     let (ws_url, child) = start_backend();
     // Global shortcuts from config.toml [atajos], each emitting an event to the frontend.
     let keys = user_config::load().atajos;
-    let shortcuts: Vec<(Shortcut, &'static str)> = [
-        (keys.escribir, "open-input"),
-        (keys.teletransporte, "teleport"),
-        (keys.mirar, "look"),
-        (keys.no_molestar, "dnd"),
-        (keys.estilo, "style"),
-        (keys.camara, "camera"),
-        (keys.escuchar, "listen"),
-    ]
-    .into_iter()
-    .filter_map(|(text, event)| match text.parse::<Shortcut>() {
+    let shortcuts: Vec<(Shortcut, &'static str)> = keys
+        .all()
+        .into_iter()
+        .filter_map(|(_, text, event)| match text.parse::<Shortcut>() {
         Ok(s) => Some((s, event)),
         Err(e) => {
             eprintln!("shortcut {text:?} for {event} not understood: {e}");
@@ -224,6 +217,7 @@ pub fn run() {
             user_config::avatar_settings,
             user_config::save_style,
             user_config::save_camera,
+            user_config::shortcuts,
             ollama::quit,
             tray::tray_check,
             tray::tray_states,

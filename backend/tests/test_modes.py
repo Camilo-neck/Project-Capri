@@ -165,3 +165,42 @@ def test_proactivity_settings_default_and_parse(isolated_config):
     isolated_config.write_text('[proactividad]\nactiva = false\nsilencio = ""\n', encoding="utf-8")
     s = settings.load()
     assert not s.proactive and s.quiet is None and s.proactive_per_hour == 2
+
+
+def run_turns(orch, *texts):
+    """Each text as a turn of his; what was sent back."""
+    sent = []
+
+    async def send(m):
+        sent.append(m)
+
+    async def go():
+        for t in texts:
+            await orch.turn(t, send)
+
+    asyncio.run(go())
+    return sent
+
+
+def said_text(sent):
+    return "".join(m.text for m in sent if getattr(m, "type", "") == "text_delta")
+
+
+def test_dnd_on_and_off_do_what_they_say_however_often(tmp_path):
+    orch, calls = orchestrator(tmp_path)
+    run_turns(orch, "/nomolestes on", "/nomolestes on")
+    assert orch.dnd  # said twice, still on (a bare /nomolestes toggles)
+    sent = run_turns(orch, "/DND off", "/nomolestes off")
+    assert not orch.dnd
+    assert "/nomolestes" not in said_text(sent)  # it may have been said, not typed
+    run_turns(orch, "/nomolestes")
+    assert orch.dnd
+    assert calls == []
+
+
+def test_help_without_the_model(tmp_path):
+    orch, calls = orchestrator(tmp_path)
+    text = said_text(run_turns(orch, "/help"))
+    assert "/olvida" in text and "/nomolestes" in text
+    assert "/recordatorios" in said_text(run_turns(orch, "/ayuda memoria"))
+    assert calls == []

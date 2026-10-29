@@ -195,8 +195,22 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
+class RoutineInfo(BaseModel):
+    nombre: str
+    frases: list[str]
+    apps: list[str]
+    musica: str
+
+
+class Routines(BaseModel):
+    """Her routines ([rutinas] in config.toml and the built-in ones), for the panel's command list."""
+
+    type: Literal["routines"] = "routines"
+    rutinas: list[RoutineInfo]
+
+
 ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
-                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo)
+                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | Routines)
 class Say(BaseModel):
     """A line of the avatar's own (a greeting, a reaction to the PC): out loud too, if she's talking."""
 
@@ -224,6 +238,10 @@ class VoiceSet(BaseModel):
     probar: bool = False
 
 
+class RoutinesGet(BaseModel):
+    type: Literal["routines_get"] = "routines_get"
+
+
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"
 
@@ -248,6 +266,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet | Interrupt,
+                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

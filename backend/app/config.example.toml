@@ -83,11 +83,11 @@ registro = true           # voz.log (junto a esta config): lo que oyó y era par
 
 # Atajos globales. Si alguno choca con otra app, cámbialo aquí y reinicia Capri.
 # Formato: modificadores (Ctrl, Alt, Shift, Super) y una tecla, separados por "+".
+# La regla: Ctrl+Alt para hablarle (escribir, escuchar); Ctrl+Alt+Shift para lo demás.
 [atajos]
 escribir = "Ctrl+Alt+Space"
-teletransporte = "Ctrl+Alt+T"
+escuchar = "Ctrl+Alt+V"            # la siguiente frase es para ella, sin decir "hey Capri"; si habla, la corta
 mirar = "Ctrl+Alt+Shift+M"
 no_molestar = "Ctrl+Alt+Shift+D"
-estilo = "Ctrl+Alt+Shift+P"
-camara = "Ctrl+Alt+Shift+C"
-escuchar = "Ctrl+Alt+V"           # la siguiente frase es para ella, sin decir "hey Capri"
+apariencia = "Ctrl+Alt+Shift+A"    # Original, Pixel art, Cámara
+teletransporte = "Ctrl+Alt+Shift+T" # la trae (o la despierta, o la hace volver)

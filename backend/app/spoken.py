@@ -5,6 +5,9 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from difflib import SequenceMatcher
+from functools import cache
+
+from app import commands
 
 NAME = "capri"
 GREETINGS = {"hey", "hei", "ey", "eh", "oye", "oiga", "ok", "okay", "okey", "oki", "hola", "hi", "hello", "yo", "buenas",
@@ -64,16 +67,7 @@ def stop_word(text: str, names: Sequence[str] = (NAME,)) -> bool:
     return bool(_STOP.fullmatch(plain(rest)))
 
 
-# spoken phrase (plain text) -> slash command, whole utterance. "{}" takes the rest.
-_EXACT: list[tuple[str, str]] = [
-    (r"escondete|ocultate|desaparece|hide|hide yourself|go away", "/escondete"),
-    (r"vuelve|sal|aparece|ven|come back|come out|show yourself|show up", "/vuelve"),
-    (r"cierrate|cierra capri|apagate|close capri|close yourself|quit capri|shut down capri|goodbye capri", "/cierra"),
-    (r"no molestes|no me molestes|no molestar|modo no molestar|do not disturb|don't disturb me|dont disturb me|dnd", "/nomolestes"),
-    (r"olvida todo|olvidalo todo|forget everything|forget it all|forget all", "/olvida todo"),
-    (r"mira la pantalla|mira mi pantalla|mira esto|que ves|que hay en pantalla|look at the screen|look at my screen|what do you see|what's on my screen|whats on my screen", "/mira"),
-    (r"modo claude (?:on|off)", "/claude {}"),
-]
+# spoken prefix -> slash command; "{}" takes the rest. Whole sentences come from commands.json.
 _PREFIX: list[tuple[str, str]] = [
     (r"(?:olvida|olvidate de|forget(?: about)?)\s+(?:que\s+|that\s+)?(.+)", "/olvida {}"),
     (r"(?:preguntale a claude|pregunta a claude|ask claude)\s+(.+)", "/claude {}"),
@@ -85,18 +79,20 @@ _SCREEN = re.compile(r"\b(?:pantalla|screen)\b")
 _THIS = re.compile(r"^(?:mira|look at|check out) (?:lo que\b|what\b|(?:esto|this)$)")
 # what doesn't change the command: "escóndete por favor", "please hide", "Capri, escóndete"
 _POLITE = re.compile(r"\b(?:por favor|porfa(?:vor)?|please|pls|ya|un rato|un momento|ahora|ahorita|capri)\b")
-# the slash commands typed in English
-ALIASES = {"/hide": "/escondete", "/show": "/vuelve", "/back": "/vuelve", "/quit": "/cierra", "/look": "/mira",
-           "/forget": "/olvida", "/dnd": "/nomolestes", "/reminders": "/recordatorios"}
+
+
+@cache
+def _whole() -> list[tuple[str, str]]:
+    return [(plain(phrase), cmd) for phrase, cmd in commands.spoken()]
 
 
 def to_command(text: str) -> str:
     """A spoken command as its slash command; anything else comes back untouched (it's chat)."""
     p = plain(text)
     core = " ".join(_POLITE.sub(" ", p).split())
-    for pattern, cmd in _EXACT:
-        if re.fullmatch(pattern, p) or re.fullmatch(pattern, core):  # "close capri" needs her name
-            return cmd.format(core.split()[-1]) if "{}" in cmd else cmd
+    for phrase, cmd in _whole():
+        if phrase in (p, core):  # "close capri" needs her name
+            return cmd
     if (_LOOK.search(p) and _SCREEN.search(p)) or _THIS.search(p):
         return f"/mira {text.strip()}"  # the whole sentence is her question about it
     for pattern, cmd in _PREFIX:
@@ -108,10 +104,3 @@ def to_command(text: str) -> str:
             words = text.split()  # the rest as it was said (accents, case), not as it was compared
             return cmd.format(" ".join(words[len(words) - len(rest.split()):]).strip(" ,.;:!?"))
     return text.strip()
-
-
-def alias(text: str) -> str:
-    """A slash command typed in English -> the Spanish one the rest of the code knows."""
-    head, _, rest = text.strip().partition(" ")
-    cmd = ALIASES.get(head.lower())
-    return f"{cmd} {rest}".strip() if cmd else text

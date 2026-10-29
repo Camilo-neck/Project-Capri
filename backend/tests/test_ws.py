@@ -342,3 +342,15 @@ def test_he_can_cut_her_off_with_a_click_or_the_listen_hotkey():
         while ws.receive_json()["type"] != "model_info":
             pass
         assert speaker.stops == 2 and voice.listened == 1
+
+
+def test_the_panel_lists_her_routines(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    (tmp_path / "config.toml").write_text('[rutinas.estudio]\nfrases = ["modo estudio"]\napps = ["notion"]\n', encoding="utf-8")
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "routines_get"})
+        got = ws.receive_json()
+    assert got["type"] == "routines"
+    by_name = {r["nombre"]: r for r in got["rutinas"]}
+    assert by_name["chamba"]["frases"][0] == "modo chamba" and "vscode" in by_name["chamba"]["apps"]
+    assert by_name["estudio"] == {"nombre": "estudio", "frases": ["modo estudio"], "apps": ["notion"], "musica": ""}

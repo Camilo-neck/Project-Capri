@@ -11,7 +11,7 @@ from app.orchestrator import Orchestrator, recover
 from app import launch, pcsense, settings
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, Interrupt, PcEvent, Presence, Pressed, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
+                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -222,6 +222,9 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         orchestrator.interrupt()
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
+                    case RoutinesGet():
+                        await send(Routines(rutinas=[RoutineInfo(nombre=n, frases=list(r.phrases), apps=list(r.apps), musica=r.music)
+                                                     for n, r in settings.load().routines.items()]))
                     case ModelGet():
                         await send(await model_info())
                     case ModelSet(proveedor=p, nombre=n):

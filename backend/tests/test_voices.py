@@ -1,0 +1,102 @@
+from pathlib import Path
+
+import pytest
+
+from app import settings, voices
+
+
+def touch(root: Path, *names: str) -> None:
+    for n in names:
+        p = root / n
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+
+
+KOKORO = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
+QWEN = ("qwen/env/Scripts/python.exe", "qwen/Qwen3-TTS-12Hz-0.6B-Base/config.json", "qwen/capri.wav", "qwen/capri.txt")
+
+
+def by_id(opts):
+    return {o.id: o for o in opts}
+
+
+def test_the_catalog():
+    ids = [v.id for v in voices.CATALOG]
+    assert ids[:5] == ["capri", "capri_ligera", "dora", "daniela", "claude_mx"]
+    assert {"bella", "emma"} <= set(ids) and len(ids) == len(set(ids))
+    assert voices.get("nada") is voices.get(voices.DEFAULT)
+    assert all(v.motor in ("qwen", "kokoro", "piper") for v in voices.CATALOG)
+
+
+def test_what_is_downloaded_and_what_can_be(tmp_path):
+    touch(tmp_path, *KOKORO, "es_AR-daniela-high.onnx", "es_AR-daniela-high.onnx.json")
+    o = by_id(voices.options(str(tmp_path), gpu=None))
+    assert o["dora"].descargada and o["bella"].descargada
+    assert not o["daniela"].descargada and o["daniela"].descargable  # amy is missing
+    assert not o["capri_ligera"].descargada and not o["capri_ligera"].descargable  # her tuned style is made, not downloaded
+    assert o["daniela"].mb > 0 and o["dora"].mb == 0  # what's left to download
+
+
+def test_her_cloned_voice_needs_an_nvidia_gpu(tmp_path):
+    touch(tmp_path, *QWEN)
+    assert not by_id(voices.options(str(tmp_path), gpu=None))["capri"].disponible
+    assert "NVIDIA" in by_id(voices.options(str(tmp_path), gpu=None))["capri"].motivo
+    small = by_id(voices.options(str(tmp_path), gpu=(3000, 4096)))["capri"]
+    assert not small.disponible and "4 GB" in small.motivo
+    ok = by_id(voices.options(str(tmp_path), gpu=(9000, 16311)))["capri"]
+    assert ok.disponible and ok.descargada
+    assert by_id(voices.options(str(tmp_path), gpu=None))["dora"].disponible  # the CPU ones always are
+
+
+def test_nvidia_smi_parsed():
+    assert voices.parse_gpu("15742, 16311\n") == (15742, 16311)
+    assert voices.parse_gpu("") is None
+    assert voices.parse_gpu("garbage") is None
+
+
+def test_each_voice_builds_its_engine(monkeypatch, tmp_path):
+    made = []
+    monkeypatch.setattr(voices.speech, "kokoro", lambda folder, styles: made.append(("kokoro", styles)) or (lambda *a: None))
+    monkeypatch.setattr(voices.speech, "piper", lambda folder, models: made.append(("piper", models)) or (lambda *a: None))
+    monkeypatch.setattr(voices.speech, "qwen", lambda folder, ref: made.append(("qwen", ref)) or (lambda *a: None))
+    voices.make("daniela", str(tmp_path))
+    voices.make("capri_ligera", str(tmp_path))
+    voices.make("capri", str(tmp_path))
+    assert made[0] == ("piper", {"es": "es_AR-daniela-high", "en": "en_US-amy-medium"})
+    assert made[1] == ("kokoro", {"es": "capri", "en": "capri"})
+    assert made[2:] == [("qwen", "capri"), ("kokoro", {"es": "ef_dora", "en": "af_heart"})]  # Dora if her clone fails
+
+
+def test_a_voice_downloads_with_progress_and_no_half_files(monkeypatch, tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("es_MX-claude-high.onnx", "es_MX-claude-high.onnx.json", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json"):
+        (src / name).write_bytes(b"y" * 5000)
+    monkeypatch.setattr(voices, "url_for", lambda name: (src / name).as_uri())
+    dest = tmp_path / "tts"
+    seen = []
+    voices.download("claude_mx", str(dest), lambda done, total: seen.append((done, total)))
+    assert by_id(voices.options(str(dest), gpu=None))["claude_mx"].descargada
+    assert seen[-1][0] == seen[-1][1] > 0
+    assert not list(dest.glob("*.part"))
+
+
+def test_an_unreachable_file_leaves_nothing_behind(monkeypatch, tmp_path):
+    monkeypatch.setattr(voices, "url_for", lambda name: (tmp_path / "nope" / name).as_uri())
+    with pytest.raises(OSError):
+        voices.download("daniela", str(tmp_path / "tts"), lambda d, t: None)
+    assert not list((tmp_path / "tts").glob("*"))
+
+
+@pytest.mark.parametrize("voz, expected", [
+    ("", "capri"),
+    ('motor = "kokoro"\nvoz_tts = "capri"', "capri_ligera"),
+    ('motor = "kokoro"\nvoz_tts = ""', "dora"),
+    ('motor = "qwen"', "capri"),
+    ('voz = "daniela"', "daniela"),
+    ('voz = "inventada"', "capri"),
+])
+def test_her_voice_from_config_old_and_new(monkeypatch, tmp_path, voz, expected):
+    (tmp_path / "config.toml").write_text(f"[voz]\n{voz}\n", encoding="utf-8")
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    assert settings.load().tts_voice == expected

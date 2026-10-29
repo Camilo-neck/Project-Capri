@@ -43,12 +43,35 @@ export interface Mode {
   hablar: boolean; // with the voice on, she answers out loud
 }
 
-/** Her voice's touches (settings panel). */
+/** One of her voices as it stands on this PC (backend voices.CATALOG). */
+export type VoiceOption = {
+  id: string;
+  nombre: string;
+  motor: "qwen" | "kokoro" | "piper";
+  nota: string;
+  gpu: boolean;
+  descargada: boolean;
+  descargable: boolean; // what's missing can be downloaded from the panel
+  disponible: boolean; // this PC can run it
+  motivo: string; // why not
+  mb: number; // left to download
+};
+/** Her voice and its touches (settings panel). */
 export interface VoiceInfo {
   type: "voice_info";
   velocidad: number;
   robot: number;
   glitch: number;
+  voz: string;
+  voces: VoiceOption[];
+}
+/** A voice downloading (bytes). */
+export interface VoiceProgress {
+  type: "voice_progress";
+  voz: string;
+  completado: number;
+  total: number;
+  error: string;
 }
 
 /** Her routines (built-in and [rutinas] in config.toml), for the panel's command list. */
@@ -179,7 +202,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | Routines;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines;
 /** A line of the avatar's own (a greeting, a reaction): out loud too, if she's talking. */
 export interface Say {
   type: "say";
@@ -201,7 +224,12 @@ export interface VoiceSet {
   velocidad: number;
   robot: number;
   glitch: number;
+  voz: string; // another of her voices ("" keeps hers)
   probar: boolean; // play a line with them (even with the voice off)
+}
+export interface VoiceDownload {
+  type: "voice_download";
+  voz: string;
 }
 // the tray's settings panel: her brain
 export interface ModelGet {
@@ -223,4 +251,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload;

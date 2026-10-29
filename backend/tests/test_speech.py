@@ -395,3 +395,20 @@ def test_list_lines_are_for_reading_not_saying():
     assert clean("/olvida <algo>|todo (/forget): Olvida lo que recuerda.") == ""
     assert clean("• Memoria") == ""
     assert clean("Mis comandos (en inglés también valen):") == "Mis comandos (en inglés también valen):"
+
+
+def test_changing_her_voice_stops_her_frees_the_old_one_and_uses_the_new():
+    closed, used = [], []
+
+    def old(text, lang, speed=1.0):
+        used.append("old")
+        return np.full(10, 0.5, dtype="float32"), 24000
+
+    def new(text, lang, speed=1.0):
+        used.append("new")
+        return np.full(10, 0.5, dtype="float32"), 24000
+
+    old.close = lambda: closed.append("old")
+    sp = Speaker(synth=old, play=Card(), voice="capri")
+    sp.use(new, "dora")
+    assert closed == ["old"] and sp.voice == "dora" and sp.synth is new

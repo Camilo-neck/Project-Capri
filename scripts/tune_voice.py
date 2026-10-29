@@ -3,7 +3,7 @@ recording. Kokoro voices are style vectors; this scores each one (and blends of 
 with a speaker-embedding model (resemblyzer, local), then walks the best one in small random steps, keeping
 what gets closer. It copies the timbre, not the delivery or the effects (those are [voz] robot / glitch).
 
-Leaves <dir>/<name>.npy (use it with [voz] voz_tts = "<name>") and samples in <dir>/bench/.
+Leaves <dir>/<name>.npy (capri.npy is the "capri_ligera" voice: [voz] voz = "capri_ligera") and samples in <dir>/bench/.
 
 resemblyzer pulls torch and a package that won't build on Windows, so it gets its own venv, outside Capri's:
     uv venv tune && uv pip install --python tune resemblyzer --no-deps

@@ -99,3 +99,21 @@ select.field-input option { background: #17132a; }
 .cmd .copy { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--dim); }
 .cmd .copy:hover { background: var(--card-hi); color: var(--fg); }
 .cmd .copy.done { color: var(--accent-2); }
+
+/* her voices: one card each */
+.voices { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+.voice { padding: 7px 10px; border: 1px solid transparent; border-radius: 10px; background: var(--card); }
+.voice.pick { cursor: pointer; }
+.voice.pick:hover { border-color: rgb(162 75 255 / 0.5); }
+.voice.on { border-color: var(--accent); background: rgb(162 75 255 / 0.14); }
+.voice.off b { color: var(--dim); }
+.v-top { display: flex; align-items: center; gap: 7px; }
+.v-top b { font-weight: 600; }
+.voice small { display: block; margin-top: 2px; color: var(--dim); font-size: 10.5px; }
+.tag { padding: 0 5px; border-radius: 5px; background: var(--card-hi); color: var(--dim); font-size: 9.5px; letter-spacing: 0.06em; }
+.tag.gpu { background: rgb(182 255 59 / 0.14); color: var(--accent-2); }
+.v-on { margin-left: auto; color: #cfa2ff; font-size: 10.5px; }
+.v-off { margin-left: auto; color: var(--dim); font-size: 10.5px; }
+.v-get { margin-left: auto; height: 22px; font-size: 10.5px; }
+.v-top .bar { flex: 1; max-width: 90px; margin-left: auto; }
+.slider input:disabled { opacity: 0.35; }

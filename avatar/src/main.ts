@@ -13,6 +13,7 @@ import { ClipPlayer, gestureFrame, mouthCell, PERCHED, type ClipFrame, type Styl
 import { GROUND, H, solve } from "./pet/rig.ts";
 import { Fx, type Rect } from "./render/fx.ts";
 import { IntroView } from "./render/intro.ts";
+import { pixelStill } from "./render/pixelface.ts";
 import { Portrait } from "./render/portrait.ts";
 import { cutinFor, faceSquare, portraitFor } from "./state/faces.ts";
 import { reaction as pcReaction } from "./state/pc.ts";
@@ -1050,8 +1051,15 @@ async function goToScreen(s: Screens): Promise<void> {
 }
 
 /** Her portrait by what she says, glitching into the face of how she feels now. */
+let faceFor: Emocion = "neutral"; // the emotion of the portrait on screen, to redraw it when the style changes
 function showFace(e: Emocion): void {
+  faceFor = e;
   if (camera) return; // the feed already is her face
+  if (style === "pixel") { // her own drawn face; the show's shots stay for the style of the show and the big cut-ins
+    portrait.set(`px:${e}`, pixelStill(e), performance.now());
+    faceMoving = true;
+    return;
+  }
   void camView.load().then(() => {
     const p = portraitFor(e);
     const still = camView.still(p.shot, p.index);
@@ -1227,6 +1235,7 @@ void listen("style", async () => {
   await pet.setStyle(next);
   style = next;
   clips = new ClipPlayer(style);
+  showFace(faceFor);
   glitch.kick("change", performance.now());
   void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
   trayCheck("style", style === "pixel");

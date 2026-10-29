@@ -385,3 +385,7 @@ def test_her_robotic_touch_is_seamless_across_streamed_chunks():
         parts.append(fx(voice[at:at + size], rate, robot=0.6, start=at, before=voice[:at]))
         at += size
     assert np.allclose(np.concatenate(parts), whole, atol=1e-6)
+
+
+def test_a_no_ends_its_sentence_like_any_word():
+    assert Sentences().feed("Pues no. Mejor mañana. ") == ["Pues no.", "Mejor mañana."]

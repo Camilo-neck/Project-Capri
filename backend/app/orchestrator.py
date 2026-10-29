@@ -466,6 +466,9 @@ class Orchestrator:
         try:
             result = await asyncio.to_thread(tool.run, args, settings.load())
             ok = True
+        except asyncio.CancelledError:  # cut while it ran: the avatar's "doing" must still end
+            await send(Action(nombre=accion.nombre, fase="fin", ok=False, ms=round((time.monotonic() - start) * 1000)))
+            raise
         except tools.ToolError as e:
             result = f"No se pudo: {e}"
         except Exception as e:  # a tool failing must not end the turn
@@ -582,8 +585,12 @@ class Orchestrator:
 
     async def own_turn(self, text: str, send: Send) -> None:
         """Something she brings up herself; one that breaks must not end her reminders or leave her speaking."""
+        self.current = task = asyncio.create_task(self.turn(text, send, own=True))  # a task of its own: a cut ends it, not her loops
         try:
-            await self.turn(text, send, own=True)
+            await task
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise  # the loop itself is being stopped
         except Exception:
             log.exception("her own turn failed")
             await recover(send)

@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 # a sentence ends at . ! ? … (and closing quotes) followed by a space, or at a line break
 _END = re.compile(r"[.!?…]+[\"»”’)\]]*(?=\s)|\n+")
-_ABBR = {"dr", "dra", "sr", "sra", "srta", "ud", "uds", "etc", "vs", "mr", "mrs", "ms", "st", "pag", "num", "no"}
+_ABBR = {"dr", "dra", "sr", "sra", "srta", "ud", "uds", "etc", "vs", "mr", "mrs", "ms", "st", "pag", "num"}
 
 
 def level(chunk: np.ndarray) -> float:

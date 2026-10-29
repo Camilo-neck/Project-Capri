@@ -169,6 +169,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                     case TextInput(text=text, charla=charla):
                         if speaker and not panel:
                             speaker.stop()  # a new message of his: she stops talking and listens
+                        if not panel:
+                            orchestrator.interrupt()  # and a reply still streaming stops (a confirmation waiting stays)
                         spawn(orchestrator.turn(text, send, charla=charla))
                     case Look(text=text, rect=rect):
                         spawn(orchestrator.look(text, rect, send))

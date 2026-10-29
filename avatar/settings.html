@@ -17,6 +17,17 @@
         <button class="x" data-act="close" title="Cerrar (Esc)">×</button>
       </header>
 
+      <div class="seg tabs" id="tabs">
+        <button data-tab="ajustes" class="on">Ajustes</button>
+        <button data-tab="comandos">Comandos</button>
+      </div>
+
+      <div class="tab" id="tab-comandos" hidden>
+        <input id="cmd-search" class="field-input" type="search" spellcheck="false" placeholder="Buscar: /dnd, pantalla, escóndete…" />
+        <div id="cmd-list"></div>
+      </div>
+
+      <div class="tab" id="tab-ajustes">
       <div class="quick">
         <button data-act="open-input"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>Escribirle</button>
         <button data-act="hide"><svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6zM4 4l16 16" /></svg>Esconderse</button>
@@ -113,6 +124,7 @@
         <button class="danger" data-act="quit">Cerrar Capri</button>
         <button class="danger ghost" data-act="quit-ollama">Cerrar y apagar Ollama</button>
       </footer>
+      </div>
     </main>
   </body>
 </html>

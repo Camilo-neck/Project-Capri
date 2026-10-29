@@ -2,6 +2,7 @@ import "@fontsource/chakra-petch/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { parse } from "./commands.ts";
 
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
@@ -1204,7 +1205,7 @@ function startTurn(shown: string): void {
   showTx();
 }
 
-/** Looks at the screen you were on (Ctrl+Alt+M or /mira), with Capri kept out of the shot. */
+/** Looks at the screen you were on (its shortcut, Ctrl+Alt+Shift+M by default, or /mira), with Capri kept out of the shot. */
 async function look(question: string): Promise<void> {
   const rect = await invoke<[number, number, number, number]>("look_target");
   await invoke("capture_guard", { on: true }).catch((e) => console.warn("capture_guard", e));
@@ -1267,10 +1268,9 @@ async function setLook(to: Look): Promise<void> {
   }
   glitch.kick("change", performance.now());
 }
-// Ctrl+Alt+Shift+P goes round the three (original, pixel, camera); Ctrl+Alt+Shift+C jumps to the camera and back;
-// the panel picks one (`mode-<look>`). Saved in config.toml for next time.
+// its shortcut (Ctrl+Alt+Shift+A) goes round the three (original, pixel, camera); the panel picks one
+// (`mode-<look>`). Saved in config.toml for next time.
 void listen("style", () => setLook(LOOKS[(LOOKS.indexOf(appearance()) + 1) % LOOKS.length]));
-void listen("camera", () => setLook(camera ? style : "camara"));
 for (const m of LOOKS) void listen(`mode-${m}`, () => setLook(m));
 void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
@@ -1343,28 +1343,20 @@ inputRow.addEventListener("submit", (e) => {
   if (submit(text)) input.value = "";
 });
 
-// her own commands, handled here (the backend has /olvida, /nomolestes and /claude); the English names work too
-const OWN: Record<string, () => void> = {
-  "/escondete": () => (hiding ? unhide() : hide()),
-  "/hide": () => (hiding ? unhide() : hide()),
-  "/vuelve": unhide,
-  "/show": unhide,
-  "/back": unhide,
+// her own commands, handled here (the rest go to the backend); names, aliases and arguments from commands.json
+const OWN: Record<string, (arg: string) => void> = {
+  "/escondete": (arg) => (arg === "off" || (!arg && hiding) ? unhide() : hiding ? undefined : hide()),
+  "/vuelve": () => unhide(),
   "/cierra": () => void quit(),
-  "/quit": () => void quit(),
+  "/mira": (arg) => void look(arg),
 };
 
 /** What was typed or said, as a message or one of her own commands; `shown` is what to display for a spoken command. Returns whether it was taken. */
 function submit(text: string, shown = "", charla = false): boolean {
-  const command = OWN[text.toLowerCase()];
-  if (command) {
-    if (!/^\/(cierra|quit)$/i.test(text)) setInputOpen(false);
-    command();
-    return true;
-  }
-  const mira = text.match(/^\/(?:mira|look)(?:\s+|$)(.*)$/s);
-  if (mira) {
-    void look(mira[1]);
+  const own = parse(text);
+  if (own) {
+    if (own.name !== "/cierra" && own.name !== "/mira") setInputOpen(false);
+    OWN[own.name](own.arg);
     return true;
   }
   if (!text || !link.send({ type: "text_input", text, charla })) return false;

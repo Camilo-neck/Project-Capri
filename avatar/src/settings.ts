@@ -7,7 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import face from "../assets/faces/grin.png";
-import type { ModelInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
+import { entries, matches, SECTIONS } from "./commandlist.ts";
+import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
@@ -38,6 +39,19 @@ document.addEventListener("click", (e) => {
   if (row) {
     e.preventDefault(); // the real state comes back as an event
     act(row.dataset.id!);
+    return;
+  }
+  const tab = t.closest<HTMLElement>("#tabs button");
+  if (tab) {
+    showTab(tab.dataset.tab!);
+    return;
+  }
+  const copy = t.closest<HTMLElement>(".copy");
+  if (copy) {
+    void navigator.clipboard.writeText(copy.dataset.copy!).then(() => {
+      copy.classList.add("done");
+      setTimeout(() => copy.classList.remove("done"), 900);
+    });
     return;
   }
   const seg = t.closest<HTMLElement>("#look button");
@@ -111,8 +125,43 @@ function sendVoice(probar: boolean): void {
   link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), probar });
 }
 
+// ---- her commands: what to type, what to say, the shortcuts, her routines ----
+const search = $<HTMLInputElement>("cmd-search"), list = $("cmd-list");
+let routines: RoutineInfo[] = [];
+let shortcuts: [string, string][] = [];
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+const COPY_ICON = '<svg viewBox="0 0 24 24"><path d="M9 9h11v11H9zM5 15H4V4h11v1" /></svg>';
+
+function showTab(name: string): void {
+  document.querySelectorAll<HTMLElement>("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll<HTMLElement>(".tab").forEach((t) => (t.hidden = t.id !== `tab-${name}`));
+  if (name === "comandos") {
+    void invoke<[string, string][]>("shortcuts").then((s) => ((shortcuts = s), renderCommands()));
+    link.send({ type: "routines_get" });
+    renderCommands();
+  }
+}
+
+function renderCommands(): void {
+  const shown = entries(routines, shortcuts).filter((e) => matches(e, search.value));
+  list.innerHTML = SECTIONS.map((s) => {
+    const rows = shown.filter((e) => e.seccion === s);
+    if (!rows.length) return "";
+    return `<section><h2>${s}</h2>${rows.map((e) => `<div class="cmd"><div class="cmd-top">${
+      s === "Atajos" ? e.titulo.split("+").map((k) => `<kbd>${esc(k)}</kbd>`).join("+") : `<code>${esc(e.titulo)}</code>`
+    }${e.alias.map((a) => `<span class="alias">${esc(a)}</span>`).join("")}</div><small>${esc(e.detalle)}</small>${
+      e.copiar ? `<button class="copy" data-copy="${esc(e.copiar)}" title="Copiar">${COPY_ICON}</button>` : ""
+    }</div>`).join("")}</section>`;
+  }).join("") || '<p class="empty">Nada con eso.</p>';
+}
+search.addEventListener("input", renderCommands);
+
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
   if (m.type === "voice_info") showVoice(m);
+  else if (m.type === "routines") {
+    routines = m.rutinas;
+    renderCommands();
+  }
   else if (m.type === "model_info") {
     const first = !info;
     info = m;

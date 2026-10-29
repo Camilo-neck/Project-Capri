@@ -35,30 +35,51 @@ impl Default for Avatar {
     }
 }
 
-#[derive(Deserialize)]
+/// One rule: Ctrl+Alt to talk to her (write, listen), Ctrl+Alt+Shift for everything else.
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct Shortcuts {
     pub escribir: String,
-    pub teletransporte: String,
+    pub escuchar: String,
     pub mirar: String,
     pub no_molestar: String,
-    pub estilo: String,
-    pub camara: String,
-    pub escuchar: String,
+    /// Goes round her looks: Original, Pixel art, Camera. (Was `estilo`; the camera's own key is gone.)
+    #[serde(alias = "estilo")]
+    pub apariencia: String,
+    pub teletransporte: String,
 }
 
 impl Default for Shortcuts {
     fn default() -> Self {
         Self {
             escribir: "Ctrl+Alt+Space".into(),
-            teletransporte: "Ctrl+Alt+T".into(),
+            escuchar: "Ctrl+Alt+V".into(),
             mirar: "Ctrl+Alt+Shift+M".into(),
             no_molestar: "Ctrl+Alt+Shift+D".into(),
-            estilo: "Ctrl+Alt+Shift+P".into(),
-            camara: "Ctrl+Alt+Shift+C".into(),
-            escuchar: "Ctrl+Alt+V".into(),
+            apariencia: "Ctrl+Alt+Shift+A".into(),
+            teletransporte: "Ctrl+Alt+Shift+T".into(),
         }
     }
+}
+
+impl Shortcuts {
+    /// (what it does, its keys, the event it emits), in the order the panel lists them.
+    pub fn all(&self) -> [(&'static str, &str, &'static str); 6] {
+        [
+            ("Escribirle", &self.escribir, "open-input"),
+            ("Escuchar (la siguiente frase es para ella; si habla, la corta)", &self.escuchar, "listen"),
+            ("Mirar la pantalla", &self.mirar, "look"),
+            ("No molestar", &self.no_molestar, "dnd"),
+            ("Apariencia: Original, Pixel art, Cámara", &self.apariencia, "style"),
+            ("Traerla (o despertarla, o que vuelva)", &self.teletransporte, "teleport"),
+        ]
+    }
+}
+
+/// The shortcuts in use, for the panel's command list.
+#[tauri::command]
+pub fn shortcuts() -> Vec<(String, String)> {
+    load().atajos.all().iter().map(|(what, keys, _)| (what.to_string(), keys.to_string())).collect()
 }
 
 /// Same rule as the backend's settings.path(): CAPRI_CONFIG, else %APPDATA%\Capri\config.toml.
@@ -124,9 +145,14 @@ mod tests {
     #[test]
     fn default_shortcuts_parse_and_missing_keys_default() {
         let keys = Shortcuts::default();
-        for s in [keys.escribir, keys.teletransporte, keys.mirar, keys.no_molestar, keys.estilo, keys.camara] {
+        for (_, s, _) in keys.all() {
             s.parse::<Shortcut>().unwrap_or_else(|e| panic!("{s}: {e}"));
         }
+        let old: UserConfig = toml::from_str("[atajos]
+estilo = \"Ctrl+Alt+P\"
+camara = \"Ctrl+Alt+C\"
+").unwrap();
+        assert_eq!(old.atajos.apariencia, "Ctrl+Alt+P"); // an older config still works
         let partial: UserConfig = toml::from_str("[avatar]\nposeer_ventanas = false\n").unwrap();
         assert!(partial.avatar.deambular && !partial.avatar.poseer_ventanas);
         assert_eq!(partial.atajos.escribir, "Ctrl+Alt+Space");

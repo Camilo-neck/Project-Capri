@@ -16,6 +16,7 @@ dependencies = [
     "ollama>=0.6.3",
     "openai>=3.39.0",
     "pillow>=13.0.0",
+    "piper-tts>=1.8.0",
     "pydantic>=2.14.1",
     "pyperclip>=1.11.0",
     "recurring-ical-events>=3.8.2",

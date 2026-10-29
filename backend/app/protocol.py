@@ -89,13 +89,40 @@ class Level(BaseModel):
     valor: float  # 0-1
 
 
+class VoiceOption(BaseModel):
+    """One of her voices (voices.CATALOG) as it stands on this PC."""
+
+    id: str
+    nombre: str
+    motor: str
+    nota: str
+    gpu: bool
+    descargada: bool
+    descargable: bool
+    disponible: bool
+    motivo: str
+    mb: int
+
+
 class VoiceInfo(BaseModel):
-    """Her voice's touches, for the settings panel."""
+    """Her voice and its touches, for the settings panel."""
 
     type: Literal["voice_info"] = "voice_info"
     velocidad: float
     robot: float
     glitch: float
+    voz: str = ""
+    voces: list[VoiceOption] = []
+
+
+class VoiceProgress(BaseModel):
+    """A voice downloading (bytes)."""
+
+    type: Literal["voice_progress"] = "voice_progress"
+    voz: str
+    completado: int = 0
+    total: int = 0
+    error: str = ""
 
 
 class Heard(BaseModel):
@@ -210,7 +237,7 @@ class Routines(BaseModel):
 
 
 ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
-                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | Routines)
+                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines)
 class Say(BaseModel):
     """A line of the avatar's own (a greeting, a reaction to the PC): out loud too, if she's talking."""
 
@@ -235,7 +262,13 @@ class VoiceSet(BaseModel):
     velocidad: float
     robot: float
     glitch: float
+    voz: str = ""  # another of her voices ("" keeps hers)
     probar: bool = False
+
+
+class VoiceDownload(BaseModel):
+    type: Literal["voice_download"] = "voice_download"
+    voz: str
 
 
 class RoutinesGet(BaseModel):
@@ -266,6 +299,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet,
+                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

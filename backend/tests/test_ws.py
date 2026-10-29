@@ -197,6 +197,11 @@ class FakeSpeaker:
         self.enabled, self.playing, self.lang = True, False, "es"
         self.speed, self.robot, self.glitch = 1.0, 0.0, 0.0
         self.emit, self.on_first_audio = None, None
+        self.voice, self.used = "capri", []
+
+    def use(self, synth, voice):
+        self.used.append(voice)
+        self.voice = voice
 
     def see(self, msg):
         self.seen.append(msg.type)
@@ -318,9 +323,11 @@ def test_the_panel_tunes_her_voice(monkeypatch, tmp_path):
     client, voice, speaker = talking_app()
     with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
         ws.send_json({"type": "voice_get"})
-        assert ws.receive_json() == {"type": "voice_info", "velocidad": 1.0, "robot": 0.0, "glitch": 0.0}
+        got = ws.receive_json()
+        assert (got["type"], got["velocidad"], got["robot"], got["glitch"], got["voz"]) == ("voice_info", 1.0, 0.0, 0.0, "capri")
         ws.send_json({"type": "voice_set", "velocidad": 1.2, "robot": 0.4, "glitch": 2, "probar": True})
-        assert ws.receive_json() == {"type": "voice_info", "velocidad": 1.2, "robot": 0.4, "glitch": 1.0}
+        got = ws.receive_json()
+        assert (got["velocidad"], got["robot"], got["glitch"]) == (1.2, 0.4, 1.0)
     assert (speaker.speed, speaker.robot, speaker.glitch) == (1.2, 0.4, 1.0)
     assert speaker.said and speaker.said[0][1] is True  # "Probar" plays even with the voice off
     s = settings.load()
@@ -354,3 +361,33 @@ def test_the_panel_lists_her_routines(client, monkeypatch, tmp_path):
     by_name = {r["nombre"]: r for r in got["rutinas"]}
     assert by_name["chamba"]["frases"][0] == "modo chamba" and "vscode" in by_name["chamba"]["apps"]
     assert by_name["estudio"] == {"nombre": "estudio", "frases": ["modo estudio"], "apps": ["notion"], "musica": ""}
+
+
+def test_the_panel_picks_and_downloads_her_voice(monkeypatch, tmp_path):
+    from app import settings, voices
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.setattr(voices, "gpu", lambda: None)
+    monkeypatch.setattr(voices, "make", lambda v, folder: f"synth:{v}")
+
+    def download(v, folder, progress):
+        progress(50, 100)
+        progress(100, 100)
+
+    monkeypatch.setattr(voices, "download", download)
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "voice_get"})
+        got = ws.receive_json()
+        opts = {o["id"]: o for o in got["voces"]}
+        assert not opts["capri"]["disponible"] and opts["dora"]["disponible"]  # no NVIDIA here
+        ws.send_json({"type": "voice_set", "velocidad": 1.0, "robot": 0.0, "glitch": 0.0, "voz": "daniela", "probar": True})
+        assert ws.receive_json()["voz"] == "daniela"
+        assert speaker.used == ["daniela"] and speaker.said[-1][1] is True  # she says hi in it
+        ws.send_json({"type": "voice_set", "velocidad": 1.0, "robot": 0.0, "glitch": 0.0, "voz": "capri"})
+        assert ws.receive_json()["voz"] == "daniela"  # not this PC's: stays
+        ws.send_json({"type": "voice_download", "voz": "claude_mx"})
+        progress = [ws.receive_json() for _ in range(3)]
+        assert [m["type"] for m in progress] == ["voice_progress", "voice_progress", "voice_info"]
+        assert progress[1] == {"type": "voice_progress", "voz": "claude_mx", "completado": 100, "total": 100, "error": ""}
+    assert settings.load().tts_voice == "daniela"

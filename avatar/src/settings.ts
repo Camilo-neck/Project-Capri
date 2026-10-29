@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import face from "../assets/faces/grin.png";
 import { entries, matches, SECTIONS } from "./commandlist.ts";
-import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
+import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo, VoiceOption } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
@@ -113,7 +113,30 @@ function render(error = info?.error ?? ""): void {
 // ---- her voice: speed and her digital touches ----
 const sliders = { velocidad: $<HTMLInputElement>("v-speed"), robot: $<HTMLInputElement>("v-robot"), glitch: $<HTMLInputElement>("v-glitch") };
 
+const voiceList = $("voices"), voiceNote = $("voice-note");
+let voice: VoiceInfo | null = null;
+const downloading = new Map<string, number>(); // voice -> 0-1
+
+function voiceCard(o: VoiceOption, chosen: boolean): string {
+  const at = downloading.get(o.id);
+  const state = chosen ? '<span class="v-on">En uso</span>'
+    : !o.disponible ? ""
+    : at !== undefined ? `<span class="bar"><i style="width:${Math.round(at * 100)}%"></i></span>`
+    : o.descargada ? ""
+    : o.descargable ? `<button class="mini v-get" data-get="${o.id}">Descargar · ${o.mb} MB</button>`
+    : '<span class="v-off">Sin instalar</span>';
+  return `<div class="voice${chosen ? " on" : ""}${o.disponible && o.descargada ? " pick" : " off"}" data-voice="${o.id}">
+    <div class="v-top"><b>${esc(o.nombre)}</b><span class="tag${o.gpu ? " gpu" : ""}">${o.gpu ? "GPU" : "CPU"}</span>${state}</div>
+    <small>${esc(o.disponible ? o.nota : o.motivo)}</small></div>`;
+}
+
 function showVoice(v: VoiceInfo): void {
+  voice = v;
+  voiceList.innerHTML = v.voces.map((o) => voiceCard(o, o.id === v.voz)).join("");
+  const qwen = v.voces.find((o) => o.id === v.voz)?.motor === "qwen";
+  sliders.velocidad.disabled = qwen;
+  voiceNote.className = "note";
+  voiceNote.textContent = qwen ? "Su voz clonada habla a su ritmo: la velocidad es para las demás." : "Toca una voz para oírla y quedártela.";
   for (const [k, input] of Object.entries(sliders)) {
     input.value = String(v[k as keyof typeof sliders]);
     input.nextElementSibling!.textContent = k === "velocidad" ? `${Number(input.value).toFixed(2)}×` : `${Math.round(Number(input.value) * 100)} %`;
@@ -122,7 +145,7 @@ function showVoice(v: VoiceInfo): void {
 
 function sendVoice(probar: boolean): void {
   const n = (k: keyof typeof sliders) => Number(sliders[k].value);
-  link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), probar });
+  link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), voz: "", probar });
 }
 
 // ---- her commands: what to type, what to say, the shortcuts, her routines ----
@@ -158,6 +181,15 @@ search.addEventListener("input", renderCommands);
 
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
   if (m.type === "voice_info") showVoice(m);
+  else if (m.type === "voice_progress") {
+    if (m.error) {
+      downloading.delete(m.voz);
+      voiceNote.className = "note err";
+      voiceNote.textContent = m.error;
+    } else downloading.set(m.voz, m.total ? m.completado / m.total : 0);
+    if (m.error || m.completado >= m.total) downloading.delete(m.voz);
+    if (voice && !m.error) showVoice(voice);
+  }
   else if (m.type === "routines") {
     routines = m.rutinas;
     renderCommands();
@@ -188,6 +220,20 @@ void getCurrentWindow().onFocusChanged(({ payload }) => {
 });
 for (const input of Object.values(sliders)) input.addEventListener("change", () => sendVoice(false));
 $("v-try").addEventListener("click", () => sendVoice(true));
+voiceList.addEventListener("click", (e) => {
+  const t = e.target as HTMLElement;
+  const get = t.closest<HTMLElement>("[data-get]")?.dataset.get;
+  if (get) {
+    if (link.send({ type: "voice_download", voz: get })) downloading.set(get, 0);
+    if (voice) showVoice(voice);
+    return;
+  }
+  const card = t.closest<HTMLElement>(".voice.pick:not(.on)");
+  if (card) {
+    const n = (k: keyof typeof sliders) => Number(sliders[k].value);
+    link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), voz: card.dataset.voice!, probar: true });
+  }
+});
 
 prov.addEventListener("click", (e) => {
   const p = (e.target as HTMLElement).closest<HTMLElement>("button")?.dataset.prov;

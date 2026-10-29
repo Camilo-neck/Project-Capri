@@ -8,10 +8,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import launch, pcsense, settings
+from app import launch, pcsense, settings, voices
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, ServerMessage, State, TextInput, VoiceGet, VoiceInfo,
+                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -149,6 +149,28 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                 tasks.add(asyncio.create_task(pcsense.watch(lambda tipo, detalle: send(PcEvent(tipo=tipo, detalle=detalle)),
                                                             lambda: settings.load().pc_react)))
 
+        async def voice_info() -> VoiceInfo:
+            opts = voices.options(settings.load().tts_dir, await asyncio.to_thread(voices.gpu))
+            return VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch, voz=speaker.voice,
+                             voces=[VoiceOption(**vars(o)) for o in opts])
+
+        async def download_voice(vid: str) -> None:
+            loop = asyncio.get_running_loop()
+            last, sent = [0.0], []
+
+            def progress(done: int, total: int) -> None:
+                if done == total or time.monotonic() - last[0] > 0.25:  # a few updates a second
+                    last[0] = time.monotonic()
+                    sent.append(asyncio.run_coroutine_threadsafe(send(VoiceProgress(voz=vid, completado=done, total=total)), loop))
+
+            try:
+                await asyncio.to_thread(voices.download, vid, settings.load().tts_dir, progress)
+            except Exception as e:  # no network, no disk space
+                log.warning("voice download %s failed: %s", vid, e)
+                await send(VoiceProgress(voz=vid, error=f"No se pudo descargar: {e}"))
+            await asyncio.gather(*map(asyncio.wrap_future, sent), return_exceptions=True)  # the last progress goes out first
+            await send(await voice_info())
+
         async def pull(name: str) -> None:
             try:
                 async for status, done, total in providers.pull(name):
@@ -201,13 +223,19 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                     case Say(texto=texto) if talks() and not panel:
                         speaker.say(texto)
                     case VoiceGet() if speaker:
-                        await send(VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch))
+                        await send(await voice_info())
                     case VoiceSet() as v if speaker:
                         speaker.speed = min(1.5, max(0.7, v.velocidad))
                         speaker.robot, speaker.glitch = (min(1.0, max(0.0, x)) for x in (v.robot, v.glitch))
                         for key, value in (("velocidad", speaker.speed), ("robot", speaker.robot), ("glitch", speaker.glitch)):
                             settings.set_value("voz", key, value)
-                        await send(VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch))
+                        info = await voice_info()
+                        pick = next((o for o in info.voces if o.id == v.voz), None)
+                        if pick and pick.id != speaker.voice and pick.disponible and pick.descargada:
+                            speaker.use(voices.make(pick.id, settings.load().tts_dir), pick.id)
+                            settings.set_value("voz", "voz", pick.id)
+                            info.voz = pick.id
+                        await send(info)
                         if v.probar:
                             speaker.stop()
                             speaker.say("¡Hola! Así sueno ahora, ¿te gusta?", force=True)
@@ -222,6 +250,10 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         orchestrator.interrupt()
                     case Hotkey(name=name):
                         log.info("hotkey %s", name)
+                    case VoiceDownload(voz=vid) if speaker:
+                        task = asyncio.create_task(download_voice(vid))
+                        tasks.add(task)
+                        task.add_done_callback(tasks.discard)
                     case RoutinesGet():
                         await send(Routines(rutinas=[RoutineInfo(nombre=n, frases=list(r.phrases), apps=list(r.apps), musica=r.music)
                                                      for n, r in settings.load().routines.items()]))

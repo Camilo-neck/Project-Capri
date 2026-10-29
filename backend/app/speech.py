@@ -133,27 +133,48 @@ def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: 
     return np.clip(x, -1, 1).astype("float32")  # not scaled to its peak: a chunk's own peak would jump the volume
 
 
-STOCK = {"es": "ef_dora", "en": "af_heart"}  # Kokoro's voices when no tuned one is set
 PREBUFFER_S = 0.4  # a streamed sentence starts once this much is made: with the LLM busy too, it's about real time
 
 
-def kokoro(folder: str, voice: str = "") -> Callable[[str, str, float], tuple[np.ndarray, int]]:
-    """Kokoro on the CPU, loaded on first use. `voice`: a tuned style (<folder>/<voice>.npy, scripts/tune_voice.py),
-    one of Kokoro's voices, or "" for STOCK by language."""
+def kokoro(folder: str, styles: dict[str, str]) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
+    """Kokoro on the CPU, loaded on first use. `styles` by language ("es", "en"): one of Kokoro's voices or a tuned
+    one (<folder>/<name>.npy, scripts/tune_voice.py)."""
     loaded: dict = {}
+    lock = threading.Lock()  # warm() and her first sentence: one load
 
     def synth(text: str, lang: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
-        if not loaded:
-            from kokoro_onnx import Kokoro
+        with lock:
+            if not loaded:
+                from kokoro_onnx import Kokoro
 
-            root = Path(folder)
-            k = Kokoro(str(root / "kokoro-v1.0.onnx"), str(root / "voices-v1.0.bin"))
-            tuned = root / f"{voice}.npy"
-            loaded["style"] = np.load(tuned) if voice and tuned.exists() else voice if voice in k.get_voices() else None
-            loaded["k"] = k
-        style = loaded["style"] if loaded["style"] is not None else STOCK.get(lang, STOCK["es"])
+                root = Path(folder)
+                loaded["k"] = Kokoro(str(root / "kokoro-v1.0.onnx"), str(root / "voices-v1.0.bin"))
+                loaded["styles"] = {k: np.load(root / f"{s}.npy") if (root / f"{s}.npy").exists() else s for k, s in styles.items()}
+        style = loaded["styles"].get(lang, loaded["styles"]["es"])
         audio, rate = loaded["k"].create(text, voice=style, speed=speed, lang="en-us" if lang == "en" else "es")
         return np.asarray(audio, dtype="float32"), rate
+
+    return synth
+
+
+def piper(folder: str, models: dict[str, str]) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
+    """Piper on the CPU: a model by language (<folder>/<name>.onnx + .onnx.json), each loaded on first use."""
+    loaded: dict = {}
+    lock = threading.Lock()
+
+    def synth(text: str, lang: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
+        name = models.get(lang, models["es"])
+        with lock:
+            if name not in loaded:
+                from piper import PiperVoice
+
+                loaded[name] = PiperVoice.load(str(Path(folder) / f"{name}.onnx"))
+        from piper import SynthesisConfig
+
+        chunks = list(loaded[name].synthesize(text, SynthesisConfig(length_scale=1 / speed, volume=0.65)))
+        if not chunks:
+            return np.zeros(0, dtype="float32"), loaded[name].config.sample_rate
+        return np.concatenate([c.audio_float_array for c in chunks]).astype("float32"), chunks[0].sample_rate
 
     return synth
 
@@ -264,8 +285,9 @@ class Speaker:
     RECENT_S = 10
 
     def __init__(self, synth: Callable[..., tuple[np.ndarray, int]], play: Callable = sound_card,
-                 emit: Callable[[object], None] = lambda m: None):
+                 emit: Callable[[object], None] = lambda m: None, voice: str = ""):
         self.synth, self.play, self.emit = synth, play, emit
+        self.voice = voice  # which of voices.CATALOG this is
         self.enabled = True
         self.lang = "es"  # what he spoke last (set by the voice)
         self.speed, self.robot, self.glitch = 1.0, 0.0, 0.0
@@ -338,6 +360,11 @@ class Speaker:
         self.stop()
         if close := getattr(self.synth, "close", None):
             close()
+
+    def use(self, synth: Callable[..., tuple[np.ndarray, int]], voice: str) -> None:
+        """Another voice: she stops, the old one's model is freed, the next sentence is in the new one."""
+        self.release()
+        self.synth, self.voice = synth, voice
 
     def duck(self, on: bool) -> None:
         self._gain = self.DUCK if on else 1.0

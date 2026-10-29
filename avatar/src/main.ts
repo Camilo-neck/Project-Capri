@@ -436,6 +436,21 @@ function unhide(): void {
 
 /** The open microphone as a tag at her head, on her left (clear of the transmission, which stacks above her):
  * on her, or on her sleeping mask; hiding and camera mode have their own (state/mic.ts). */
+/** The stage is a fixed 288 px tall, and her art doesn't fill it: the smaller she is (the chibi), the more empty
+ * space between the transmission above and her head. The highest her pixels have been since the style changed
+ * (monotonic, so the transmission doesn't bounce with her poses) is pulled up out of the way. */
+let topSeen = Infinity;
+let trimmed = 0;
+function trimStage(): void {
+  const b = peek || camera || hiding || doze.asleep || teleporting || possessing || flying || falling ? null : petBounds();
+  if (b && b.h > 0) topSeen = Math.min(topSeen, b.y);
+  const want = Number.isFinite(topSeen) ? Math.max(0, Math.round(topSeen) - 8) : 0;
+  if (want !== trimmed) {
+    trimmed = want;
+    stage.style.marginTop = `${4 - want}px`;
+  }
+}
+
 function drawMic(): void {
   const view = micView({ voice, hiding, camera });
   micChip.hidden = view !== "dot" && view !== "bar";
@@ -1233,6 +1248,7 @@ async function setLook(to: Look): Promise<void> {
     await pet.setStyle(to);
     style = to;
     clips = new ClipPlayer(style);
+    topSeen = Infinity; // her size is another's: measure again
     void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
     trayCheck("style", style === "pixel");
   }
@@ -1680,6 +1696,7 @@ pet.app.ticker.add((ticker) => {
     clipFrame = eyes || (gestureFrame(s.gesto, s.gestureT, base, name) ?? base);
   }
   pet.showClip(clipFrame, jaw);
+  trimStage();
   // on a window's left corner the show's art sits mirrored, legs hanging out to the left
   const tilt = flying ? ` rotate(${((flying.rot * 180) / Math.PI).toFixed(1)}deg)` : now < dizzyUntil ? " rotate(90deg)" : "";
   const spin = trick?.name === "spin" ? ` scaleX(${spinScale((now - trick.since) / TRICK_MS.spin).toFixed(1)})` : "";

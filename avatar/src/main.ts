@@ -3,6 +3,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { parse } from "./commands.ts";
+import { camHeight, camResize, camWidth, type Corner } from "./state/camsize.ts";
 
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
@@ -103,7 +104,7 @@ const intro = { // whichever is on
   skip() { showIntro.skip(); pixelIntro.skip(); },
 };
 const director = new Director();
-type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean };
+type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean; camara_ancho: number };
 const settings = await invoke<AvatarSettings>("avatar_settings");
 let style: Style = settings.estilo === "pixel" ? "pixel" : "original";
 let sleepAfter = settings.dormir_min * 60_000;
@@ -125,6 +126,34 @@ let lastCutin = -Infinity;
 let gameHid = false; // she put herself away for his game: she comes back when it's over
 const camPlayer = new CameraPlayer();
 let camera = false; // camera mode: her close-ups in a transmission frame instead of her body
+
+// Camera mode's frame, resized from its corners (state/camsize.ts) and saved for next time.
+const CAM_BOTTOM = 54; // its bottom over the stage's (styles.css .cam): on her ledge
+let camW = camWidth(settings.camara_ancho);
+let camGrab: { corner: Corner; x: number; y: number; w: number } | null = null;
+function sizeCam(w: number): void {
+  camW = w;
+  cam.style.width = `${w}px`;
+  cam.style.height = `${camHeight(w)}px`;
+}
+sizeCam(camW);
+cam.addEventListener("pointerdown", (e) => {
+  const corner = (e.target as HTMLElement).closest<HTMLElement>(".cam-grip")?.dataset.corner as Corner | undefined;
+  if (!corner || e.button !== 0) return;
+  e.stopPropagation(); // not a drag of her
+  camGrab = { corner, x: e.clientX, y: e.clientY, w: camW };
+  cam.classList.add("resizing");
+  cam.setPointerCapture(e.pointerId);
+});
+cam.addEventListener("pointermove", (e) => {
+  if (camGrab) sizeCam(camResize(camGrab.w, camGrab.corner, e.clientX - camGrab.x, e.clientY - camGrab.y));
+});
+cam.addEventListener("pointerup", () => {
+  if (!camGrab) return;
+  camGrab = null;
+  cam.classList.remove("resizing");
+  void invoke("save_cam_width", { ancho: camW }).catch((err) => console.warn("save_cam_width", err));
+});
 
 /** Camera mode on or off: the feed takes her body's place (same spot, same ledges). */
 async function setCamera(on: boolean): Promise<void> {
@@ -452,7 +481,9 @@ let trimmed = 0;
 function trimStage(): void {
   const b = peek || camera || hiding || doze.asleep || teleporting || possessing || flying || falling ? null : petBounds();
   if (b && b.h > 0) topSeen = Math.min(topSeen, b.y);
-  const want = Number.isFinite(topSeen) ? Math.max(0, Math.round(topSeen) - 8) : 0;
+  // in camera mode its frame is what's on top, whatever its size (it may need more room than the stage, not less)
+  const want = camera ? stage.offsetHeight - CAM_BOTTOM - cam.offsetHeight - 8
+    : Number.isFinite(topSeen) ? Math.max(0, Math.round(topSeen) - 8) : 0;
   if (want !== trimmed) {
     trimmed = want;
     stage.style.marginTop = `${4 - want}px`;
@@ -496,7 +527,7 @@ function drawHide(now: number): void {
     { bob: reducedMotion.matches ? 0 : [0, -1, -2, -1][Math.floor(now / 600) % 4], px: style === "pixel" ? SCALE : 1 },
   );
 }
-hideMask.canvas.addEventListener("pointerdown", () => unhide());
+hideMask.canvas.addEventListener("pointerdown", (e) => e.button === 0 && unhide());
 
 /** Keeps a tick in the tray menu in step with the state it shows. */
 function trayCheck(name: string, on: boolean): void {
@@ -1293,7 +1324,15 @@ void listen<[number, number]>("cursor", (e) => {
     if (mischief.zap(cursorAt, Math.hypot(cursor[0] - b.x, cursor[1] - b.y), true)) zapCursor();
   }
 });
-mask.canvas.addEventListener("pointerdown", () => wakeUp());
+mask.canvas.addEventListener("pointerdown", (e) => e.button === 0 && wakeUp());
+
+// A right click on her (her body, her camera, her mask asleep or hiding): her quick menu at the pointer. Nowhere
+// else the webview's own menu (Back, Reload, Inspect) shows.
+addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const t = e.target as Node;
+  if (stage.contains(t) || t === mask.canvas || t === hideMask.canvas) void invoke("quick_menu");
+});
 
 /** The pointer within `pad` px of her mask (in camera mode, of the feed showing it). */
 function nearMask(pad: number): boolean {
@@ -1394,9 +1433,9 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 // Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
 // edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return; // a right click is her quick menu (contextmenu)
   if (doze.asleep) return wakeUp(); // the feed showing her mask
   if (peek && !teleporting) return void hopPeek(null); // caught peeking: back to her spot
-  if (e.button !== 0) return;
   const now = performance.now();
   if (!temper.canGrab(now) && !busy()) { // thrown once too often: hands off for a while
     glitch.kick("poke", now);
@@ -1712,7 +1751,7 @@ pet.app.ticker.add((ticker) => {
   drawClaude(now);
   if (faceMoving) faceMoving = portrait.draw(now);
   // a fast drag must not slip off her; during her intro a click anywhere skips it
-  const boxes: number[][] = dragging || intro.playing ? [[0, 0, innerWidth, innerHeight]] : [];
+  const boxes: number[][] = dragging || camGrab || intro.playing ? [[0, 0, innerWidth, innerHeight]] : [];
   if (!mask.canvas.hidden) boxes.push(mask.box());
   if (!hideMask.canvas.hidden) boxes.push(hideMask.box());
   const b = teleporting || doze.asleep || camera || peek || hiding ? null : petBounds(); // while she's gone, nothing to click
@@ -1722,7 +1761,7 @@ pet.app.ticker.add((ticker) => {
   }
   if (camera && !teleporting && !hiding) {
     const c = cam.getBoundingClientRect();
-    boxes.push([c.left, c.top, c.width, c.height]);
+    boxes.push([c.left - 6, c.top - 6, c.width + 12, c.height + 12]); // its corner grips stick out
   }
   if (b) {
     const r = stage.getBoundingClientRect();

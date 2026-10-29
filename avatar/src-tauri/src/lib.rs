@@ -217,11 +217,14 @@ pub fn run() {
             user_config::avatar_settings,
             user_config::save_style,
             user_config::save_camera,
+            user_config::save_cam_width,
             user_config::shortcuts,
             ollama::quit,
             tray::tray_check,
             tray::tray_states,
-            tray::tray_action
+            tray::tray_action,
+            tray::quick_menu,
+            tray::open_panel
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

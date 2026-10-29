@@ -11,121 +11,130 @@
       <header>
         <img id="face" alt="" />
         <div>
-          <h1>Capri</h1>
+          <h1>Capri <span class="slash">//</span> <span class="sub">ajustes</span></h1>
           <p>en línea</p>
         </div>
-        <button class="x" data-act="close" title="Cerrar (Esc)">×</button>
+        <button class="x" data-act="close" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
       </header>
 
-      <div class="seg tabs" id="tabs">
-        <button data-tab="ajustes" class="on">Ajustes</button>
-        <button data-tab="comandos">Comandos</button>
+      <nav class="tabs" id="tabs" role="tablist">
+        <button role="tab" data-tab="general" class="on">General</button>
+        <button role="tab" data-tab="cerebro">Cerebro</button>
+        <button role="tab" data-tab="voz">Voz</button>
+        <button role="tab" data-tab="comandos">Comandos</button>
+      </nav>
+
+      <div class="tab" id="tab-general" role="tabpanel">
+        <div class="quick">
+          <button data-act="open-input"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>Escribirle</button>
+          <button data-act="hide"><svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6zM4 4l16 16" /></svg>Esconderse</button>
+        </div>
+
+        <section>
+          <h2>Modos</h2>
+          <label class="row" data-id="claude">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z" /></svg></span>
+            <span class="txt"><b>Modo Claude</b><small>Reacciona a lo que hace Claude Code</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="dnd">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z" /></svg></span>
+            <span class="txt"><b>No molestar</b><small>No habla ni interrumpe por su cuenta</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="voz">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5 11a7 7 0 0014 0M12 18v3" /></svg></span>
+            <span class="txt"><b>Voz</b><small>Escúchame: di «Capri» (es / en)</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="hablar">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11" /></svg></span>
+            <span class="txt"><b>Hablar</b><small>Con la voz activa, te contesta en voz alta</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+        </section>
+
+        <section>
+          <h2>Apariencia</h2>
+          <div class="seg seg3" id="look">
+            <button data-look="original">Original</button>
+            <button data-look="pixel">Pixel art</button>
+            <button data-look="camara">Cámara</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Comportamiento</h2>
+          <label class="row" data-id="deambular">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20l4-8 3 3 4-9 3 14" /></svg></span>
+            <span class="txt"><b>Deambular</b><small>Pasea por la pantalla</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="poseer_ventanas">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 9h16" /></svg></span>
+            <span class="txt"><b>Poseer ventanas</b><small>Se mete en tus ventanas por un rato</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="reaccionar_pc">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" /></svg></span>
+            <span class="txt"><b>Reaccionar a mi PC</b><small>Procesador, batería, red, USB, juegos</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+          <label class="row" data-id="seguir_pantallas">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M2 5h9v7H2zM13 9h9v7h-9zM6 15v3M17 19v-3M9 12l5-1" /></svg></span>
+            <span class="txt"><b>Seguirme entre pantallas</b><small>Se cambia al monitor donde estás</small></span>
+            <input type="checkbox" /><i class="sw"></i>
+          </label>
+        </section>
+
+        <footer>
+          <button class="danger" data-act="quit">Cerrar Capri</button>
+          <button class="danger ghost" data-act="quit-ollama">Cerrar y apagar Ollama</button>
+        </footer>
       </div>
 
-      <div class="tab" id="tab-comandos" hidden>
+      <div class="tab" id="tab-cerebro" role="tabpanel" hidden>
+        <section id="brain">
+          <h2>Quién piensa por ella</h2>
+          <div class="seg seg4" id="prov">
+            <button data-prov="ollama">Local</button>
+            <button data-prov="claude_code" title="Tu plan de Claude, por Claude Code: sin clave">Mi Claude</button>
+            <button data-prov="anthropic" title="API de Anthropic: pago por uso, con clave">API</button>
+            <button data-prov="openai">GPT</button>
+          </div>
+          <select id="model" class="field-input"></select>
+          <div id="key-row" class="field" hidden>
+            <input id="key" class="field-input" type="password" autocomplete="off" spellcheck="false" />
+            <button id="key-save" class="mini">Guardar</button>
+          </div>
+          <div id="pull-row" class="field">
+            <input id="pull" class="field-input" list="suggest" spellcheck="false" placeholder="otro modelo: gemma3:12b" />
+            <button id="pull-go" class="mini">Descargar</button>
+            <datalist id="suggest"></datalist>
+          </div>
+          <div id="pull-bar" class="bar" hidden><i></i></div>
+          <small id="brain-note" class="note"></small>
+        </section>
+      </div>
+
+      <div class="tab" id="tab-voz" role="tabpanel" hidden>
+        <section id="voice">
+          <h2>Su voz</h2>
+          <div id="voices" class="voices"></div>
+          <small id="voice-note" class="note"></small>
+        </section>
+        <section>
+          <h2>Toques</h2>
+          <label class="slider"><span>Velocidad</span><input id="v-speed" type="range" min="0.7" max="1.5" step="0.05" /><output></output></label>
+          <label class="slider"><span>Robótica</span><input id="v-robot" type="range" min="0" max="1" step="0.05" /><output></output></label>
+          <label class="slider"><span>Glitch</span><input id="v-glitch" type="range" min="0" max="1" step="0.05" /><output></output></label>
+          <button id="v-try" class="mini wide">Probar</button>
+        </section>
+      </div>
+
+      <div class="tab" id="tab-comandos" role="tabpanel" hidden>
         <input id="cmd-search" class="field-input" type="search" spellcheck="false" placeholder="Buscar: /dnd, pantalla, escóndete…" />
         <div id="cmd-list"></div>
-      </div>
-
-      <div class="tab" id="tab-ajustes">
-      <div class="quick">
-        <button data-act="open-input"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>Escribirle</button>
-        <button data-act="hide"><svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6zM4 4l16 16" /></svg>Esconderse</button>
-      </div>
-
-      <section>
-        <h2>Modos</h2>
-        <label class="row" data-id="claude">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4z" /></svg></span>
-          <span class="txt"><b>Modo Claude</b><small>Reacciona a lo que hace Claude Code</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="dnd">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z" /></svg></span>
-          <span class="txt"><b>No molestar</b><small>No habla ni interrumpe por su cuenta</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="voz">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5 11a7 7 0 0014 0M12 18v3" /></svg></span>
-          <span class="txt"><b>Voz</b><small>Escúchame: di «Capri» (es / en)</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="hablar">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11" /></svg></span>
-          <span class="txt"><b>Hablar</b><small>Con la voz activa, te contesta en voz alta</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-      </section>
-
-      <section id="brain">
-        <h2>Cerebro</h2>
-        <div class="seg seg4" id="prov">
-          <button data-prov="ollama">Local</button>
-          <button data-prov="claude_code" title="Tu plan de Claude, por Claude Code: sin clave">Mi Claude</button>
-          <button data-prov="anthropic" title="API de Anthropic: pago por uso, con clave">API</button>
-          <button data-prov="openai">GPT</button>
-        </div>
-        <select id="model" class="field-input"></select>
-        <div id="key-row" class="field" hidden>
-          <input id="key" class="field-input" type="password" autocomplete="off" spellcheck="false" />
-          <button id="key-save" class="mini">Guardar</button>
-        </div>
-        <div id="pull-row" class="field">
-          <input id="pull" class="field-input" list="suggest" spellcheck="false" placeholder="otro modelo: gemma3:12b" />
-          <button id="pull-go" class="mini">Descargar</button>
-          <datalist id="suggest"></datalist>
-        </div>
-        <div id="pull-bar" class="bar" hidden><i></i></div>
-        <small id="brain-note" class="note"></small>
-      </section>
-
-      <section id="voice">
-        <h2>Su voz</h2>
-        <div id="voices" class="voices"></div>
-        <small id="voice-note" class="note"></small>
-        <label class="slider"><span>Velocidad</span><input id="v-speed" type="range" min="0.7" max="1.5" step="0.05" /><output></output></label>
-        <label class="slider"><span>Robótica</span><input id="v-robot" type="range" min="0" max="1" step="0.05" /><output></output></label>
-        <label class="slider"><span>Glitch</span><input id="v-glitch" type="range" min="0" max="1" step="0.05" /><output></output></label>
-        <button id="v-try" class="mini wide">Probar</button>
-      </section>
-
-      <section>
-        <h2>Apariencia</h2>
-        <div class="seg seg3" id="look">
-          <button data-look="original">Original</button>
-          <button data-look="pixel">Pixel art</button>
-          <button data-look="camara">Cámara</button>
-        </div>
-      </section>
-
-      <section>
-        <h2>Comportamiento</h2>
-        <label class="row" data-id="deambular">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20l4-8 3 3 4-9 3 14" /></svg></span>
-          <span class="txt"><b>Deambular</b><small>Pasea por la pantalla</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="poseer_ventanas">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 9h16" /></svg></span>
-          <span class="txt"><b>Poseer ventanas</b><small>Se mete en tus ventanas por un rato</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="reaccionar_pc">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" /></svg></span>
-          <span class="txt"><b>Reaccionar a mi PC</b><small>Procesador, batería, red, USB, juegos</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-        <label class="row" data-id="seguir_pantallas">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M2 5h9v7H2zM13 9h9v7h-9zM6 15v3M17 19v-3M9 12l5-1" /></svg></span>
-          <span class="txt"><b>Seguirme entre pantallas</b><small>Se cambia al monitor donde estás</small></span>
-          <input type="checkbox" /><i class="sw"></i>
-        </label>
-      </section>
-
-      <footer>
-        <button class="danger" data-act="quit">Cerrar Capri</button>
-        <button class="danger ghost" data-act="quit-ollama">Cerrar y apagar Ollama</button>
-      </footer>
       </div>
     </main>
   </body>

@@ -91,3 +91,9 @@ def test_the_system_never_opens_from_a_routine(monkeypatch, config):
     config.write_text('[rutinas.chamba]\nfrases = ["modo chamba"]\napps = ["regedit", "vscode"]\n', encoding="utf-8")
     opened, _, _, said = run_turn("modo chamba", monkeypatch)
     assert opened == ["vscode"] and "regedit" in said.lower()
+
+
+def test_the_voice_starts_on_unless_config_says_otherwise(config):
+    assert settings.load().voice_on is True  # an empty config: her ears are open from the start
+    config.write_text("[voz]\nactiva = false\n", encoding="utf-8")
+    assert settings.load().voice_on is False

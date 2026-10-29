@@ -46,7 +46,7 @@ class Settings:
     model_provider: str = "ollama"  # "ollama", "anthropic" (Claude) or "openai" (GPT)
     model_name: str = "qwen3-vl:8b-instruct"
     model_effort: str = "low"  # Claude: low | medium | high (more is slower)
-    voice_on: bool = False  # the microphone opens at start
+    voice_on: bool = True  # the microphone opens at start
     pc_react: bool = True  # she reacts to the PC: processor, battery, network, USB, devices, games ([avatar] reaccionar_pc)
     voice_model: str = "turbo"  # faster-whisper model
     voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
@@ -107,7 +107,7 @@ def load() -> Settings:
         model_provider=data.get("modelo", {}).get("proveedor", "ollama"),
         model_name=data.get("modelo", {}).get("nombre", "qwen3-vl:8b-instruct"),
         model_effort=data.get("modelo", {}).get("esfuerzo", "low"),
-        voice_on=bool(data.get("voz", {}).get("activa", False)),
+        voice_on=bool(data.get("voz", {}).get("activa", True)),
         pc_react=bool(data.get("avatar", {}).get("reaccionar_pc", True)),
         voice_model=data.get("voz", {}).get("modelo", "turbo"),
         voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),

@@ -155,9 +155,21 @@ let shortcuts: [string, string][] = [];
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const COPY_ICON = '<svg viewBox="0 0 24 24"><path d="M9 9h11v11H9zM5 15H4V4h11v1" /></svg>';
 
+const TABS = ["general", "cerebro", "voz", "comandos"];
+
+/** One of the four tabs; the panel opens on the last one (or the one her quick menu asks for). */
 function showTab(name: string): void {
-  document.querySelectorAll<HTMLElement>("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  if (!TABS.includes(name)) name = "general";
+  document.querySelectorAll<HTMLElement>("#tabs button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === name);
+    b.setAttribute("aria-selected", String(b.dataset.tab === name));
+  });
   document.querySelectorAll<HTMLElement>(".tab").forEach((t) => (t.hidden = t.id !== `tab-${name}`));
+  try {
+    localStorage.setItem("tab", name);
+  } catch {
+    // no storage: it opens on General next time
+  }
   if (name === "comandos") {
     void invoke<[string, string][]>("shortcuts").then((s) => ((shortcuts = s), renderCommands()));
     link.send({ type: "routines_get" });
@@ -178,6 +190,7 @@ function renderCommands(): void {
   }).join("") || '<p class="empty">Nada con eso.</p>';
 }
 search.addEventListener("input", renderCommands);
+void listen<string>("panel-tab", (e) => showTab(e.payload)); // her quick menu: "Comandos", "Más ajustes…"
 
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
   if (m.type === "voice_info") showVoice(m);
@@ -256,3 +269,9 @@ $("pull-go").addEventListener("click", () => {
     note.textContent = `Descargando ${name}…`;
   }
 });
+
+try {
+  showTab(localStorage.getItem("tab") ?? "general");
+} catch {
+  showTab("general");
+}

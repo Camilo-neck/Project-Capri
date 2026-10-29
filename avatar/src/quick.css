@@ -1,0 +1,82 @@
+/* Her quick menu: the panel's look, smaller and sharper. A cut-corner frame in her violet-to-green, rows that light a
+   bar on their left, chamfered segments and toggles; a short glitch on hover. */
+:root {
+  --bg: rgb(11 9 22 / 0.97);
+  --card: rgb(255 255 255 / 0.045);
+  --card-hi: rgb(255 255 255 / 0.09);
+  --fg: #ece9f6;
+  --dim: #8a86a6;
+  --accent: #a24bff;
+  --accent-2: #b6ff3b;
+  --red: #ff4d6d;
+  --cut: 12px;
+  --font-head: "Chakra Petch", sans-serif;
+  --font-body: "JetBrains Mono", monospace;
+}
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; color: var(--fg); font: 12px/1.35 var(--font-body); user-select: none; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+:focus { outline: none; }
+
+.menu {
+  --chamfer: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  position: relative; box-sizing: border-box; height: 100%; padding: 1px; display: flex; flex-direction: column;
+  background: linear-gradient(200deg, var(--accent), rgb(162 75 255 / 0.35) 50%, rgb(182 255 59 / 0.6));
+  clip-path: var(--chamfer);
+  animation: in 150ms steps(3, jump-end) both;
+}
+.menu > * { position: relative; }
+.menu::before { content: ""; position: absolute; inset: 1px; background: var(--bg); clip-path: var(--chamfer); }
+.menu::after {
+  content: ""; position: absolute; inset: 1px; pointer-events: none; clip-path: var(--chamfer);
+  background: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.02) 0 1px, transparent 1px 3px);
+}
+@keyframes in {
+  0% { opacity: 0; transform: translate(-4px, -4px); clip-path: inset(0 60% 60% 0); }
+  60% { opacity: 1; transform: translate(2px, 1px); }
+}
+
+.m-head { display: flex; align-items: baseline; gap: 6px; padding: 9px 12px 7px; border-bottom: 1px solid rgb(162 75 255 / 0.35); font: 600 12px var(--font-head); letter-spacing: 0.14em; text-transform: uppercase; }
+.m-head .slash { color: var(--accent-2); }
+.m-head em { font-style: normal; color: var(--dim); }
+
+.m-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
+
+.m-item { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 7px 8px; border-left: 2px solid transparent; text-align: left; }
+.m-item .k { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-item .v { max-width: 52%; color: var(--accent-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-item .chev { color: var(--dim); font-style: normal; }
+.m-item:hover, .m-item:focus-visible { background: var(--card-hi); border-left-color: var(--accent); animation: glitch 160ms steps(2, jump-none) 1; }
+.m-item:hover .chev, .m-item:focus-visible .chev { color: var(--accent-2); }
+.m-item.back { color: var(--dim); }
+.m-item.pick.on { background: rgb(162 75 255 / 0.18); border-left-color: var(--accent-2); }
+.m-item.pick.on .k::after { content: "  ◆"; color: var(--accent-2); font-size: 9px; }
+.m-item.danger { color: #ff9db0; justify-content: center; }
+.m-item.danger:hover, .m-item.danger:focus-visible { background: rgb(255 77 109 / 0.22); border-left-color: var(--red); color: #fff; }
+.m-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-top: 2px; }
+.m-pair .m-item { justify-content: center; background: var(--card); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%); }
+@keyframes glitch { 0% { transform: translateX(-2px); text-shadow: 2px 0 var(--accent), -2px 0 var(--accent-2); } 100% { transform: none; } }
+
+.m-label { display: flex; align-items: center; gap: 6px; margin: 7px 2px 3px; color: var(--accent-2); font: 600 9.5px var(--font-head); letter-spacing: 0.18em; text-transform: uppercase; }
+.m-label::before { content: "//"; color: var(--accent); }
+.m-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgb(162 75 255 / 0.45), transparent); }
+.m-note { margin: 6px 4px 0; color: var(--dim); font-size: 10.5px; }
+.m-rule { width: 100%; height: 1px; margin: 6px 0 4px; border: 0; background: linear-gradient(90deg, transparent, rgb(162 75 255 / 0.5), transparent); }
+
+.m-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.m-seg button { padding: 6px 0; background: var(--card); color: var(--dim); clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.m-seg button:hover, .m-seg button:focus-visible { color: var(--fg); background: var(--card-hi); }
+.m-seg button.on { background: var(--accent); color: #fff; box-shadow: inset 0 -2px 0 var(--accent-2); }
+
+.m-toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.m-tog { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 7px 2px 6px; background: var(--card); color: var(--dim); font-size: 10.5px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%); }
+.m-tog i { width: 22px; height: 5px; background: rgb(255 255 255 / 0.14); clip-path: polygon(2px 0, 100% 0, calc(100% - 2px) 100%, 0 100%); }
+.m-tog:hover, .m-tog:focus-visible { background: var(--card-hi); color: var(--fg); }
+.m-tog[aria-pressed="true"] { color: var(--fg); background: rgb(162 75 255 / 0.2); }
+.m-tog[aria-pressed="true"] i { background: var(--accent-2); box-shadow: 0 0 6px var(--accent-2); }
+
+.tag { padding: 0 5px; background: var(--card-hi); color: var(--dim); font-size: 9.5px; letter-spacing: 0.08em; }
+.tag.gpu { background: rgb(182 255 59 / 0.14); color: var(--accent-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .menu, .m-item:hover, .m-item:focus-visible { animation: none; }
+}

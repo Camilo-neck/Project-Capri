@@ -222,7 +222,9 @@ pub fn run() {
             ollama::quit,
             tray::tray_check,
             tray::tray_states,
-            tray::tray_action
+            tray::tray_action,
+            tray::quick_menu,
+            tray::open_panel
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

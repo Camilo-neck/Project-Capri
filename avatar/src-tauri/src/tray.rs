@@ -12,7 +12,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 
 use crate::{ollama, user_config};
 
-const PANEL: (f64, f64) = (340.0, 960.0); // taller than this scrolls (a 1080p work area is ~1030)
+const PANEL: (f64, f64) = (340.0, 660.0); // in tabs: a longer one scrolls inside
+const QUICK: (f64, f64) = (268.0, 344.0); // her quick menu (right click on her), `quick.html`
 
 /// The toggles by id, so the panel shows the real state when it opens and when a mode changes by other means.
 pub struct States(Mutex<HashMap<&'static str, bool>>);
@@ -83,6 +84,10 @@ fn toggle_panel(w: &WebviewWindow) {
     if HID_AT.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(300)) {
         return;
     }
+    show_panel(w);
+}
+
+fn show_panel(w: &WebviewWindow) {
     if let (Ok(Some(m)), Ok(size)) = (w.primary_monitor(), w.outer_size()) {
         let a = m.work_area();
         let margin = (8.0 * m.scale_factor()) as i32;
@@ -92,6 +97,43 @@ fn toggle_panel(w: &WebviewWindow) {
     }
     let _ = w.show();
     let _ = w.set_focus();
+}
+
+/// Her quick menu's top-left: right and below the pointer, flipped to the other side where it wouldn't fit,
+/// and always inside the work area. Physical px; `area` is x, y, width, height.
+fn place(cursor: (i32, i32), size: (i32, i32), area: (i32, i32, i32, i32)) -> (i32, i32) {
+    let (ax, ay, aw, ah) = area;
+    let x = if cursor.0 + size.0 > ax + aw { cursor.0 - size.0 } else { cursor.0 };
+    let y = if cursor.1 + size.1 > ay + ah { cursor.1 - size.1 } else { cursor.1 };
+    (x.clamp(ax, (ax + aw - size.0).max(ax)), y.clamp(ay, (ay + ah - size.1).max(ay)))
+}
+
+/// A right click on her: her quick menu at the pointer.
+#[tauri::command]
+pub fn quick_menu(app: AppHandle) {
+    let Some(w) = app.get_webview_window("quick") else { return };
+    if let Ok(c) = app.cursor_position() {
+        if let Ok(Some(m)) = app.monitor_from_point(c.x, c.y) {
+            let s = m.scale_factor();
+            let a = m.work_area();
+            let size = ((QUICK.0 * s) as i32, (QUICK.1 * s) as i32);
+            let area = (a.position.x, a.position.y, a.size.width as i32, a.size.height as i32);
+            let (x, y) = place((c.x as i32, c.y as i32), size, area);
+            let _ = w.set_position(PhysicalPosition::new(x, y));
+        }
+    }
+    let _ = w.emit("quick-open", ());
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
+/// The settings panel, open on one of its tabs (her quick menu's "Comandos" and "Más ajustes…").
+#[tauri::command]
+pub fn open_panel(tab: String, app: AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.emit("panel-tab", tab);
+        show_panel(&w);
+    }
 }
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
@@ -128,6 +170,24 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         }
     });
 
+    let quick = WebviewWindowBuilder::new(app, "quick", WebviewUrl::App("quick.html".into()))
+        .title("Capri")
+        .inner_size(QUICK.0, QUICK.1)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()?;
+    let hide_quick = quick.clone();
+    quick.on_window_event(move |e| {
+        if let WindowEvent::Focused(false) = e {
+            let _ = hide_quick.hide();
+        }
+    });
+
     TrayIconBuilder::with_id("capri")
         .icon(app.default_window_icon().expect("the app has an icon").clone())
         .tooltip("Capri")
@@ -142,4 +202,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::place;
+
+    const AREA: (i32, i32, i32, i32) = (0, 0, 1920, 1032);
+
+    #[test]
+    fn the_quick_menu_opens_by_the_pointer_and_never_off_screen() {
+        assert_eq!(place((500, 400), (268, 404), AREA), (500, 400)); // right and below
+        assert_eq!(place((1800, 400), (268, 404), AREA), (1532, 400)); // no room on the right: to its left
+        assert_eq!(place((500, 900), (268, 404), AREA), (500, 496)); // near the taskbar: above
+        assert_eq!(place((100, 100), (268, 404), (0, 0, 200, 300)), (0, 0)); // a tiny screen: its corner
+        assert_eq!(place((2500, 300), (268, 404), (1920, 0, 1920, 1032)), (2500, 300)); // a second monitor
+    }
 }

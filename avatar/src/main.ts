@@ -527,7 +527,7 @@ function drawHide(now: number): void {
     { bob: reducedMotion.matches ? 0 : [0, -1, -2, -1][Math.floor(now / 600) % 4], px: style === "pixel" ? SCALE : 1 },
   );
 }
-hideMask.canvas.addEventListener("pointerdown", () => unhide());
+hideMask.canvas.addEventListener("pointerdown", (e) => e.button === 0 && unhide());
 
 /** Keeps a tick in the tray menu in step with the state it shows. */
 function trayCheck(name: string, on: boolean): void {
@@ -1324,7 +1324,15 @@ void listen<[number, number]>("cursor", (e) => {
     if (mischief.zap(cursorAt, Math.hypot(cursor[0] - b.x, cursor[1] - b.y), true)) zapCursor();
   }
 });
-mask.canvas.addEventListener("pointerdown", () => wakeUp());
+mask.canvas.addEventListener("pointerdown", (e) => e.button === 0 && wakeUp());
+
+// A right click on her (her body, her camera, her mask asleep or hiding): her quick menu at the pointer. Nowhere
+// else the webview's own menu (Back, Reload, Inspect) shows.
+addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const t = e.target as Node;
+  if (stage.contains(t) || t === mask.canvas || t === hideMask.canvas) void invoke("quick_menu");
+});
 
 /** The pointer within `pad` px of her mask (in camera mode, of the feed showing it). */
 function nearMask(pad: number): boolean {
@@ -1425,9 +1433,9 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 // Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
 // edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return; // a right click is her quick menu (contextmenu)
   if (doze.asleep) return wakeUp(); // the feed showing her mask
   if (peek && !teleporting) return void hopPeek(null); // caught peeking: back to her spot
-  if (e.button !== 0) return;
   const now = performance.now();
   if (!temper.canGrab(now) && !busy()) { // thrown once too often: hands off for a while
     glitch.kick("poke", now);

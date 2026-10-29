@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app import calendar_ics, claude_link, launch, presence, reminders, routines, settings, spoken, tools, vision
+from app import calendar_ics, claude_link, commands, launch, presence, reminders, routines, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta,
@@ -43,6 +43,7 @@ LABELS = {"vscode": "VSCode", "warp": "Warp"}  # how she says some programs of a
 FORGET_CMD = "/olvida"
 DND_CMD = "/nomolestes"
 ALARMS_CMD = "/recordatorios"
+HELP_CMD = "/ayuda"
 SNOOZE = timedelta(minutes=10)
 LATE = timedelta(minutes=5)  # a reminder said this late was missed (she was closed, or kept quiet)
 BUTTON_SETS = 50  # button rows kept answerable; older ones stop doing anything
@@ -142,7 +143,7 @@ class Orchestrator:
         """A user message (or, with `own`, something she brings up herself: a reminder, a greeting)."""
         if not own:
             self.last_user_at = self.clock()
-        text = spoken.alias(text)  # /forget, /dnd...
+        text = commands.canonical(text)  # /forget, /DND, /Olvída...
         command = text.strip().lower()
         if image is None and command.startswith(FORGET_CMD):
             await self.forget_command(text.strip()[len(FORGET_CMD):].strip(), send)
@@ -150,11 +151,15 @@ class Orchestrator:
         if image is None and command == ALARMS_CMD:
             await self.list_reminders(send)
             return
-        if image is None and command == DND_CMD:
+        if image is None and command.split()[:1] == [DND_CMD] and command.split()[1:] in ([], ["on"], ["off"]):
             await send(State(value="thinking"))
-            await self.toggle_dnd(send)
-            await self.speak("Vale, me quedo calladita: no hablo por mi cuenta hasta que vuelvas a escribir /nomolestes."
+            arg = command.split()[1:]
+            await self.toggle_dnd(send, arg == ["on"] if arg else None)
+            await self.speak("Vale, me quedo calladita: no hablo por mi cuenta hasta que me digas que ya puedo."
                              if self.dnd else "¡De vuelta! Ya puedo avisarte y decirte cosas.", send)
+            return
+        if image is None and command.split(maxsplit=1)[:1] == [HELP_CMD]:
+            await self.speak(commands.help_text(text.strip()[len(HELP_CMD):]), send)
             return
         if image is None and not own and not charla and (name := routines.match(text, settings.load().routines)):
             await self.routine(name, send)  # his own phrase, said to her: never overheard, never her own idea
@@ -252,7 +257,7 @@ class Orchestrator:
         """/claude on|off, or /claude <question>: asks the latest Claude Code session (read-only, after a click)."""
         if arg.lower() in ("on", "off"):
             on = await self.toggle_claude(send, arg.lower() == "on")
-            await self.speak("Vale, vuelvo a vigilar a Claude." if on else "Vale, dejo de mirar a Claude hasta que escribas /claude on.", send)
+            await self.speak("Vale, vuelvo a vigilar a Claude." if on else "Vale, dejo de mirar a Claude hasta que me lo pidas.", send)
             return
         session = self.claude.latest()
         if not arg or session is None:
@@ -600,8 +605,8 @@ class Orchestrator:
     def mode(self) -> Mode:
         return Mode(no_molestar=self.dnd, claude=self.claude.enabled, hablar=self.hablar)
 
-    async def toggle_dnd(self, send: Send) -> None:
-        self.dnd = not self.dnd
+    async def toggle_dnd(self, send: Send, on: bool | None = None) -> None:
+        self.dnd = not self.dnd if on is None else on
         await send(self.mode())
 
     async def toggle_claude(self, send: Send, on: bool | None = None) -> bool:

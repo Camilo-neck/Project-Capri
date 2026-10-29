@@ -51,6 +51,13 @@ export interface VoiceInfo {
   glitch: number;
 }
 
+/** Her routines (built-in and [rutinas] in config.toml), for the panel's command list. */
+export type RoutineInfo = { nombre: string; frases: string[]; apps: string[]; musica: string };
+export interface Routines {
+  type: "routines";
+  rutinas: RoutineInfo[];
+}
+
 /** The microphone: idle waits for "hey Capri"; listening means the next sentence is for her. */
 export type VoiceState = "off" | "loading" | "idle" | "hearing" | "listening" | "thinking";
 export interface Voice {
@@ -172,7 +179,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | Routines;
 /** A line of the avatar's own (a greeting, a reaction): out loud too, if she's talking. */
 export interface Say {
   type: "say";
@@ -182,7 +189,10 @@ export interface Say {
 export interface Interrupt {
   type: "interrupt";
 }
-// the tray's settings panel: her voice
+// the tray's settings panel: her routines, her voice
+export interface RoutinesGet {
+  type: "routines_get";
+}
 export interface VoiceGet {
   type: "voice_get";
 }
@@ -213,4 +223,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet;

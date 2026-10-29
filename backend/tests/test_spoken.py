@@ -1,6 +1,6 @@
 import pytest
 
-from app.spoken import alias, strip_wake, to_command
+from app.spoken import strip_wake, to_command
 
 
 @pytest.mark.parametrize("said, left", [
@@ -24,8 +24,12 @@ def test_no_wake(said):
 
 
 @pytest.mark.parametrize("said, cmd", [
-    ("Escóndete.", "/escondete"), ("hide", "/escondete"), ("Vuelve", "/vuelve"), ("Come back!", "/vuelve"),
-    ("No me molestes", "/nomolestes"), ("Do not disturb.", "/nomolestes"),
+    ("Escóndete.", "/escondete on"), ("hide", "/escondete on"), ("Vuelve", "/vuelve"), ("Come back!", "/vuelve"),
+    ("No me molestes", "/nomolestes on"), ("Do not disturb.", "/nomolestes on"),
+    ("Ya puedes molestarme", "/nomolestes off"), ("you can disturb me", "/nomolestes off"),
+    ("¿Qué recordatorios tengo?", "/recordatorios"), ("what are my reminders", "/recordatorios"),
+    ("Claude mode on", "/claude on"), ("desactiva el modo Claude", "/claude off"),
+    ("¿Qué comandos hay?", "/ayuda"), ("what commands are there", "/ayuda"),
     ("Olvida todo", "/olvida todo"), ("forget everything", "/olvida todo"),
     ("olvida que me gusta el café", "/olvida me gusta el café"),
     ("Mira la pantalla", "/mira"), ("what do you see", "/mira"),
@@ -42,13 +46,6 @@ def test_chat_is_untouched():
     assert to_command("hide the cookies in the jar please") == "hide the cookies in the jar please"
 
 
-def test_english_slash_aliases():
-    assert alias("/forget my cat") == "/olvida my cat"
-    assert alias("/dnd") == "/nomolestes"
-    assert alias("/mira") == "/mira"
-    assert alias("hello") == "hello"
-
-
 @pytest.mark.parametrize("said", [
     "Mira lo que tengo en la pantalla", "mira lo que estoy jugando", "¿Qué ves en mi pantalla?",
     "revisa mi pantalla, sale un error", "check my screen please", "look at this",
@@ -62,9 +59,9 @@ def test_screen_without_looking_is_chat():
 
 
 @pytest.mark.parametrize("said, cmd", [
-    ("Escóndete por favor.", "/escondete"), ("Escóndete un rato", "/escondete"), ("please hide", "/escondete"),
-    ("No molestes, por favor", "/nomolestes"), ("olvida todo por favor.", "/olvida todo"),
-    ("Capri, escóndete", "/escondete"),
+    ("Escóndete por favor.", "/escondete on"), ("Escóndete un rato", "/escondete on"), ("please hide", "/escondete on"),
+    ("No molestes, por favor", "/nomolestes on"), ("olvida todo por favor.", "/olvida todo"),
+    ("Capri, escóndete", "/escondete on"),
 ])
 def test_commands_said_politely(said, cmd):
     assert to_command(said) == cmd

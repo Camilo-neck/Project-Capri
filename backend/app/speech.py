@@ -62,8 +62,11 @@ _MARKS = re.compile(r"\*\*|__|~~|`|^#+\s*|^[-*]\s+", re.M)
 
 
 def clean(text: str) -> str:
-    """What's said of a text: no markdown, no emojis, links as "el enlace"."""
-    t = _MARKS.sub("", _URL.sub("el enlace", text))
+    """What's said of a text: no markdown, no emojis, links as "el enlace". A line of a list ("• …", "/comando …",
+    her /ayuda) is for reading: nothing is said of it."""
+    if text.lstrip().startswith(("/", "•")):
+        return ""
+    t =_MARKS.sub("", _URL.sub("el enlace", text))
     t = "".join(c for c in t if unicodedata.category(c) not in ("So", "Cs", "Co", "Cn") and c not in "️‍")
     return " ".join(t.split()) if any(c.isalnum() for c in t) else ""  # "-", "* * *": nothing to say
 

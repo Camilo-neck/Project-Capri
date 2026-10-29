@@ -389,3 +389,9 @@ def test_her_robotic_touch_is_seamless_across_streamed_chunks():
 
 def test_a_no_ends_its_sentence_like_any_word():
     assert Sentences().feed("Pues no. Mejor mañana. ") == ["Pues no.", "Mejor mañana."]
+
+
+def test_list_lines_are_for_reading_not_saying():
+    assert clean("/olvida <algo>|todo (/forget): Olvida lo que recuerda.") == ""
+    assert clean("• Memoria") == ""
+    assert clean("Mis comandos (en inglés también valen):") == "Mis comandos (en inglés también valen):"

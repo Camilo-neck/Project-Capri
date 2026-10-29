@@ -1,0 +1,110 @@
+{
+  "_": "Capri's commands, the one list: backend/app/commands.py and the avatar (src/commands.ts, the panel) read it. 'voz' are whole spoken sentences (compared without accents, case or punctuation) and what each one does; 'voz_ejemplos' are shown only (those are understood by code: /mira, /olvida <algo>, /claude <pregunta>).",
+  "grupos": ["Capri", "Pantalla", "Memoria", "Modos", "Ayuda"],
+  "comandos": [
+    {
+      "nombre": "/escondete",
+      "alias": ["/hide"],
+      "args": "[on|off]",
+      "grupo": "Capri",
+      "donde": "avatar",
+      "descripcion": "Se esconde (on) o vuelve (off). Sin nada: lo contrario de lo que esté.",
+      "voz": [
+        {"dice": ["escóndete", "ocúltate", "desaparece", "hide", "hide yourself", "go away"], "hace": "/escondete on"}
+      ]
+    },
+    {
+      "nombre": "/vuelve",
+      "alias": ["/show", "/back"],
+      "args": "",
+      "grupo": "Capri",
+      "donde": "avatar",
+      "descripcion": "Vuelve si estaba escondida (lo mismo que /escondete off).",
+      "voz": [
+        {"dice": ["vuelve", "sal", "aparece", "ven", "come back", "come out", "show yourself", "show up"], "hace": "/vuelve"}
+      ]
+    },
+    {
+      "nombre": "/cierra",
+      "alias": ["/quit"],
+      "args": "",
+      "grupo": "Capri",
+      "donde": "avatar",
+      "descripcion": "Cierra Capri y apaga Ollama (vuelve a arrancar al abrirla).",
+      "voz": [
+        {"dice": ["ciérrate", "cierra capri", "apágate", "close capri", "close yourself", "quit capri", "shut down capri", "goodbye capri"], "hace": "/cierra"}
+      ]
+    },
+    {
+      "nombre": "/mira",
+      "alias": ["/look"],
+      "args": "[pregunta]",
+      "grupo": "Pantalla",
+      "donde": "avatar",
+      "descripcion": "Captura la pantalla en la que estás y te dice qué ve (o responde tu pregunta sobre ella).",
+      "voz": [
+        {"dice": ["mira la pantalla", "mira mi pantalla", "mira esto", "qué ves", "qué hay en pantalla", "look at the screen", "look at my screen", "what do you see", "what's on my screen", "whats on my screen"], "hace": "/mira"}
+      ],
+      "voz_ejemplos": ["mira la pantalla y dime qué error sale", "look at my screen, what's this?"]
+    },
+    {
+      "nombre": "/olvida",
+      "alias": ["/forget"],
+      "args": "<algo>|todo",
+      "grupo": "Memoria",
+      "donde": "backend",
+      "descripcion": "Olvida lo que recuerda de algo, o todo (todo, everything o all). Te pregunta antes.",
+      "voz": [
+        {"dice": ["olvida todo", "olvídalo todo", "forget everything", "forget it all", "forget all"], "hace": "/olvida todo"}
+      ],
+      "voz_ejemplos": ["olvida que me gusta el café", "forget about my exam"]
+    },
+    {
+      "nombre": "/recordatorios",
+      "alias": ["/reminders"],
+      "args": "",
+      "grupo": "Memoria",
+      "donde": "backend",
+      "descripcion": "Los recordatorios pendientes, con un botón para cancelar cada uno.",
+      "voz": [
+        {"dice": ["qué recordatorios tengo", "mis recordatorios", "mis alarmas", "what are my reminders", "my reminders"], "hace": "/recordatorios"}
+      ]
+    },
+    {
+      "nombre": "/nomolestes",
+      "alias": ["/dnd"],
+      "args": "[on|off]",
+      "grupo": "Modos",
+      "donde": "backend",
+      "descripcion": "No molestar: no habla por su cuenta (on) o vuelve a hacerlo (off). Sin nada: lo contrario de lo que esté.",
+      "voz": [
+        {"dice": ["no molestes", "no me molestes", "no molestar", "modo no molestar", "do not disturb", "don't disturb me", "dont disturb me", "dnd"], "hace": "/nomolestes on"},
+        {"dice": ["ya puedes molestarme", "puedes molestarme", "quita el no molestar", "quita no molestar", "you can disturb me", "disturb me again", "dnd off"], "hace": "/nomolestes off"}
+      ]
+    },
+    {
+      "nombre": "/claude",
+      "alias": [],
+      "args": "<pregunta>|on|off",
+      "grupo": "Modos",
+      "donde": "backend",
+      "descripcion": "Modo Claude: on u off le enseña o no lo que hace Claude Code; con una pregunta, se la hace a la sesión abierta (solo lectura, tras tu clic).",
+      "voz": [
+        {"dice": ["modo claude on", "activa el modo claude", "claude mode on", "turn on claude mode"], "hace": "/claude on"},
+        {"dice": ["modo claude off", "desactiva el modo claude", "claude mode off", "turn off claude mode"], "hace": "/claude off"}
+      ],
+      "voz_ejemplos": ["pregúntale a Claude qué está haciendo", "ask Claude what it changed"]
+    },
+    {
+      "nombre": "/ayuda",
+      "alias": ["/help"],
+      "args": "[grupo]",
+      "grupo": "Ayuda",
+      "donde": "backend",
+      "descripcion": "Esta lista. Con un grupo (capri, pantalla, memoria, modos, voz) solo ese.",
+      "voz": [
+        {"dice": ["qué comandos hay", "qué comandos tienes", "comandos", "what commands are there", "what are your commands", "commands"], "hace": "/ayuda"}
+      ]
+    }
+  ]
+}

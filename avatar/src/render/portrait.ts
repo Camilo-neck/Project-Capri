@@ -41,12 +41,8 @@ export class Portrait {
     g.clearRect(0, 0, s, s);
     if (!face) return false;
     const { sx, sy, sw: side } = face; // a square around her face (faces.ts faceSquare)
-    g.imageSmoothingEnabled = !face.shadow; // her pixel faces stay pixels
-    if (face.shadow) g.drawImage(face.shadow, sx, sy, side, side, 2, 2, s - 2, s - 2);
-    else {
-      g.fillStyle = VIOLET; // her misregistered violet copy, like in the show
-      g.fillRect(2, 2, s - 2, s - 2);
-    }
+    g.fillStyle = VIOLET; // her misregistered violet copy, like in the show
+    g.fillRect(2, 2, s - 2, s - 2);
     g.drawImage(face.img, sx, sy, side, side, 0, 0, s - 2, s - 2);
     if (gl.split) {
       const seed = Math.floor(now / 40);

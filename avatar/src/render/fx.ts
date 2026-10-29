@@ -133,7 +133,6 @@ export interface Still {
   sy: number;
   sw: number;
   sh: number;
-  shadow?: CanvasImageSource; // pixel art: drawn crisp, with this silhouette (not a square) as its violet copy
 }
 
 export class Fx {

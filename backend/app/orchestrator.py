@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app import calendar_ics, claude_link, commands, launch, presence, reminders, routines, settings, spoken, tools, vision
+from app import calendar_ics, claude_link, commands, winalarm, launch, presence, reminders, routines, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta,
@@ -91,6 +91,7 @@ class Orchestrator:
         self.external = False  # something from outside was read in this turn
         self.claude = claude_link.ClaudeLink()
         self.alarms = reminders.Alarms(self.memory.db)
+        self.windows = winalarm  # alarms on Windows itself (tests swap it)
         self.button_sets: dict[str, dict[str, Callable[[Send], Awaitable[None]]]] = {}  # Buttons id -> button -> what it does
         self.after: list[ServerMessage] = []  # sent once this turn's reply is out
         self.asking: set[asyncio.Task] = set()  # /claude questions in flight (they outlast the turn that started them)
@@ -316,21 +317,39 @@ class Orchestrator:
 
     # ---- reminders ----
 
-    def set_reminder(self, texto: str) -> str:
-        """The `recordatorio` tool: when comes from his own words, never from the model."""
+    async def set_reminder(self, texto: str, send: Send) -> str:
+        """The `recordatorio` tool: when comes from his own words, never from the model; and so does whether it's an
+        alarm on Windows itself ("en el PC": it rings with her closed), which asks first with a click."""
         if not self.request:
             return "Un recordatorio solo lo pide él."
         now = self.clock()
         at = reminders.when(self.request, now)
         if at is None:
             return "No dijo cuándo: pregúntale a qué hora o en cuánto tiempo (no lo supongas)."
-        rid = self.alarms.add(texto, at)
+        on_pc = reminders.on_pc(self.request)
+        if on_pc:
+            if not await self.ask(f"Poner una alarma de Windows {reminders.said_when(at, now)}: «{texto}» (suena aunque Capri esté cerrada)", send):
+                return DENIED
+            rid = self.alarms.add(texto, at, donde="windows")
+            try:
+                await asyncio.to_thread(self.windows.schedule, rid, texto, at)
+            except Exception as e:
+                log.warning("windows alarm failed: %s", e)
+                self.alarms.set(rid, "cancelado")
+                return f"Windows no dejó crear la alarma ({e}). Díselo; si quiere, se lo recuerdas tú."
+            tools.audit({"accion": "alarma_windows", "texto": texto, "cuando": at.isoformat(timespec="minutes")})
+        else:
+            rid = self.alarms.add(texto, at)
 
         async def cancel(send: Send) -> None:
             self.alarms.set(rid, "cancelado")
+            if on_pc:
+                await asyncio.to_thread(self.windows.cancel, rid)
             await self.speak(f"Vale, ya no te recuerdo «{texto}».", send)
 
         self.after.append(self.buttons([("Cancelar", cancel)]))
+        if on_pc:
+            return f"Alarma de Windows puesta: «{texto}» {reminders.said_when(at, now)}; suena aunque te cierre. Díselo con esa hora."
         return f"Guardado: le recordarás «{texto}» {reminders.said_when(at, now)}. Díselo con esa hora (le sale un botón para cancelarlo)."
 
     async def ring(self, send: Send) -> None:
@@ -364,19 +383,25 @@ class Orchestrator:
     async def list_reminders(self, send: Send) -> None:
         """/recordatorios: the pending ones, with a button to cancel each."""
         await send(State(value="thinking"))
-        now, pending = self.clock(), self.alarms.pending()
+        now = self.clock()
+        pending = [(rid, t, at, False) for rid, t, at in self.alarms.pending()]
+        pending += [(rid, t, at, True) for rid, t, at in self.alarms.on_windows(now)]
+        pending.sort(key=lambda p: p[2])
         if not pending:
             await self.speak("No tienes recordatorios pendientes.", send)
             return
-        await self.speak("Tus recordatorios: " + "; ".join(f"«{t}» {reminders.said_when(at, now)}" for _, t, at in pending) + ".", send)
+        await self.speak("Tus recordatorios: " + "; ".join(f"«{t}» {reminders.said_when(at, now)}" + (" (alarma de Windows)" if win else "")
+                                                         for _, t, at, win in pending) + ".", send)
 
-        def cancel(rid: int, texto: str) -> Callable[[Send], Awaitable[None]]:
+        def cancel(rid: int, texto: str, win: bool) -> Callable[[Send], Awaitable[None]]:
             async def run(send: Send) -> None:
                 self.alarms.set(rid, "cancelado")
+                if win:
+                    await asyncio.to_thread(self.windows.cancel, rid)
                 await self.speak(f"Cancelado: «{texto}».", send)
             return run
 
-        await send(self.buttons([(f"Cancelar «{t}»", cancel(rid, t)) for rid, t, _ in pending[:5]]))
+        await send(self.buttons([(f"Cancelar «{t}»", cancel(rid, t, win)) for rid, t, _, win in pending[:5]]))
 
     async def routine(self, name: str, send: Send) -> None:
         """A routine of his (config.toml [rutinas]): its programs and its music, at once, without the model.
@@ -438,7 +463,7 @@ class Orchestrator:
         if accion.nombre == "buscar_web":
             return await self.search_in_browser(args.consulta, send)
         if accion.nombre == "recordatorio":
-            return self.set_reminder(args.texto)
+            return await self.set_reminder(args.texto, send)
         if accion.nombre == "olvidar":
             return {"done": "Olvidado.", "none": "No había nada así en la memoria.",
                     "declined": "El usuario no quiso olvidarlo; sigue en la memoria."}[await self.forget(args.texto, send)]

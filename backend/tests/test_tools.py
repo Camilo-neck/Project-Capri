@@ -287,19 +287,29 @@ def test_actions_per_turn_are_capped():
     assert len(calls) == MAX_ACTIONS + 1
 
 
-def test_calendar_url_is_validated_and_saved_keeping_the_rest(isolated_config):
+def test_calendar_url_is_validated_and_saved_keeping_the_rest(isolated_config, tmp_path):
     settings.load()
-    with pytest.raises(ValueError):
-        settings.save_calendar_url("https://evil.example/cal.ics")
+    for bad in ("ftp://x.com/cal.ics", "javascript:alert(1)", r"C:\no\existe.ics", "mi calendario", str(tmp_path)):
+        with pytest.raises(ValueError):
+            settings.save_calendar_url(bad)
+    settings.save_calendar_url("webcal://p01-caldav.icloud.com/published/2/abc")  # Apple's links
+    assert settings.load().calendar_url == "https://p01-caldav.icloud.com/published/2/abc"
+    settings.save_calendar_url("Outlook")
+    assert settings.load().calendar_url == "outlook"
+    local = tmp_path / "mio.ics"
+    local.write_bytes(ICS)
+    settings.save_calendar_url(f'"{local}"')
+    assert settings.load().calendar_url == str(local)
     url = "https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc123/basic.ics"
     settings.save_calendar_url(url)
     s = settings.load()
     assert s.calendar_url == url and s.remind_minutes == 10 and "calculadora" in s.apps
-    assert "# Dirección secreta" in isolated_config.read_text(encoding="utf-8")  # comments kept
+    assert "# Tu calendario" in isolated_config.read_text(encoding="utf-8")  # comments kept
 
 
 def test_calendar_tool_guides_setup_when_unconfigured():
-    assert "Dirección secreta en formato iCal" in tools.calendar(tools.CalendarArgs(), settings.load())
+    steps = tools.calendar(tools.CalendarArgs(), settings.load())
+    assert "Dirección secreta en formato iCal" in steps and "Outlook" in steps and "iCloud" in steps
 
 
 ICS = b"""BEGIN:VCALENDAR
@@ -349,23 +359,57 @@ def test_reminders_fire_once_inside_the_lead_time_and_never_for_all_day():
     assert calendar_ics.due(evs, datetime(2026, 11, 1, 23, 55), 10, seen) == []  # all-day: no reminder
 
 
-def test_calendar_fetch_only_talks_to_google_and_caches(monkeypatch):
+class Resp:
+    def __init__(self, content=ICS, to=""):
+        self.content, self.is_redirect, self.headers = content, bool(to), {"location": to}
+
+    def raise_for_status(self):
+        pass
+
+
+def test_calendar_fetch_only_talks_to_public_hosts_and_caches(monkeypatch):
+    from app import power
+
     got = []
-
-    class Resp:
-        content = ICS
-
-        def raise_for_status(self):
-            pass
-
     monkeypatch.setattr(calendar_ics.httpx, "get", lambda url, **kw: got.append(url) or Resp())
+
+    def public(url):
+        if "192.168" in url or "localhost" in url:
+            raise power.ToolError("es de esta red")
+        return url
+
+    monkeypatch.setattr(calendar_ics.power, "public", public)
     url = "https://calendar.google.com/calendar/ical/x/private-y/basic.ics"
     assert calendar_ics.fetch(url, now=1000) == ICS
     calendar_ics.fetch(url, now=1000 + 60)  # cached
     calendar_ics.fetch(url, now=1000 + calendar_ics.CACHE_S + 1)  # stale: fetched again
     assert got == [url, url]
+    assert calendar_ics.fetch("https://outlook.office365.com/owa/calendar/x/calendar.ics", now=1) == ICS
     with pytest.raises(ValueError):
-        calendar_ics.fetch("https://example.com/basic.ics")
+        calendar_ics.fetch("https://192.168.1.5/cal.ics", now=1)
+    # a redirect to this network is refused too
+    monkeypatch.setattr(calendar_ics.httpx, "get", lambda url, **kw: Resp(to="http://localhost:8765/ws") if "evil" in url else Resp())
+    with pytest.raises(ValueError):
+        calendar_ics.fetch("https://evil.example/cal.ics", now=1)
+
+
+def test_calendar_from_a_file_on_this_pc(tmp_path):
+    f = tmp_path / "cal.ics"
+    f.write_bytes(ICS)
+    assert calendar_ics.fetch(str(f), now=1) == ICS
+
+
+def test_calendar_from_outlook_is_exported_by_outlook_itself(tmp_path):
+    ran = []
+
+    def run(cmd):
+        ran.append(cmd)
+        (tmp_path / "outlook.ics").write_bytes(ICS)
+
+    assert calendar_ics.fetch("outlook", now=1, folder=tmp_path, run=run) == ICS
+    assert "GetCalendarExporter" in ran[0][-1] and "SaveAsICal" in ran[0][-1]
+    calendar_ics.fetch("outlook", now=60, folder=tmp_path, run=run)
+    assert len(ran) == 1  # cached
 
 
 def test_reminder_loop_has_capri_bring_up_the_event(monkeypatch):
@@ -443,3 +487,13 @@ def test_voice_chat_without_her_name_never_captures_without_a_click(opened, monk
 def test_voice_chat_without_her_name_still_opens_what_he_names(opened):
     msgs = named_turn("abre Discord", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}, charla=True)
     assert "confirm_request" not in {m["type"] for m in msgs}
+
+
+def test_the_example_config_never_carries_a_calendar_address():
+    # what friends install starts from this file: nobody's calendar link may ride along
+    import tomllib
+    from pathlib import Path
+
+    example = tomllib.loads((Path(settings.__file__).with_name("config.example.toml")).read_text(encoding="utf-8"))
+    assert example["calendario"].get("url", "") == ""
+    assert "calendar.google.com/calendar/ical/" not in Path(settings.__file__).with_name("config.example.toml").read_text(encoding="utf-8")

@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pytest
 
+from app import reminders
 from app.reminders import when
 
 NOW = datetime(2026, 10, 28, 15, 10)  # a Wednesday, 3:10 pm
@@ -173,3 +174,73 @@ def test_recordatorios_lists_them_with_a_cancel_each(tmp_path):
     assert "sacar la ropa" in said and "mañana a las 9:00" in said
     assert [b["texto"] for b in [m for m in sent if m["type"] == "buttons"][-1]["botones"]] == \
         ["Cancelar «sacar la ropa»", "Cancelar «llamar al taller»"]
+
+
+class FakeWindows:
+    """winalarm without Task Scheduler."""
+
+    def __init__(self):
+        self.scheduled, self.cancelled = [], []
+
+    def schedule(self, rid, texto, at):
+        self.scheduled.append((rid, texto, at))
+
+    def cancel(self, rid):
+        self.cancelled.append(rid)
+
+
+@pytest.mark.parametrize("said", [
+    "pon una alarma en el pc en 20 minutos para sacar la ropa", "ponme una alarma de Windows a las 7",
+    "recuérdame en mi computador a las 5 llamar a mamá", "set an alarm on my PC at 6pm",
+    "avísame aunque cierres Capri en 10 minutos",
+])
+def test_a_reminder_for_windows_is_read_off_his_words(said):
+    assert reminders.on_pc(said)
+
+
+@pytest.mark.parametrize("said", ["recuérdame en 20 minutos sacar la ropa", "pon una alarma a las 7", "el pc va lento, recuérdamelo luego"])
+def test_a_plain_reminder_is_hers(said):
+    assert not reminders.on_pc(said)
+
+
+def test_an_alarm_on_windows_asks_then_goes_to_task_scheduler_and_she_doesnt_say_it(tmp_path):
+    orch = orchestrator(tmp_path, say("Va.", ROPA), say("Listo, suena a las 3:30 aunque me cierres."))
+    orch.windows = FakeWindows()
+    with TestClient(create_app(TOKEN, orch, reminders=False)).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "pon una alarma en el pc en 20 minutos para sacar la ropa"})
+        ask = until(ws, "confirm_request")[-1]
+        assert ask["riesgo"] == "normal" and "Windows" in ask["texto"] and "sacar la ropa" in ask["texto"]
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": True})
+        until(ws, "buttons")
+    at = datetime(2026, 10, 28, 15, 30)
+    assert [(t, c) for _, t, c in orch.windows.scheduled] == [("sacar la ropa", at)]
+    orch.clock = lambda: datetime(2026, 10, 28, 15, 31)
+    sent, send = collect()
+    asyncio.run(orch.ring(send))
+    assert sent == []  # Windows rings it, not her
+
+
+def test_an_alarm_on_windows_he_turned_down_is_not_kept(tmp_path):
+    orch = orchestrator(tmp_path, say("Va.", ROPA), say("Vale, nada."))
+    orch.windows = FakeWindows()
+    with TestClient(create_app(TOKEN, orch, reminders=False)).websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:
+        ws.send_json({"type": "text_input", "text": "pon una alarma en el pc en 20 minutos para sacar la ropa"})
+        ask = until(ws, "confirm_request")[-1]
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": False})
+        until(ws, "utterance_end")
+    assert orch.windows.scheduled == [] and orch.alarms.pending() == [] and orch.alarms.on_windows() == []
+
+
+def test_recordatorios_lists_the_windows_ones_too_and_cancels_them_there(tmp_path):
+    orch = orchestrator(tmp_path, say("..."))
+    orch.windows = FakeWindows()
+    orch.alarms.add("sacar la ropa", datetime(2026, 10, 28, 15, 30))
+    rid = orch.alarms.add("reunión", datetime(2026, 10, 29, 7, 0), donde="windows")
+    sent, send = collect()
+    asyncio.run(orch.turn("/recordatorios", send))
+    said = "".join(m["text"] for m in sent if m["type"] == "text_delta")
+    assert "sacar la ropa" in said and "reunión" in said and "alarma de Windows" in said
+    buttons = [m for m in sent if m["type"] == "buttons"][-1]
+    assert [b["texto"] for b in buttons["botones"]] == ["Cancelar «sacar la ropa»", "Cancelar «reunión»"]
+    asyncio.run(orch.press(buttons["id"], buttons["botones"][1]["id"], send))
+    assert orch.windows.cancelled == [rid] and orch.alarms.on_windows() == []

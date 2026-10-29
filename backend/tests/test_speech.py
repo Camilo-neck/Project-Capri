@@ -373,3 +373,15 @@ def test_warming_up_and_her_first_sentence_start_one_process(tmp_path, monkeypat
         assert spawned == [1]
     finally:
         synth.close()
+
+
+def test_her_robotic_touch_is_seamless_across_streamed_chunks():
+    rate = 24000
+    t = np.arange(rate) / rate
+    voice = (0.5 * np.sin(2 * np.pi * 220 * t)).astype("float32")
+    whole = fx(voice, rate, robot=0.6)
+    parts, at = [], 0
+    for size in (7919, 4000, 8000, rate - 19919):  # chunk edges anywhere, as the model streams them
+        parts.append(fx(voice[at:at + size], rate, robot=0.6, start=at, before=voice[:at]))
+        at += size
+    assert np.allclose(np.concatenate(parts), whole, atol=1e-6)

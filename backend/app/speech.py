@@ -95,17 +95,21 @@ def echo(heard: str, said: list[str]) -> bool:
                for i in range(max(1, len(words) - len(h) + 1)))
 
 
-def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: int | None = None) -> np.ndarray:
-    """Her digital touches, 0-1 each: `robot` rings and combs the voice (metallic), `glitch` stutters bits of it."""
+def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: int | None = None,
+       start: int = 0, before: np.ndarray | None = None) -> np.ndarray:
+    """Her digital touches, 0-1 each: `robot` rings and combs the voice (metallic), `glitch` stutters bits of it.
+    For a chunk of a streamed sentence, `start` (samples before it) and `before` (the plain audio before it) carry
+    the effect on from the last chunk without a click."""
     if (robot <= 0 and glitch <= 0) or not audio.size:
         return audio
     x = audio.astype("float32")
     if robot > 0:
-        t = np.arange(len(x)) / rate
+        t = (start + np.arange(len(x))) / rate
         ring = x * np.sin(2 * np.pi * 70 * t)
         d = int(0.004 * rate)
-        comb = x.copy()
-        comb[d:] += 0.6 * x[:-d]
+        prev = np.zeros(d, dtype="float32") if before is None else np.asarray(before, dtype="float32")[-d:]
+        delayed = np.concatenate([np.zeros(d - len(prev), dtype="float32"), prev, x])[:len(x)]
+        comb = x + 0.6 * delayed
         x = (1 - robot) * x + robot * (0.5 * ring + 0.5 * comb)
     if glitch > 0:
         rng = np.random.default_rng(seed)
@@ -123,8 +127,7 @@ def fx(audio: np.ndarray, rate: int, robot: float = 0, glitch: float = 0, seed: 
             at = c + size
         parts.append(x[at:])
         x = np.concatenate(parts)
-    peak = np.abs(x).max()
-    return (x / peak if peak > 1 else x).astype("float32")
+    return np.clip(x, -1, 1).astype("float32")  # not scaled to its peak: a chunk's own peak would jump the volume
 
 
 STOCK = {"es": "ef_dora", "en": "af_heart"}  # Kokoro's voices when no tuned one is set
@@ -403,11 +406,13 @@ class Speaker:
             try:
                 audio, rate = self.synth(text, lang, self.speed)
                 chunks = iter([audio]) if isinstance(audio, np.ndarray) else iter(audio)
-                held, have = [], 0
+                held, have, at, last = [], 0, 0, None
                 for c in chunks:
                     if gen != self._gen:
                         break
-                    c = fx(np.asarray(c, dtype="float32"), rate, self.robot, self.glitch)
+                    plain = np.asarray(c, dtype="float32")
+                    c = fx(plain, rate, self.robot, self.glitch, start=at, before=last)
+                    at, last = at + plain.size, plain
                     if not c.size:
                         continue
                     if stream is not None:

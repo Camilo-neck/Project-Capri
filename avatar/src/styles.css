@@ -101,6 +101,7 @@ body {
 .tx-frame {
   background: color-mix(in srgb, var(--accent) 70%, transparent);
   padding: 1px;
+  animation: tx-flicker 9s steps(1) infinite;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%);
 }
 
@@ -413,32 +414,105 @@ body {
 
 /* Quiet by default: the status bar only shows while the input is open. */
 /* ...except while she captures the screen or in do-not-disturb: those always show. */
-.hud:not(.input-open) .status:not([data-state="looking"]):not([data-dnd="1"]):not([data-mic]) {
+.hud:not(.input-open) .status:not([data-state="looking"]):not([data-dnd="1"]) {
   display: none;
 }
 
 .status[data-mic="bar"] {
-  color: #ff5d73; /* she's listening to you */
+  color: #ff5d73; /* she's listening to you (with the input open the words are here too) */
 }
 
-/* the microphone open at rest: only a red dot by the mark */
-.status[data-mic] .status-mark::after {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 4px;
-  border-radius: 50%;
-  background: #ff5d73;
-  vertical-align: 1px;
+/* The open microphone, a tag at her head (main.ts places it): small and dark at rest, 2077 yellow with the
+   level of your voice while she's listening. Cut corners and a bar down its left like the rest of her HUD. */
+.mic-chip {
+  --yellow: #fcee0a;
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 15px;
+  padding: 0 8px 0 7px;
+  font: 700 9px var(--font-head);
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  color: var(--yellow);
+  background: linear-gradient(90deg, var(--yellow) 0 2px, transparent 2px), rgb(8 6 16 / 0.9);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  pointer-events: none;
 }
 
-.status[data-mic][data-voice="loading"] .status-mark::after {
-  background: var(--warn);
+.mic-pip {
+  width: 5px;
+  height: 5px;
+  background: #ff2a4d;
+  animation: pip 1.4s steps(1) infinite;
 }
 
-.hud:not(.input-open) .status[data-mic="dot"][data-state="idle"]:not([data-dnd="1"]) :is(#status-label, .segs) {
+@keyframes pip {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.mic-bars {
   display: none;
+  align-items: flex-end;
+  gap: 1px;
+  height: 9px;
+}
+
+.mic-bars i {
+  width: 2px;
+  height: calc(2px + var(--lv, 0) * 7px);
+  background: currentColor;
+}
+
+.mic-bars i:nth-child(2n) {
+  height: calc(2px + var(--lv, 0) * 4px);
+}
+
+.mic-chip[data-mic="bar"] {
+  color: #0b0916;
+  background: var(--yellow);
+  text-shadow: -1px 0 rgb(0 240 255 / 0.7), 1px 0 rgb(255 42 77 / 0.6);
+  animation: mic-in 200ms steps(1) both;
+}
+
+.mic-chip[data-mic="bar"] .mic-bars {
+  display: flex;
+}
+
+.mic-chip[data-mic="bar"] .mic-pip {
+  animation: none;
+}
+
+.mic-chip[data-voice="loading"] {
+  color: var(--warn);
+}
+
+/* it comes in torn, in a few steps */
+@keyframes mic-in {
+  0% {
+    clip-path: polygon(0 20%, 100% 20%, 100% 45%, 0 45%);
+    transform: translateX(3px);
+  }
+  34% {
+    clip-path: polygon(0 0, 100% 0, 100% 30%, 0 30%, 0 60%, 100% 60%, 100% 100%, 0 100%);
+    transform: translateX(-2px);
+  }
+  67% {
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+    transform: translateX(1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-chip,
+  .mic-pip {
+    animation: none !important;
+  }
 }
 
 /* hiding: the dot sits on her mask, and beats while she hears you */
@@ -505,6 +579,35 @@ body {
 
 .input input::placeholder {
   color: var(--dim);
+}
+
+/* the border of the transmission now and then dips or flashes, a frame or two, like a bad signal */
+@keyframes tx-flicker {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  31% {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  31.6% {
+    background: color-mix(in srgb, var(--accent) 100%, white 25%);
+  }
+  32.2% {
+    background: color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  67% {
+    background: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  67.8% {
+    background: color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-frame {
+    animation: none;
+  }
 }
 
 @keyframes tx-in {

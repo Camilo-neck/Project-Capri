@@ -37,6 +37,13 @@ const HALF = 30; // half her width at the seat: that much of the ledge must be v
 const MIN_W = 300;
 export const CORNER = 18; // px from the window's side to where she sits: her legs hang just past it
 
+/** Room a ledge needs above it. `quiet` (the transmission and the input are closed): just her, `pet` px tall
+ * with the strip under her feet (`below`) not counting. Otherwise the whole column, `hud` px, which stacks
+ * the transmission above her. */
+export function roomNeeded({ quiet, pet, hud, below }: { quiet: boolean; pet: number; hud: number; below: number }): number {
+  return (quiet ? pet + 4 : hud) - below;
+}
+
 /** A ledge she can use: not maximized, wide enough, room above it, and some of it on this screen. */
 export function canSit(win: Win, lim: Limits): boolean {
   return !win.max && win.w >= MIN_W && win.y >= lim.room && win.x + win.w - HALF * 2 > lim.margin && win.x + HALF * 2 < lim.width - lim.margin;

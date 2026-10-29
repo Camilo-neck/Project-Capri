@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { canSit, CORNER, covered, ledgeAt, pickSeat, seatOf, type Win, type Windows } from "./perch.ts";
+import { canSit, CORNER, covered, ledgeAt, pickSeat, roomNeeded, seatOf, type Win, type Windows } from "./perch.ts";
 
 const ROOM = { room: 500, width: 2560, margin: 180 };
 const win = (id: number, x: number, y: number, w = 800, h = 400, max = false): Win => ({ id, x, y, w, h, max });
@@ -59,4 +59,15 @@ test("on her own she takes the left corner (the right one has the close button),
   assert.equal(pickSeat({ fg: 1, wins: [win(1, 0, 600)] }, ROOM)?.side, "right"); // its left corner is past the margin
   const atRight = win(1, 1800, 600, 760); // dropped by its right corner, which is past the margin
   assert.equal(ledgeAt({ fg: 1, wins: [atRight] }, { x: 2400, y: 600 }, ROOM)?.side, "left");
+});
+
+test("room above a ledge: just her while the transmission is closed, her and the transmission while it's open", () => {
+  const sizes = { pet: 288, hud: 560, below: 54 };
+  const quiet = roomNeeded({ ...sizes, quiet: true });
+  const talking = roomNeeded({ ...sizes, quiet: false });
+  assert.ok(quiet < talking);
+  const win = { id: 1, x: 100, y: 300, w: 800, h: 500, max: false };
+  const lim = (room: number) => ({ room, width: 1920, margin: 196 });
+  assert.equal(canSit(win, lim(quiet)), true, "a window a third of the way down: she fits above it");
+  assert.equal(canSit(win, lim(talking)), false, "...but not with the transmission above her");
 });

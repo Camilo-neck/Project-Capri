@@ -255,6 +255,25 @@ export class Fx {
     });
   }
 
+  /** Three glitch orbs juggled over `at()` (her hands: its x is between them, `size` how wide her reach is and how
+   *  high they go), each with a one-step ghost behind it; `alive` ends it early. */
+  juggle(at: () => Pt & { size: number }, orbs: (ms: number) => { x: number; y: number }[], alive: () => boolean, life: number): void {
+    const colors = [RED, VIOLET, GREEN];
+    this.add(life, (g, t) => {
+      const c = at();
+      const draw = (ms: number, alpha: number) => {
+        g.globalAlpha = alpha;
+        orbs(ms).forEach((o, i) => {
+          g.fillStyle = colors[i];
+          g.fillRect(snap(c.x + o.x * c.size * 0.3) - PX, snap(c.y - o.y * c.size * 0.55) - PX, 3 * PX, 3 * PX);
+        });
+      };
+      draw(Math.max(0, t * life - 90), 0.4);
+      draw(t * life, 1);
+      g.globalAlpha = 1;
+    }, alive);
+  }
+
   /** A column of light from the top of the screen down to `ground` at x; `down`: it lands first. */
   beam(x: number, ground: number, down = false): void {
     const seg = 4 * PX;

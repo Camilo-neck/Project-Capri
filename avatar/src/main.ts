@@ -28,8 +28,9 @@ import { AwayWatch, backLine, speaksOnBack } from "./state/away.ts";
 import { Doze, sleepy, WAKE_MS } from "./state/doze.ts";
 import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ResumeWatch, resumeLine, TICK_MS } from "./state/resume.ts";
+import { juggleOrbs, spinScale, Tricks, TRICK_MS, type Trick } from "./state/tricks.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
-import { canSit, ledgeAt, pickSeat, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { canSit, ledgeAt, pickSeat, roomNeeded, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { type Flight, type Hit, launch, step, Temper, thrown, Velocity } from "./state/throw.ts";
 import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget, type Zap } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
@@ -62,6 +63,8 @@ const txMem = $("tx-mem");
 const status = $("status");
 const statusLabel = $("status-label");
 const micDot = $("mic-dot");
+const micChip = $("mic-chip");
+const micText = $("mic-text");
 const inputRow = $<HTMLFormElement>("input-row");
 const input = $<HTMLInputElement>("input");
 const stage = $("stage");
@@ -100,6 +103,8 @@ await pet.setStyle(style);
 let clips = new ClipPlayer(style);
 const glitch = new GlitchFx(performance.now());
 const mischief = new Mischief(performance.now());
+const tricks = new Tricks(performance.now());
+let trick: { name: Trick; since: number } | null = null; // a pirouette or juggling, while she has nothing to do
 const petCanvas = pet.app.canvas as HTMLCanvasElement;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const doze = new Doze();
@@ -186,9 +191,13 @@ const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const busy = () => teleporting || !!possessing || !!falling || !!flying || performance.now() < dizzyUntil || dragging || doze.asleep || !!peek
   || hiding || intro.playing;
 const floor = () => innerHeight - BELOW;
-/** Room a ledge needs above it: her and the transmission, which stack above her feet. */
-const room = () => hud.offsetHeight - BELOW;
-const limits = () => ({ room: room(), width: innerWidth, margin: hud.offsetWidth / 2 + EDGE });
+/** Room a ledge needs above it: just her while the transmission is closed (`talking` forces the whole column
+ * of her and the transmission, which stack above her feet). Open it on a window too low for that and she falls. */
+const limits = (talking = false) => ({
+  room: roomNeeded({ quiet: !talking && tx.hidden && inputRow.hidden && linkStatus === "idle", pet: stage.offsetHeight, hud: hud.offsetHeight, below: BELOW }),
+  width: innerWidth,
+  margin: hud.offsetWidth / 2 + EDGE,
+});
 
 /** A spot on the taskbar, `frac` 0..1 from left to right. */
 function onTaskbar(frac: number): Point {
@@ -197,7 +206,7 @@ function onTaskbar(frac: number): Point {
 
 /** Moves the HUD column (transmission, input and Capri) so her feet are at `at`. */
 function placeHud(): void {
-  hud.style.transform = `translate(${Math.round(at.x - hud.offsetWidth / 2)}px, ${Math.round(at.y - room())}px)`;
+  hud.style.transform = `translate(${Math.round(at.x - hud.offsetWidth / 2)}px, ${Math.round(at.y - (hud.offsetHeight - BELOW))}px)`; // her feet at the bottom of the column
 }
 at = onTaskbar(1);
 placeHud();
@@ -425,6 +434,26 @@ function unhide(): void {
   }
 }
 
+/** The open microphone as a tag at her head, on her left (clear of the transmission, which stacks above her):
+ * on her, or on her sleeping mask; hiding and camera mode have their own (state/mic.ts). */
+function drawMic(): void {
+  const view = micView({ voice, hiding, camera });
+  micChip.hidden = view !== "dot" && view !== "bar";
+  if (micChip.hidden) return;
+  let right: number, top: number;
+  if (doze.asleep) {
+    const [bx, by] = mask.box();
+    [right, top] = [bx - 6, by];
+  } else {
+    const c = stage.getBoundingClientRect();
+    const b = peek ? body() : null;
+    const p = petBounds();
+    if (b) [right, top] = [b.x - b.size / 2 - 6, b.y - 10];
+    else [right, top] = p ? [c.left + p.x - 6, c.top + p.y + p.h * 0.2] : [c.left + c.width / 2 - 60, c.top + c.height * 0.3];
+  }
+  micChip.style.translate = `${Math.max(4, Math.round(right - micChip.offsetWidth))}px ${Math.max(4, Math.round(top))}px`;
+}
+
 /** Hiding: the small mask in its corner, eyes open on the pointer, a blink now and then. */
 function drawHide(now: number): void {
   // shown once her body has come apart
@@ -598,7 +627,7 @@ function setStatus(s: Status): void {
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
   if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
     // while she works, she sits on the window in front if she can
-    const seat = pickSeat(wins, limits(), { frontOnly: true });
+    const seat = pickSeat(wins, limits(true), { frontOnly: true }); // the transmission is about to open
     if (seat && seat.id !== perch?.id) void teleport(seat);
   }
   linkStatus = s;
@@ -610,6 +639,15 @@ const VOICE_LABEL: Record<VoiceState, string> = {
   off: "",
   loading: "CARGANDO VOZ",
   idle: "ESCUCHANDO · «HEY CAPRI»",
+  hearing: "OYÉNDOTE",
+  listening: "TE ESCUCHO",
+  thinking: "ENTENDIENDO",
+};
+/** What the tag at her head says (the status bar, with the input open, has the longer words above). */
+const CHIP_LABEL: Record<VoiceState, string> = {
+  off: "",
+  loading: "CARGANDO",
+  idle: "MIC",
   hearing: "OYÉNDOTE",
   listening: "TE ESCUCHO",
   thinking: "ENTENDIENDO",
@@ -627,6 +665,9 @@ function renderStatus(): void {
   if (view === "bar" || view === "dot") status.dataset.mic = view;
   else delete status.dataset.mic;
   status.dataset.voice = voice;
+  micChip.dataset.mic = view === "bar" ? "bar" : "dot";
+  micChip.dataset.voice = voice;
+  micText.textContent = CHIP_LABEL[voice];
   statusLabel.textContent = bar ? VOICE_LABEL[voice] : linkStatus === "idle" && dnd ? "NO MOLESTAR" : STATUS[linkStatus];
 }
 
@@ -721,7 +762,10 @@ const link = connect(
         setVoice(msg.estado);
         break;
       case "level":
-        if (msg.fuente === "mic") cam.style.setProperty("--lv", msg.valor.toFixed(2));
+        if (msg.fuente === "mic") {
+          cam.style.setProperty("--lv", msg.valor.toFixed(2));
+          micChip.style.setProperty("--lv", msg.valor.toFixed(2));
+        }
         else {
           ttsAt = now;
           ttsLevel = msg.valor;
@@ -1579,6 +1623,21 @@ pet.app.ticker.add((ticker) => {
     if (needed || now > peek.until || (shy(peek, cursor) && peek.ducks >= 2)) void hopPeek(null);
     else if (shy(peek, cursor)) void hopPeek(pickEdge(Math.random, peek.edge), peek.ducks + 1);
   }
+  const calm = linkStatus === "idle" && tx.hidden && inputRow.hidden && !confirming && !busy() && !camera && !reducedMotion.matches
+    && now - lastTalk > LINGER_MS;
+  if (trick && (!calm || now - trick.since > TRICK_MS[trick.name])) trick = null;
+  const next = trick ? null : tricks.next(now, calm);
+  if (next) {
+    const since = now;
+    trick = { name: next, since };
+    if (next === "juggle") {
+      const reach = () => {
+        const b = body();
+        return { x: b.x, y: b.y + b.size * 0.1, size: b.size };
+      };
+      fx.juggle(reach, juggleOrbs, () => trick?.since === since, TRICK_MS.juggle);
+    }
+  }
   if (now > nextWander) {
     nextWander = now + wanderGap();
     if (linkStatus === "idle" && tx.hidden && inputRow.hidden && now - lastTalk > LINGER_MS && !busy()) void wander();
@@ -1613,7 +1672,8 @@ pet.app.ticker.add((ticker) => {
   pet.showClip(clipFrame, jaw);
   // on a window's left corner the show's art sits mirrored, legs hanging out to the left
   const tilt = flying ? ` rotate(${((flying.rot * 180) / Math.PI).toFixed(1)}deg)` : now < dizzyUntil ? " rotate(90deg)" : "";
-  const mirror = (!peek && style === "original" && perch?.side === "left" ? "scaleX(-1)" : "") + tilt;
+  const spin = trick?.name === "spin" ? ` scaleX(${spinScale((now - trick.since) / TRICK_MS.spin).toFixed(1)})` : "";
+  const mirror = (!peek && style === "original" && perch?.side === "left" ? "scaleX(-1)" : "") + spin + tilt;
   if (!peek && petCanvas.style.transform !== mirror) petCanvas.style.transform = mirror;
   if (!clipFrame) pet.paint(pose, t);
   const g = glitch.at(t, linkStatus === "idle" && name !== "pinchada");
@@ -1622,6 +1682,7 @@ pet.app.ticker.add((ticker) => {
 
   drawMask(now);
   drawHide(now);
+  drawMic();
   drawClaude(now);
   if (faceMoving) faceMoving = portrait.draw(now);
   // a fast drag must not slip off her; during her intro a click anywhere skips it

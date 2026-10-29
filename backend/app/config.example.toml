@@ -7,6 +7,16 @@
 "bloc de notas" = "notepad.exe"
 calculadora = "calc.exe"
 
+# Rutinas: una frase tuya que hace varias cosas a la vez, sin pasar por el modelo. Se dicen o se escriben solas
+# ("modo chamba", "activa el modo chamba"), y solo si son para ella (con su nombre por voz). Abre programas normales
+# (lo que pediría clic en rojo, no) y pone una canción en Spotify. "modo chamba" ya viene hecha; aquí la cambias o
+# añades otras.
+# [rutinas.chamba]
+# frases = ["modo chamba"]
+# apps = ["vscode", "warp"]
+# musica = "lofi hip hop"   # búsqueda en Spotify ("" = sin música)
+# tipo = "cancion"          # una playlist o un álbum solo se abren: hay que darle play
+
 # Scripts que puede ejecutar por su nombre (siempre con confirmación, sin argumentos).
 # (Los archivos y comandos ya no necesitan lista: ver "niveles" en CLAUDE.md.)
 # nombre = "ruta al .ps1, .bat, .cmd, .py o .exe"

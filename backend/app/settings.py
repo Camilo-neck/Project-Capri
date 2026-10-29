@@ -17,9 +17,23 @@ SPOTIFY_REDIRECT = "http://127.0.0.1:5173/callback"  # the one registered for th
 GOOGLE_ICAL = re.compile(r"^https://calendar\.google\.com/calendar/ical/[^\s\"']+\.ics$")
 
 
+@dataclass(frozen=True)
+class Routine:
+    """Several things from one phrase of his: programs to open and some music."""
+
+    phrases: tuple[str, ...]
+    apps: tuple[str, ...] = ()
+    music: str = ""  # a Spotify search; "" for none
+    music_kind: str = "cancion"  # cancion | playlist | album | artista (only a song starts by itself)
+
+
+DEFAULT_ROUTINES = {"chamba": Routine(("modo chamba", "chamba mode"), ("vscode", "warp"), "lofi hip hop")}
+
+
 @dataclass
 class Settings:
     apps: dict[str, str] = field(default_factory=dict)  # name -> program or path
+    routines: dict[str, Routine] = field(default_factory=lambda: dict(DEFAULT_ROUTINES))
     scripts: dict[str, str] = field(default_factory=dict)  # name -> path
     calendar_url: str = ""
     remind_minutes: int = 10
@@ -77,6 +91,10 @@ def load() -> Settings:
     pro = data.get("proactividad", {})
     return Settings(
         apps={k.lower(): v for k, v in data.get("apps", {}).items()},
+        routines={**DEFAULT_ROUTINES, **{
+            name.lower(): Routine(tuple(str(f) for f in r.get("frases", [f"modo {name}"])), tuple(str(a) for a in r.get("apps", [])),
+                                  str(r.get("musica", "")), str(r.get("tipo", "cancion")))
+            for name, r in data.get("rutinas", {}).items()}},
         scripts={k.lower(): v for k, v in data.get("scripts", {}).items()},
         calendar_url=cal.get("url", ""),
         remind_minutes=int(cal.get("aviso_minutos", 10)),

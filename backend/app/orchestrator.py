@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app import calendar_ics, claude_link, launch, presence, reminders, settings, spoken, tools, vision
+from app import calendar_ics, claude_link, launch, presence, reminders, routines, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
 from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta,
@@ -39,6 +39,7 @@ GUARD_S = 0.25  # after "looking", before a capture: time for the avatar to keep
 # ran in a turn (or a command that wasn't plainly read-only), any action that asks for a click asks in red.
 EXTERNAL = {"leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
 DENIED = "El usuario no lo autorizó. No se hizo nada."
+LABELS = {"vscode": "VSCode", "warp": "Warp"}  # how she says some programs of a routine
 FORGET_CMD = "/olvida"
 DND_CMD = "/nomolestes"
 ALARMS_CMD = "/recordatorios"
@@ -154,6 +155,9 @@ class Orchestrator:
             await self.toggle_dnd(send)
             await self.speak("Vale, me quedo calladita: no hablo por mi cuenta hasta que vuelvas a escribir /nomolestes."
                              if self.dnd else "¡De vuelta! Ya puedo avisarte y decirte cosas.", send)
+            return
+        if image is None and not own and not charla and (name := routines.match(text, settings.load().routines)):
+            await self.routine(name, send)  # his own phrase, said to her: never overheard, never her own idea
             return
         if image is None and command.split(maxsplit=1)[:1] == [CLAUDE_CMD]:
             await self.claude_command(text.strip()[len(CLAUDE_CMD):].strip(), send)
@@ -368,6 +372,44 @@ class Orchestrator:
             return run
 
         await send(self.buttons([(f"Cancelar «{t}»", cancel(rid, t)) for rid, t, _ in pending[:5]]))
+
+    async def routine(self, name: str, send: Send) -> None:
+        """A routine of his (config.toml [rutinas]): its programs and its music, at once, without the model.
+        Only plain programs: what would be a red click (the system, a file that runs code) isn't opened from here."""
+        s = settings.load()
+        r = s.routines[name]
+        await send(State(value="thinking"))
+
+        def label(app: str) -> str:
+            return LABELS.get(app.lower(), app)
+
+        async def open_one(app: str) -> str | None:
+            args = tools.AppArgs(nombre=app)
+            if tools.app_risk(args, s) != "normal":
+                return f"{label(app)} (eso no lo abro sola)"
+            try:
+                await asyncio.to_thread(tools.open_app, args, s)
+            except tools.ToolError:
+                return f"{label(app)} (no pude)"
+            tools.audit({"accion": "rutina", "rutina": name, "abrir": app})
+            return None
+
+        async def play() -> str | None:
+            try:
+                await asyncio.to_thread(tools.play_spotify, tools.SpotifyArgs(consulta=r.music, tipo=r.music_kind), s)
+            except tools.ToolError as e:
+                return f"la música (no pude: {e})"
+            tools.audit({"accion": "rutina", "rutina": name, "musica": r.music})
+            return None
+
+        def listed(xs: list[str]) -> str:
+            return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
+
+        results = await asyncio.gather(*[open_one(a) for a in r.apps], *([play()] if r.music else []))
+        done = [label(a) for a, x in zip(r.apps, results) if not x] + (["música"] if r.music and not results[-1] else [])
+        failed = [x for x in results if x]
+        said = f"¡Modo {name}!" + (f" Abrí {listed(done)}." if done else "") + (f" No pude con {listed(failed)}." if failed else "")
+        await self.speak(said, send)
 
     async def speak(self, texto: str, send: Send) -> None:
         """A fixed reply, without the model (commands)."""

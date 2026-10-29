@@ -14,7 +14,6 @@ from pathlib import Path
 DIR = Path(os.environ.get("APPDATA", Path.home())) / "Capri"
 EXAMPLE = Path(__file__).parent / "config.example.toml"
 SPOTIFY_REDIRECT = "http://127.0.0.1:5173/callback"  # the one registered for the Spotify app (shared with telon)
-GOOGLE_ICAL = re.compile(r"^https://calendar\.google\.com/calendar/ical/[^\s\"']+\.ics$")
 
 
 @dataclass(frozen=True)
@@ -153,7 +152,20 @@ def set_value(section: str, key: str, value: str | bool | float) -> None:
     p.write_text(text, encoding="utf-8")
 
 
+def calendar_source(text: str) -> str:
+    """What the calendar is read from: an iCal address (https, or webcal as Apple gives it), a .ics file on this PC,
+    or "outlook" (Outlook for Windows, the classic one). Whether an address is public is checked when it's read."""
+    t = text.strip().strip('"').strip()
+    if t.lower() == "outlook":
+        return "outlook"
+    if t.lower().startswith("webcal://"):
+        t = "https://" + t[len("webcal://"):]
+    if re.match(r"^https://[^\s/]+\.[^\s/]+/\S*$", t, re.I):
+        return t
+    if Path(t).suffix.lower() == ".ics" and Path(t).is_file():
+        return str(Path(t))
+    raise ValueError("no es una dirección iCal (https o webcal), un archivo .ics de este PC ni «outlook»")
+
+
 def save_calendar_url(url: str) -> None:
-    if not GOOGLE_ICAL.match(url):
-        raise ValueError("no es una dirección secreta de Google Calendar en formato iCal")
-    set_value("calendario", "url", url)
+    set_value("calendario", "url", calendar_source(url))

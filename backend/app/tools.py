@@ -32,9 +32,12 @@ SEARCH_S = 10  # seconds a file search may take
 MAX_TEXT = 3000  # chars of tool output handed to the model (~800 tokens: one page read must not force a trim)
 
 SETUP_STEPS = (
-    "El calendario no está configurado. Pasos para el usuario: en calendar.google.com, Configuración (rueda "
-    "dentada) > en la izquierda, su calendario > 'Integrar el calendario' > copiar la 'Dirección secreta en "
-    "formato iCal' y pegarla en el chat. Con esa URL puedes pedir la acción configurar_calendario."
+    "El calendario no está configurado. Que te pase uno de estos y con eso pides la acción configurar_calendario: "
+    "Google Calendar: en calendar.google.com, Configuración (rueda dentada) > en la izquierda, su calendario > "
+    "'Integrar el calendario' > copiar la 'Dirección secreta en formato iCal'. Outlook.com: Configuración > Calendario > "
+    "Calendarios compartidos > Publicar un calendario > copiar el vínculo ICS. iCloud: en la app Calendario, compartir "
+    "el calendario como público y copiar el enlace (webcal://). Outlook para Windows (el clásico) instalado: que diga "
+    "«outlook». O la ruta de un archivo .ics de su PC. Sin nada de eso, tus recordatorios siguen funcionando."
 )
 
 

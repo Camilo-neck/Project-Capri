@@ -1,16 +1,20 @@
-"""Google Calendar through its secret iCal address (read-only). The one external call Capri makes,
-authorized by the user: only calendar.google.com, only that URL, at most every CACHE_S seconds."""
+"""His calendar, read-only, at most every CACHE_S seconds: an iCal address he gave (Google's secret one, Outlook.com,
+iCloud...; only public hosts, every redirect checked too), a .ics file on this PC, or Outlook for Windows (the
+classic one), which exports it itself. Authorized 25/10/2026 (Google) and 29/10/2026 (any iCal, Outlook)."""
 
 import functools
+import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import icalendar
 import recurring_ical_events
 
-from app.settings import GOOGLE_ICAL
+from app import power, settings, winalarm
 
 CACHE_S = 15 * 60
 DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -31,17 +35,57 @@ class Event:
         return f"{self.start:%d/%m} {when}: {self.title}{where}"
 
 
-def fetch(url: str, now: float | None = None) -> bytes:
-    if not GOOGLE_ICAL.match(url):
-        raise ValueError("la URL del calendario no es de Google Calendar")
+MAX_BYTES = 30 * 1024 * 1024
+POWERSHELL = winalarm.POWERSHELL
+# Outlook's own iCal export of the default calendar, from a week ago to two months ahead
+OUTLOOK = ("$o = New-Object -ComObject Outlook.Application; $f = $o.GetNamespace('MAPI').GetDefaultFolder(9); "
+           "$e = $f.GetCalendarExporter(); $e.CalendarDetail = 1; $e.IncludeWholeCalendar = $false; "
+           "$e.StartDate = (Get-Date).Date.AddDays(-7); $e.EndDate = (Get-Date).Date.AddDays(62); $e.SaveAsICal('{out}')")
+
+
+def _run(cmd: list[str]) -> None:
+    subprocess.run(cmd, capture_output=True, timeout=60, check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def _download(url: str) -> bytes:
+    for _ in range(5):
+        try:
+            url = power.public(url)
+        except power.ToolError as e:
+            raise ValueError(str(e)) from e
+        r = httpx.get(url, timeout=15, follow_redirects=False)
+        if r.is_redirect:
+            url = httpx.URL(url).join(r.headers["location"]).__str__()
+            continue
+        r.raise_for_status()
+        if len(r.content) > MAX_BYTES:
+            raise ValueError("el calendario es demasiado grande")
+        return r.content
+    raise ValueError("demasiadas redirecciones")
+
+
+def _outlook(folder: Path, run: Callable[[list[str]], None]) -> bytes:
+    out = folder / "outlook.ics"
+    out.unlink(missing_ok=True)
+    run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", OUTLOOK.format(out=str(out).replace("'", "''"))])
+    return out.read_bytes()
+
+
+def fetch(source: str, now: float | None = None, folder: Path | None = None, run: Callable[[list[str]], None] = _run) -> bytes:
+    """The calendar's iCal bytes; the same bytes object for CACHE_S (a file on this PC: until it changes)."""
     now = time.time() if now is None else now
-    hit = _cache.get(url)
+    hit = _cache.get(source)
+    if source != "outlook" and not source.lower().startswith("https://"):
+        p = Path(source)
+        key = f"{source}|{p.stat().st_mtime_ns}"
+        if (hit := _cache.get(key)) is None:
+            _cache[key] = hit = (now, p.read_bytes()[:MAX_BYTES])
+        return hit[1]
     if hit and now - hit[0] < CACHE_S:
         return hit[1]
-    r = httpx.get(url, timeout=15, follow_redirects=False)
-    r.raise_for_status()
-    _cache[url] = (now, r.content)
-    return r.content
+    data = _outlook(folder or settings.path().parent, run) if source == "outlook" else _download(source)
+    _cache[source] = (now, data)
+    return data
 
 
 def _local(v: date | datetime) -> tuple[datetime, bool]:

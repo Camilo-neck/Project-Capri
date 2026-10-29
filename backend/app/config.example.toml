@@ -23,8 +23,9 @@ calculadora = "calc.exe"
 [scripts]
 
 [calendario]
-# Dirección secreta en formato iCal de tu Google Calendar. Si está vacía, pídele a Capri
-# que te ayude a configurarla.
+# Tu calendario: la dirección iCal (Google, Outlook.com, iCloud: https o webcal), la ruta de un
+# archivo .ics de tu PC, u "outlook" (Outlook para Windows). Si está vacía, pídele a Capri que te
+# ayude; sin calendario sus recordatorios y las alarmas de Windows siguen funcionando.
 url = ""
 # Cuántos minutos antes de cada evento te avisa.
 aviso_minutos = 10

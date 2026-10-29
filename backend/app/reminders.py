@@ -22,7 +22,15 @@ AT_BARE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b")  # "6pm", "6:45 pm
 NOON = re.compile(r"\b(?:mediodia|noon)\b")
 MIDNIGHT = re.compile(r"\b(?:medianoche|midnight)\b")
 AFTER_TOMORROW = re.compile(r"\bpasado manana\b|\bthe day after tomorrow\b")
+# "en el PC", "alarma de Windows", "aunque cierres Capri": the alarm goes to Windows (winalarm), not to her
+ON_PC = re.compile(r"\b(?:en|on|in) (?:el |mi |my |the )?(?:pc|computador|computadora|ordenador|windows|laptop|portatil)\b"
+                   r"|\balarmas? de windows\b|\bwindows alarm|\baunque (?:te )?cierr|\beven if (?:you'?re |you are )?closed")
 TOMORROW = re.compile(r"(?<!de la )\bmanana\b|\btomorrow\b")
+
+
+def on_pc(text: str) -> bool:
+    """He wants it on Windows itself (rings with Capri closed), by his own words."""
+    return bool(ON_PC.search(fold(text)))
 
 
 def fold(text: str) -> str:
@@ -100,15 +108,27 @@ class Alarms:
         with db:
             db.execute("create table if not exists recordatorios (id integer primary key, texto text not null, "
                        "cuando text not null, estado text not null default 'pendiente')")
+            if "donde" not in {r[1] for r in db.execute("pragma table_info(recordatorios)")}:
+                db.execute("alter table recordatorios add column donde text not null default 'capri'")  # capri | windows
 
-    def add(self, texto: str, at: datetime) -> int:
+    def add(self, texto: str, at: datetime, donde: str = "capri") -> int:
         with self.db:
-            return self.db.execute("insert into recordatorios (texto, cuando) values (?, ?)",
-                                   (texto.strip(), at.isoformat(timespec="seconds"))).lastrowid
+            return self.db.execute("insert into recordatorios (texto, cuando, donde) values (?, ?, ?)",
+                                   (texto.strip(), at.isoformat(timespec="seconds"), donde)).lastrowid
 
-    def pending(self) -> list[tuple[int, str, datetime]]:
-        rows = self.db.execute("select id, texto, cuando from recordatorios where estado = 'pendiente' order by cuando, id")
+    def pending(self, donde: str = "capri") -> list[tuple[int, str, datetime]]:
+        """Hers (she says them), or with donde="windows" the alarms Windows rings."""
+        rows = self.db.execute("select id, texto, cuando from recordatorios where estado = 'pendiente' and donde = ? "
+                               "order by cuando, id", (donde,))
         return [(i, t, datetime.fromisoformat(c)) for i, t, c in rows]
+
+    def on_windows(self, now: datetime | None = None) -> list[tuple[int, str, datetime]]:
+        """The Windows alarms still to ring (ones already past are marked rung)."""
+        alarms = self.pending("windows")
+        for rid, _, at in alarms:
+            if now and at <= now:
+                self.set(rid, "dicho")
+        return [a for a in alarms if not now or a[2] > now]
 
     def due(self, now: datetime) -> list[tuple[int, str, datetime]]:
         return [r for r in self.pending() if r[2] <= now]

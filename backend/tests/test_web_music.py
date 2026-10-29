@@ -24,7 +24,7 @@ def test_set_value_writes_in_its_own_section_and_keeps_the_rest(isolated_config)
     s = settings.load()
     assert s.spotify_client_id == "abc123" and s.spotify_redirect == "http://127.0.0.1:5173/callback"
     assert s.calendar_url.endswith("/basic.ics") and "calculadora" in s.apps
-    assert "# Dirección secreta" in text and '[nueva]\nclave = "con \\"comillas\\""' in text
+    assert "# Tu calendario" in text and '[nueva]\nclave = "con \\"comillas\\""' in text
 
 
 def test_web_addresses_need_a_click_and_must_be_web(opened):

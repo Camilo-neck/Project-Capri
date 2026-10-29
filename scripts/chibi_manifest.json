@@ -1,0 +1,170 @@
+{
+  "_doc": "Chibi A (PixelLab, 29/10/2026): clip -> character state id, animation id, frames (index 0 is the pose it starts from)",
+  "chars": {
+    "pie": "24eedc10-867b-4f1e-9301-1c35274dcc10",
+    "sentada": "95aafbc5-1ac9-4f07-9e36-12bb8375363e",
+    "portatil": "185375fc-8bfa-4958-ab20-11c1698bd05e",
+    "cruzada": "d4f4a1f2-e3df-4eed-be40-35b5f3ef4c2a",
+    "rodillas": "82ee1ede-428d-4aed-9e43-d677cadeeaa8"
+  },
+  "clips": {
+    "hablar": [
+      "pie",
+      "6ddc1d34-566c-4e55-ae07-3b69c416b867",
+      9
+    ],
+    "feliz": [
+      "pie",
+      "0e3edfa3-02ac-4002-b045-bf45a014392d",
+      9
+    ],
+    "molesta": [
+      "pie",
+      "28b9ed56-3e16-4e36-ad68-47e1fa15bd89",
+      9
+    ],
+    "peligro": [
+      "pie",
+      "fd9ad8fd-ab74-4f37-b8d9-ee000f0b7937",
+      9,
+      [
+        0,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    ],
+    "sorprendida": [
+      "pie",
+      "88a83681-86d9-4b9a-a96e-f9c6909a6653",
+      9
+    ],
+    "traviesa": [
+      "pie",
+      "3228d8ea-42bf-4daf-9474-1f0c08dc4b66",
+      9
+    ],
+    "pensativa": [
+      "pie",
+      "a03271bf-13e2-4dc8-be24-3fa230fa5fd4",
+      9
+    ],
+    "curiosa": [
+      "pie",
+      "c79ea9ee-a2a1-40fc-9ed0-8e6a1ffb89e0",
+      9
+    ],
+    "saludar": [
+      "pie",
+      "8118a3bc-0dad-439b-b110-ddb5545ae547",
+      9
+    ],
+    "emocionada": [
+      "pie",
+      "47e2aa2c-338e-4dcd-97d9-fec87d02ec32",
+      9
+    ],
+    "enamorada": [
+      "pie",
+      "c1d73db0-895d-4254-83f6-a1ff22938050",
+      9
+    ],
+    "seria": [
+      "pie",
+      "379ecb8b-dfed-4fee-bfda-605df35b0d36",
+      5
+    ],
+    "estirarse": [
+      "sentada",
+      "b2d7a14e-44f4-4ac5-a418-f6a36300b582",
+      13
+    ],
+    "pinchada": [
+      "sentada",
+      "44924853-8391-4772-927f-bbc8e9a25eaa",
+      9
+    ],
+    "acariciada": [
+      "sentada",
+      "dc6391cd-33cb-472f-a876-3990f251edcf",
+      9
+    ],
+    "hablar_sentada": [
+      "sentada",
+      "7d619d55-0932-4dec-a52a-19b559460a04",
+      9
+    ],
+    "sentada_idle": [
+      "sentada",
+      "743a84de-2d16-44e2-a244-939724e2fab6",
+      9
+    ],
+    "escribir": [
+      "portatil",
+      "a1728dde-d02a-44d2-8235-0ea7e99741f5",
+      9
+    ],
+    "asentir": [
+      "pie",
+      "3e860a47-736d-4d18-9a98-42e026cdb792",
+      7
+    ],
+    "saltar": [
+      "pie",
+      "8f9ccf5f-387e-444c-a634-6b85263ae0c0",
+      9
+    ],
+    "ladear": [
+      "pie",
+      "0f6bd3e1-29b6-4d9b-9d77-d8454e1b198e",
+      7
+    ],
+    "guino": [
+      "pie",
+      "1b562943-eee7-4f65-8417-2cc8ec77082e",
+      5
+    ],
+    "senalar": [
+      "pie",
+      "aa93516a-8eaa-4807-8f8e-b0ad1e1f23d8",
+      7
+    ],
+    "cruzar_brazos": [
+      "pie",
+      "a01e2587-473d-4027-ab37-5e9e86bdd1c6",
+      7
+    ],
+    "sentarse": [
+      "pie",
+      "ac82d9bd-6922-4efd-afab-66136d8dbd5e",
+      7
+    ],
+    "de_pie_idle": [
+      "pie",
+      "970f51a9-c595-4c72-be5a-58c9d8134619",
+      9
+    ],
+    "meditar": [
+      "cruzada",
+      "eb628eeb-9eb2-4ed0-a616-56b78b31cdd6",
+      9
+    ],
+    "dormirse": [
+      "cruzada",
+      "ee3549a6-2bbb-4ce9-92a1-7d35911e13d0",
+      9
+    ],
+    "dormir": [
+      "cruzada",
+      "d02e5887-4862-4e0d-be86-5812118f65a2",
+      5
+    ],
+    "triste": [
+      "rodillas",
+      "5eb3c6da-f0ae-44aa-ba75-887992419125",
+      9
+    ]
+  }
+}

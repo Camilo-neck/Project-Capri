@@ -32,21 +32,21 @@ export const CLIPS: Record<string, ClipInfo> = {
   pensativa: loop(9, 6),
   sorprendida: loop(9, 12),
   molesta: loop(9, 10),
-  seria: loop(7, 5),
+  seria: loop(5, 5),
   saludar: loop(9, 10),
   // sitting family (3/4 view)
-  abrir_portatil: { frames: 9, fps: 10 },
+  abrir_portatil: { frames: 2, fps: 4 }, // she had no laptop, then she has it
   dormirse: { frames: 9, fps: 6 },
   escribir: loop(9, 10),
-  estirarse: loop(11, 8),
+  estirarse: { frames: 13, fps: 10 },
   hablar_sentada: loop(9, 8),
   meditar: loop(9, 6),
-  dormir: loop(3, 2), // frames 4-9 had a hair artifact; the first three breathe cleanly
+  dormir: loop(5, 3),
   triste: loop(9, 6),
   pinchada: loop(9, 12),
   acariciada: loop(9, 8),
   // standing, not tied to a behavior yet: confirmation of risky actions (phase 5)
-  peligro: { frames: 9, fps: 10 },
+  peligro: { frames: 6, fps: 8 },
 };
 
 // The original strips (lachydotmcg/capri-desktop): 240x384 cells, perch ones 384x384.
@@ -90,7 +90,7 @@ export function mouthCell(mouth: Mouth | null, frame: ClipFrame | null): number 
 export const GESTURE_CLIPS: Partial<Record<Gesto, ClipInfo & { clip: string }>> = {
   asentir: { clip: "asentir", frames: 7, fps: 12 },
   ladear_cabeza: { clip: "ladear", frames: 7, fps: 10 },
-  guino: { clip: "guino", frames: 7, fps: 10 },
+  guino: { clip: "guino", frames: 5, fps: 10 },
   saltar: { clip: "saltar", frames: 9, fps: 12 },
   senalar: { clip: "senalar", frames: 7, fps: 10 },
   cruzar_brazos: { clip: "cruzar_brazos", frames: 7, fps: 10 },

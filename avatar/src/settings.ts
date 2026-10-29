@@ -15,11 +15,15 @@ document.querySelector<HTMLImageElement>("#face")!.src = face;
 const act = (id: string): void => void invoke("tray_action", { id });
 const close = (): void => void getCurrentWindow().hide();
 
+const looks = { style: false, camera: false }; // how she looks: the camera over the art, or the art (original | pixel)
+
 function show(name: string, on: boolean): void {
   const input = document.querySelector<HTMLInputElement>(`.row[data-id="${name}"] input`);
   if (input) input.checked = on;
-  if (name === "style") {
-    document.querySelectorAll<HTMLElement>("#style button").forEach((b) => b.classList.toggle("on", (b.dataset.style === "pixel") === on));
+  if (name === "style" || name === "camera") {
+    looks[name] = on;
+    const now = looks.camera ? "camara" : looks.style ? "pixel" : "original";
+    document.querySelectorAll<HTMLElement>("#look button").forEach((b) => b.classList.toggle("on", b.dataset.look === now));
   }
 }
 
@@ -36,9 +40,9 @@ document.addEventListener("click", (e) => {
     act(row.dataset.id!);
     return;
   }
-  const seg = t.closest<HTMLElement>("#style button");
+  const seg = t.closest<HTMLElement>("#look button");
   if (seg) {
-    if (!seg.classList.contains("on")) act("style");
+    if (!seg.classList.contains("on")) act(`mode-${seg.dataset.look}`);
     return;
   }
   const id = t.closest<HTMLElement>("[data-act]")?.dataset.act;

@@ -1221,24 +1221,34 @@ void listen<boolean>("fullscreen", (e) => {
   }
   link.send({ type: "presence", fullscreen });
 });
-// Ctrl+Alt+Shift+P: the show's art <-> the pixel pet, saved in config.toml for next time.
-void listen("style", async () => {
-  const next: Style = style === "pixel" ? "original" : "pixel";
-  await pet.setStyle(next);
-  style = next;
-  clips = new ClipPlayer(style);
+// How she looks is one of three, never two at once: the show's art, the pixel pet, or the camera feed. The camera
+// sits over the art she had (which stays the one under it: her mask asleep, her look when she's back).
+type Look = "original" | "pixel" | "camara";
+const LOOKS: Look[] = ["original", "pixel", "camara"];
+const appearance = (): Look => (camera ? "camara" : style);
+
+async function setLook(to: Look): Promise<void> {
+  if (to === appearance()) return;
+  if (to !== "camara" && style !== to) {
+    await pet.setStyle(to);
+    style = to;
+    clips = new ClipPlayer(style);
+    void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
+    trayCheck("style", style === "pixel");
+  }
+  if (camera !== (to === "camara")) {
+    await setCamera(to === "camara");
+    void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
+    trayCheck("camera", camera);
+    renderStatus();
+  }
   glitch.kick("change", performance.now());
-  void invoke("save_style", { estilo: style }).catch((e) => console.warn("save_style", e));
-  trayCheck("style", style === "pixel");
-});
-// Ctrl+Alt+Shift+C: camera mode on/off, saved in config.toml for next time.
-void listen("camera", async () => {
-  await setCamera(!camera);
-  glitch.kick("change", performance.now());
-  void invoke("save_camera", { on: camera }).catch((e) => console.warn("save_camera", e));
-  trayCheck("camera", camera);
-  renderStatus();
-});
+}
+// Ctrl+Alt+Shift+P goes round the three (original, pixel, camera); Ctrl+Alt+Shift+C jumps to the camera and back;
+// the panel picks one (`mode-<look>`). Saved in config.toml for next time.
+void listen("style", () => setLook(LOOKS[(LOOKS.indexOf(appearance()) + 1) % LOOKS.length]));
+void listen("camera", () => setLook(camera ? style : "camara"));
+for (const m of LOOKS) void listen(`mode-${m}`, () => setLook(m));
 void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
 void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
 void listen<Windows>("windows", (e) => {

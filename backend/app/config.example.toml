@@ -72,6 +72,7 @@ llamada = true            # solo hace caso a lo que la llama por su nombre (fals
 silencio_ms = 900         # silencio que da por terminada una frase
 modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" gasta menos GPU)
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = caché de Hugging Face)
+dispositivo = "auto"       # dónde corre Whisper: "auto" (la GPU si hay NVIDIA; si no, la CPU con "small"), "cuda" o "cpu"
 hablar = true             # con la voz activa, te contesta en voz alta
 voz = "capri"             # su voz (también en el panel): "capri" (clonada, GPU NVIDIA; si falla, Dora), "capri_ligera"
                           # (afinada a ella, CPU), "dora", "daniela", "claude_mx", "bella", "emma" (CPU). La clonada usa

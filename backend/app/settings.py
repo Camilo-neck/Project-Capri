@@ -49,6 +49,7 @@ class Settings:
     pc_react: bool = True  # she reacts to the PC: processor, battery, network, USB, devices, games ([avatar] reaccionar_pc)
     voice_model: str = "turbo"  # faster-whisper model
     voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
+    voice_device: str = "auto"  # Whisper on "cuda", "cpu", or "auto" (the GPU if there's an NVIDIA one)
     voice_silence_ms: int = 900  # silence that ends a sentence (600 cut "pon... algo de Bad Bunny" in two)
     voice_wake: bool = True  # only what starts with "hey Capri" counts
     voice_names: tuple[str, ...] = ("capri",)  # what she answers to (compared loosely: "Kapri", "Capry")
@@ -109,6 +110,7 @@ def load() -> Settings:
         pc_react=bool(data.get("avatar", {}).get("reaccionar_pc", True)),
         voice_model=data.get("voz", {}).get("modelo", "turbo"),
         voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),
+        voice_device=v if (v := str(data.get("voz", {}).get("dispositivo", "auto"))) in ("auto", "cuda", "cpu") else "auto",
         voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 900)),
         voice_wake=bool(data.get("voz", {}).get("llamada", True)),
         voice_names=tuple(n.lower() for n in data.get("voz", {}).get("nombres", ["capri"]) if n.strip()) or ("capri",),

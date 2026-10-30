@@ -21,11 +21,11 @@ function show(id) {
   chip.classList.toggle("small", id !== "boot" && id !== "done"); // room for the options and the progress
 }
 
-// Capri waving (her pixel clip), on the screens she's on
+// Capri (the show's art, her idle), on the screens she's on
 let frame = 0;
 setInterval(() => {
-  frame = (frame % 9) + 1;
-  for (const img of [$("capri-boot"), $("capri-done")]) img.src = `img/saludar_0${frame}.png`;
+  frame = (frame % 8) + 1;
+  for (const img of [$("capri-boot"), $("capri-done")]) img.src = `img/capri_${frame}.png`;
 }, reduced ? 1e9 : 110);
 
 async function typeLines(el, lines) {

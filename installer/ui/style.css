@@ -65,7 +65,7 @@ p { margin: 0; }
 .term .dim { color: var(--dim); }
 .term .err { color: #ff8095; }
 .term.small { font-size: 10.5px; line-height: 1.45; height: 100%; box-sizing: border-box; overflow-y: auto; color: #9fd86a; scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
-.capri { width: 162px; image-rendering: pixelated; filter: drop-shadow(5px 4px 0 rgb(162 75 255 / 0.6)); }
+.capri { height: 220px; filter: drop-shadow(5px 4px 0 rgb(162 75 255 / 0.6)); }
 
 nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
 .go, .ghost { height: 36px; padding: 0 22px; font: 600 12px var(--font-head); letter-spacing: 0.16em; text-transform: uppercase; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }

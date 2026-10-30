@@ -88,6 +88,9 @@ if __name__ == "__main__":
     gif("pixel.gif", [on_dark(f, 3, 12) for n in ("saludar", "feliz", "traviesa") for f in clips(n)], 110)
     cam = [f for n in ("mira", "sonrisa", "risa") for f in strip(n, 360, 240)[:10]]
     gif("camara.gif", [f.convert("RGB").convert("P", palette=Image.ADAPTIVE) for f in cam], 100)
-    chip = Image.open(ROOT / "installer" / "ui" / "img" / "chip.png")
-    chip.save(OUT / "biochip.png", optimize=True)
+    f = Image.open(A / "original" / "idle.webp").convert("RGBA").crop((0, 0, 240, 384))
+    f = f.crop(f.getbbox())
+    bg = Image.new("RGBA", (f.width + 40, f.height + 40), BG + (255,))
+    bg.alpha_composite(f, (20, 20))
+    bg.convert("RGB").save(OUT / "original.png", optimize=True)
     print(*(f"{p.name} {p.stat().st_size // 1024} KB" for p in sorted(OUT.iterdir())), sep="\n")

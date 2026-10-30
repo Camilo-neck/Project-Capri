@@ -26,7 +26,7 @@ música, te recuerda cosas y reacciona a lo que pasa en tu PC. Todo local por de
     <td align="center"><b>Cámara</b><br /><sub>sus primeros planos en un recuadro de transmisión</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/img/biochip.png" width="260" alt="El biochip" /></td>
+    <td align="center"><img src="docs/img/original.png" height="260" alt="Capri en su estilo original" /></td>
     <td align="center"><img src="docs/img/pixel.gif" width="190" alt="Capri en pixel art" /></td>
     <td align="center"><img src="docs/img/camara.gif" width="260" alt="Modo cámara" /></td>
   </tr>

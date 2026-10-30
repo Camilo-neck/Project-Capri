@@ -237,8 +237,32 @@ class Routines(BaseModel):
     rutinas: list[RoutineInfo]
 
 
+class SetupInfo(BaseModel):
+    """The first-run wizard: what this PC has, and the brain and voice that suit it (firstrun.py)."""
+
+    type: Literal["setup_info"] = "setup_info"
+    gpu: str
+    vram_mb: int
+    ram_gb: float
+    disco_gb: float
+    ollama: bool
+    claude_code: bool
+    qwen: bool
+    proveedor: str
+    modelo: str
+    voz: str
+    por_que: str
+
+
+class SetupSaved(BaseModel):
+    type: Literal["setup_saved"] = "setup_saved"
+    campo: str
+    ok: bool
+    error: str = ""
+
+
 ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
-                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines)
+                 | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines | SetupInfo | SetupSaved)
 class Say(BaseModel):
     """A line of the avatar's own (a greeting, a reaction to the PC): out loud too, if she's talking."""
 
@@ -276,6 +300,22 @@ class RoutinesGet(BaseModel):
     type: Literal["routines_get"] = "routines_get"
 
 
+class SetupGet(BaseModel):
+    type: Literal["setup_get"] = "setup_get"
+
+
+class SetupSave(BaseModel):
+    """A wizard step he filled in: his calendar's address or his Spotify app's Client ID."""
+
+    type: Literal["setup_save"] = "setup_save"
+    campo: Literal["calendario", "spotify"]
+    valor: str = Field(max_length=2000)
+
+
+class SetupDone(BaseModel):
+    type: Literal["setup_done"] = "setup_done"
+
+
 class ModelGet(BaseModel):
     type: Literal["model_get"] = "model_get"
 
@@ -300,6 +340,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload,
+                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

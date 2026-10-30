@@ -177,5 +177,13 @@ def calendar_source(text: str) -> str:
     raise ValueError("no es una dirección iCal (https o webcal), un archivo .ics de este PC ni «outlook»")
 
 
+def save_spotify_client_id(text: str) -> None:
+    """His own Spotify app's Client ID (32 hex characters), from developer.spotify.com."""
+    t = text.strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", t):
+        raise ValueError("un Client ID de Spotify son 32 letras y números (a-f, 0-9)")
+    set_value("spotify", "client_id", t.lower())
+
+
 def save_calendar_url(url: str) -> None:
     set_value("calendario", "url", calendar_source(url))

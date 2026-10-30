@@ -81,6 +81,28 @@ export interface Routines {
   rutinas: RoutineInfo[];
 }
 
+/** The first-run wizard: what this PC has, and the brain and voice that suit it. */
+export interface SetupInfo {
+  type: "setup_info";
+  gpu: string; // the NVIDIA card, "" without one
+  vram_mb: number;
+  ram_gb: number;
+  disco_gb: number;
+  ollama: boolean;
+  claude_code: boolean;
+  qwen: boolean; // her cloned voice is installed
+  proveedor: string;
+  modelo: string;
+  voz: string;
+  por_que: string;
+}
+export interface SetupSaved {
+  type: "setup_saved";
+  campo: string;
+  ok: boolean;
+  error: string;
+}
+
 /** The microphone: idle waits for "hey Capri"; listening means the next sentence is for her. */
 export type VoiceState = "off" | "loading" | "idle" | "hearing" | "listening" | "thinking";
 export interface Voice {
@@ -203,7 +225,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines | SetupInfo | SetupSaved;
 /** A line of the avatar's own (a greeting, a reaction): out loud too, if she's talking. */
 export interface Say {
   type: "say";
@@ -212,6 +234,18 @@ export interface Say {
 /** He cuts her off (a click on her transmission): she stops talking, and the turn where it is. */
 export interface Interrupt {
   type: "interrupt";
+}
+// the first-run wizard
+export interface SetupGet {
+  type: "setup_get";
+}
+export interface SetupSave {
+  type: "setup_save";
+  campo: "calendario" | "spotify";
+  valor: string;
+}
+export interface SetupDone {
+  type: "setup_done";
 }
 // the tray's settings panel: her routines, her voice
 export interface RoutinesGet {
@@ -252,4 +286,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone;

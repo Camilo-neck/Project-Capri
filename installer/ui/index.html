@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Instalar Capri</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="frame">
+      <header class="bar" data-tauri-drag-region>
+        <b data-tauri-drag-region>Capri</b><span class="slash" data-tauri-drag-region>//</span>
+        <em id="bar-title" data-tauri-drag-region>constructo · biochip</em>
+        <span class="ver" id="ver" data-tauri-drag-region></span>
+        <button class="win" id="min" title="Minimizar" aria-label="Minimizar">–</button>
+        <button class="win x" id="close" title="Cerrar" aria-label="Cerrar">×</button>
+      </header>
+
+      <!-- the chip: dim until it's in; its traces light up as she installs (--p, 0-1) -->
+      <div class="chip" id="chip" style="--p: 0">
+        <img class="chip-off" src="img/chip.png" alt="" />
+        <img class="chip-on" src="img/chip.png" alt="El biochip de Capri" />
+        <i class="chip-scan"></i>
+      </div>
+
+      <!-- 1. booting: the chip slots in, a few lines of its log -->
+      <section class="screen" id="boot">
+        <div class="cols">
+          <pre class="term" id="boot-log" aria-live="polite"></pre>
+          <img class="capri" id="capri-boot" src="img/saludar_01.png" alt="Capri saludando" />
+        </div>
+        <nav><button class="go" id="to-options" disabled>Insertar chip</button></nav>
+      </section>
+
+      <!-- 2. what to install -->
+      <section class="screen" id="options" hidden>
+        <h2>Dónde y qué</h2>
+        <label class="field">
+          <span>Carpeta</span>
+          <input id="dir" spellcheck="false" />
+        </label>
+        <div class="opts">
+          <label class="opt fixed"><input type="checkbox" checked disabled /><i></i><b>Capri y su Python</b><small>la app, su backend y sus paquetes</small><em>~2,5 GB</em></label>
+          <label class="opt fixed"><input type="checkbox" checked disabled /><i></i><b>Sus voces en CPU</b><small>Kokoro y su voz afinada</small><em>~350 MB</em></label>
+          <label class="opt" id="opt-ollama"><input type="checkbox" id="ollama" /><i></i><b>Ollama</b><small id="ollama-note">para un cerebro en tu PC</small><em>~1 GB</em></label>
+          <label class="opt" id="opt-voz"><input type="checkbox" id="voz" /><i></i><b>Su voz clonada</b><small id="voz-note">su propia voz, en tu GPU</small><em>~6 GB</em></label>
+          <label class="opt"><input type="checkbox" id="inicio" checked /><i></i><b>Acceso en Inicio</b><small>en el menú de Windows</small><em></em></label>
+          <label class="opt"><input type="checkbox" id="escritorio" checked /><i></i><b>Acceso en el escritorio</b><small></small><em></em></label>
+          <label class="opt"><input type="checkbox" id="arranque" /><i></i><b>Arrancar con Windows</b><small>que despierte contigo</small><em></em></label>
+        </div>
+        <p class="note" id="space"></p>
+        <nav><button class="ghost" id="back-boot">Atrás</button><button class="go" id="install">Instalar</button></nav>
+      </section>
+
+      <!-- 3. installing -->
+      <section class="screen" id="progress" hidden>
+        <div class="cols">
+          <ol class="tasks" id="tasks"></ol>
+          <pre class="term small" id="log" aria-live="polite"></pre>
+        </div>
+      </section>
+
+      <!-- 4. done -->
+      <section class="screen" id="done" hidden>
+        <div class="cols">
+          <div>
+            <h2 id="done-title">Constructo en línea</h2>
+            <p id="done-text"></p>
+            <ul class="warns" id="warns"></ul>
+          </div>
+          <img class="capri" id="capri-done" src="img/saludar_01.png" alt="Capri saludando" />
+        </div>
+        <nav><button class="ghost" id="close-done">Cerrar</button><button class="go" id="wake">Despertar a Capri</button></nav>
+      </section>
+
+      <!-- uninstalling -->
+      <section class="screen" id="remove" hidden>
+        <h2>Extraer el chip</h2>
+        <p>Se quitan la app, sus accesos directos, sus alarmas de Windows y su entrada en «Agregar o quitar programas». Además, si quieres:</p>
+        <div class="opts">
+          <label class="opt"><input type="checkbox" id="memoria" /><i></i><b>Su memoria y su configuración</b><small>lo que recuerda de ti, recordatorios, ajustes</small><em></em></label>
+          <label class="opt"><input type="checkbox" id="modelos" /><i></i><b>Sus modelos</b><small>sus voces y Whisper descargados</small><em></em></label>
+          <label class="opt"><input type="checkbox" id="claves" /><i></i><b>Tus claves de API</b><small>las guardadas en el Administrador de credenciales</small><em></em></label>
+        </div>
+        <p class="note">Ollama y sus modelos se quedan: quítalos desde «Agregar o quitar programas» si quieres.</p>
+        <nav><button class="ghost" id="cancel-remove">Cancelar</button><button class="go red" id="do-remove">Desinstalar</button></nav>
+      </section>
+    </main>
+  </body>
+</html>

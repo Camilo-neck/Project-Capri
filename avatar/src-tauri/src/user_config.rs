@@ -10,6 +10,20 @@ use serde::{Deserialize, Serialize};
 pub struct UserConfig {
     pub avatar: Avatar,
     pub atajos: Shortcuts,
+    pub inicio: FirstRun,
+}
+
+/// The first-run wizard: a fresh config says it's due (`listo = false`); an older one, without it, is done.
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct FirstRun {
+    pub listo: bool,
+}
+
+impl Default for FirstRun {
+    fn default() -> Self {
+        Self { listo: true }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -166,6 +180,11 @@ camara = \"Ctrl+Alt+C\"
         assert_eq!(partial.atajos.escribir, "Ctrl+Alt+Space");
         assert_eq!(partial.avatar.estilo, "original");
         assert_eq!(partial.avatar.dormir_min, 20);
+        assert!(partial.inicio.listo); // an older config: no wizard
+        let fresh: UserConfig = toml::from_str("[inicio]
+listo = false
+").unwrap();
+        assert!(!fresh.inicio.listo);
     }
 
     #[test]

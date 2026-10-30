@@ -232,7 +232,9 @@ pub fn run() {
             tray::tray_states,
             tray::tray_action,
             tray::quick_menu,
-            tray::open_panel
+            tray::open_panel,
+            tray::setup_close,
+            tray::open_web
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

@@ -8,7 +8,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import face from "../assets/faces/grin.png";
 import { entries, matches, SECTIONS } from "./commandlist.ts";
-import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo, VoiceOption } from "./net/protocol.ts";
+import { voiceCard } from "./voicecard.ts";
+import { KEY_PAGES } from "./cloudkeys.ts";
+import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
@@ -75,12 +77,6 @@ const prov = $("prov"), model = $<HTMLSelectElement>("model"), note = $("brain-n
 const keyRow = $("key-row"), key = $<HTMLInputElement>("key"), pull = $<HTMLInputElement>("pull");
 const pullRow = $("pull-row"), bar = $("pull-bar");
 const cloud = $<HTMLSelectElement>("cloud");
-// where each cloud brain gives its API keys
-const KEY_WHERE: Record<string, string> = {
-  anthropic: "console.anthropic.com", openai: "platform.openai.com", gemini: "aistudio.google.com (tiene uso gratis)",
-  openrouter: "openrouter.ai/keys (muchos modelos, algunos gratis)", groq: "console.groq.com (rápido, tiene uso gratis)",
-  mistral: "console.mistral.ai", deepseek: "platform.deepseek.com", xai: "console.x.ai",
-};
 const LOCALS = ["ollama", "claude_code"];
 let lastCloud = "anthropic"; // the cloud brain "Nube" shows
 const SUGGESTED = ["gemma3:12b", "qwen3-vl:8b-instruct", "gemma3:4b"];
@@ -120,7 +116,7 @@ function render(error = info?.error ?? ""): void {
       ? (list.length
         ? `Usa tu plan de Claude a través de Claude Code, sin clave: gasta de tu cupo y tarda unos segundos más en empezar a hablar. ${away}`
         : "No encuentro Claude Code (el comando `claude`) en este PC.")
-      : `${name}: pago por uso con tu clave. ${away} ${hasKey ? "" : `Consigue tu clave en ${KEY_WHERE[shown] ?? "su web"} y pégala aquí para elegir modelo.`}`);
+      : `${name}: pago por uso con tu clave. ${away} ${hasKey ? "" : `Consigue tu clave en ${KEY_PAGES[shown]?.hint ?? "su web"} y pégala aquí para elegir modelo.`}`);
 }
 
 // ---- her voice: speed and her digital touches ----
@@ -130,22 +126,9 @@ const voiceList = $("voices"), voiceNote = $("voice-note");
 let voice: VoiceInfo | null = null;
 const downloading = new Map<string, number>(); // voice -> 0-1
 
-function voiceCard(o: VoiceOption, chosen: boolean): string {
-  const at = downloading.get(o.id);
-  const state = chosen ? '<span class="v-on">En uso</span>'
-    : !o.disponible ? ""
-    : at !== undefined ? `<span class="bar"><i style="width:${Math.round(at * 100)}%"></i></span>`
-    : o.descargada ? ""
-    : o.descargable ? `<button class="mini v-get" data-get="${o.id}">Descargar · ${o.mb} MB</button>`
-    : '<span class="v-off">Sin instalar</span>';
-  return `<div class="voice${chosen ? " on" : ""}${o.disponible && o.descargada ? " pick" : " off"}" data-voice="${o.id}">
-    <div class="v-top"><b>${esc(o.nombre)}</b><span class="tag${o.gpu ? " gpu" : ""}">${o.gpu ? "GPU" : "CPU"}</span>${state}</div>
-    <small>${esc(o.disponible ? o.nota : o.motivo)}</small></div>`;
-}
-
 function showVoice(v: VoiceInfo): void {
   voice = v;
-  voiceList.innerHTML = v.voces.map((o) => voiceCard(o, o.id === v.voz)).join("");
+  voiceList.innerHTML = v.voces.map((o) => voiceCard(o, o.id === v.voz, downloading.get(o.id))).join("");
   const qwen = v.voces.find((o) => o.id === v.voz)?.motor === "qwen";
   sliders.velocidad.disabled = qwen;
   voiceNote.className = "note";

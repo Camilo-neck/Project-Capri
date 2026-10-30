@@ -1,0 +1,47 @@
+/* The first-run wizard: the panel's look (settings.css) laid out as steps, a rail of them on top, the step in the
+   middle and its buttons at the bottom. */
+.wizard header { padding-bottom: 4px; }
+.wizard header img { width: 44px; height: 44px; }
+
+.rail { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin: 4px 14px 12px; padding: 0; list-style: none; }
+.rail li {
+  padding: 5px 0 4px; text-align: center; background: var(--card); color: var(--dim);
+  font: 600 9.5px var(--font-head); letter-spacing: 0.08em; text-transform: uppercase;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+.rail li.done { color: var(--accent-2); background: rgb(182 255 59 / 0.08); }
+.rail li.on { background: var(--accent); color: #fff; box-shadow: inset 0 -2px 0 var(--accent-2); }
+
+.steps p { margin: 0; line-height: 1.5; }
+.steps p.big { font: 600 15px/1.45 var(--font-head); letter-spacing: 0.02em; }
+.step { gap: 9px; }
+.opt { margin-left: 6px; color: var(--dim); font-size: 9px; letter-spacing: 0.12em; }
+.how { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--fg); line-height: 1.45; }
+.how li::marker { color: var(--accent); }
+.how b { color: var(--accent-2); font-weight: 600; }
+code { padding: 1px 5px; background: rgb(0 0 0 / 0.35); color: var(--accent-2); font: 11.5px var(--font-body); user-select: text; }
+kbd { padding: 0 5px; border: 1px solid rgb(255 255 255 / 0.18); border-bottom-width: 2px; font: 600 11px var(--font-body); }
+.link { padding: 0; border: 0; background: none; color: #d7b4ff; text-decoration: underline; text-underline-offset: 2px; }
+.link:hover { color: var(--accent-2); }
+.note.okay { color: var(--accent-2); }
+
+/* this PC: one row per thing it has (or not) */
+.checks { display: flex; flex-direction: column; gap: 4px; }
+.check { display: grid; grid-template-columns: 14px 110px 1fr; align-items: center; gap: 8px; padding: 7px 10px; background: var(--card); border-left: 2px solid rgb(255 255 255 / 0.12); }
+.check i { width: 8px; height: 8px; background: var(--dim); }
+.check.ok { border-left-color: var(--accent-2); }
+.check.ok i { background: var(--accent-2); box-shadow: 0 0 6px var(--accent-2); }
+.check.no { border-left-color: #ffb020; }
+.check.no i { background: #ffb020; }
+.check b { font-weight: 600; }
+.check span { color: var(--dim); font-size: 11px; }
+
+.advice { padding: 9px 11px; background: rgb(162 75 255 / 0.14); border-left: 2px solid var(--accent-2); line-height: 1.45; }
+.advice b { color: var(--accent-2); font-weight: 600; }
+.advice span { color: var(--dim); font-size: 11px; }
+.sub-step { display: flex; flex-direction: column; gap: 6px; }
+
+.wiz-nav { display: flex; justify-content: space-between; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid rgb(162 75 255 / 0.3); }
+.wiz-nav .mini { height: 32px; padding: 0 16px; }
+.wiz-nav .go { margin-left: auto; background: var(--accent); color: #fff; box-shadow: inset 0 -2px 0 var(--accent-2); }
+.wiz-nav .go:hover { background: #b46bff; }

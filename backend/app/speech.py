@@ -179,14 +179,28 @@ def piper(folder: str, models: dict[str, str]) -> Callable[[str, str, float], tu
     return synth
 
 
+# Her recording's long-term spectrum minus a plain Edge voice's (measured on 65 s of her and 40 s of Aria, scripts in
+# the history): more body under 200 Hz and more air above 5 kHz. Hz -> dB, applied smoothly in between.
+HOLO_EQ = ((60, 5.0), (150, 6.0), (300, 2.0), (500, 2.0), (1000, 1.0), (1600, 0.0), (3000, 0.0), (4000, 2.5), (6000, 5.0), (9000, 7.0), (12000, 7.0))
+
+
+def _eq(x: np.ndarray, rate: int) -> np.ndarray:
+    spec = np.fft.rfft(x)
+    f = np.fft.rfftfreq(len(x), 1 / rate)
+    freqs, gains = zip(*HOLO_EQ)
+    db = np.interp(np.log10(np.maximum(f, 1)), np.log10(freqs), gains)
+    return np.fft.irfft(spec * 10 ** (db / 20), len(x)).astype("float32")
+
+
 def holo(audio: np.ndarray, rate: int) -> np.ndarray:
-    """A "holographic construct" touch for the cloud voices: a short echo, a slow flanger and a light reverb, the same
-    audio effects (not a voice model) as run through FFmpeg elsewhere. Same length in and out, never clipping."""
+    """A "holographic construct" touch for the cloud voices: her recording's tone (body and air), a short echo, a
+    slow flanger with a counter-sweep (a phaser's comb) and a light reverb: audio effects, not a voice model. A tail
+    of 0.6 s is added so the echo isn't cut; never clips."""
     if not audio.size:
         return audio
     x = audio.astype("float32")
     n = len(x)
-    pad = np.concatenate([x, np.zeros(int(0.6 * rate), dtype="float32")])
+    pad = _eq(np.concatenate([x, np.zeros(int(0.6 * rate), dtype="float32")]), rate)
     out = pad.copy()
     for delay, gain in ((0.11, 0.28), (0.23, 0.16)):  # echo
         d = int(delay * rate)
@@ -198,6 +212,8 @@ def holo(audio: np.ndarray, rate: int) -> np.ndarray:
     frac = (idx - lo).astype("float32")
     delayed = pad[lo] * (1 - frac) + pad[np.minimum(lo + 1, len(pad) - 1)] * frac
     out += 0.35 * delayed
+    cross = np.clip(np.arange(len(pad)) - (0.002 + 0.0015 * np.sin(2 * np.pi * 0.21 * t + 1.7)) * rate, 0, len(pad) - 1).astype(int)
+    out -= 0.18 * pad[cross]  # the counter-sweep, in antiphase: notches that drift
     for delay, gain in ((0.031, 0.12), (0.047, 0.1), (0.071, 0.08)):  # light reverb
         d = int(delay * rate)
         out[d:] += gain * out[:-d].copy()
@@ -214,9 +230,9 @@ def _decode_mp3(data: bytes) -> np.ndarray:
     return np.asarray(pcm.samples, dtype="float32")
 
 
-def edge(voices: dict[str, str]) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
+def edge(voices: dict[str, str], pitch: int = 0) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
     """Microsoft Edge's neural voices through edge-tts (a cloud service: what she says goes to Microsoft; no key),
-    by language, with the holographic touch. Needs internet: it raises without it (voices.make falls back to Dora)."""
+    by language, `pitch` Hz higher (hers is ~286 Hz median, Aria's plain ~220), with the holographic touch. Needs internet: it raises without it (voices.make falls back to Dora)."""
 
     def synth(text: str, lang: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
         import asyncio
@@ -224,7 +240,7 @@ def edge(voices: dict[str, str]) -> Callable[[str, str, float], tuple[np.ndarray
         import edge_tts
 
         async def fetch() -> bytes:
-            talk = edge_tts.Communicate(text, voices.get(lang, voices["es"]), rate=f"{round((speed - 1) * 100):+d}%", pitch="+0Hz")
+            talk = edge_tts.Communicate(text, voices.get(lang, voices["es"]), rate=f"{round((speed - 1) * 100):+d}%", pitch=f"{pitch:+d}Hz")
             return b"".join([c["data"] async for c in talk.stream() if c["type"] == "audio"])
 
         data = asyncio.run(asyncio.wait_for(fetch(), 20))

@@ -26,6 +26,7 @@ class Voice:
     es: str  # the Spanish voice (Kokoro: one of its voices or a tuned <name>.npy; Piper: the model's name)
     en: str
     nota: str
+    tono: int = 0  # edge: Hz up from the voice's own, to sit near hers
 
 
 CATALOG = [
@@ -34,8 +35,8 @@ CATALOG = [
     Voice("dora", "Dora", "kokoro", "ef_dora", "af_heart", "Kokoro, en la CPU. La de respaldo."),
     Voice("daniela", "Daniela", "piper", "es_AR-daniela-high", "en_US-amy-medium", "Piper, acento argentino. En la CPU."),
     Voice("claude_mx", "Claude MX", "piper", "es_MX-claude-high", "en_US-amy-medium", "Piper, acento mexicano. En la CPU."),
-    Voice("aria", "Aria", "edge", "es-MX-DaliaNeural", "en-US-AriaNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft."),
-    Voice("jenny", "Jenny", "edge", "es-CO-SalomeNeural", "en-US-JennyNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft."),
+    Voice("aria", "Aria", "edge", "es-MX-DaliaNeural", "en-US-AriaNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 40),
+    Voice("jenny", "Jenny", "edge", "es-CO-SalomeNeural", "en-US-JennyNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 80),
     Voice("bella", "Bella", "kokoro", "af_bella", "af_bella", "Kokoro, americana: en español con acento."),
     Voice("emma", "Emma", "kokoro", "bf_emma", "bf_emma", "Kokoro, británica: en español con acento."),
 ]
@@ -135,7 +136,7 @@ def make(voice_id: str, folder: str) -> Callable:
         return speech.kokoro(folder, {"es": v.es, "en": v.en})
     backup = get(BACKUP)
     if v.motor == "edge":  # no internet: Dora, so she still talks
-        return speech.fallback(speech.edge({"es": v.es, "en": v.en}), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
+        return speech.fallback(speech.edge({"es": v.es, "en": v.en}, v.tono), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
     return speech.fallback(speech.qwen(folder, v.es), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
 
 

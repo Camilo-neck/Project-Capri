@@ -79,8 +79,9 @@ fn free_gb(dir: &Path) -> f64 {
     powershell(&format!("(Get-PSDrive {drive}).Free")).ok().and_then(|s| s.parse::<f64>().ok()).map(|b| (b / 1e9 * 10.0).round() / 10.0).unwrap_or(0.0)
 }
 
+/// Run as the uninstaller: with --uninstall (Windows' entry), or simply by being the copy named like it (a double click).
 fn uninstalling() -> bool {
-    std::env::args().any(|a| a == "--uninstall")
+    std::env::args().any(|a| a == "--uninstall") || std::env::current_exe().is_ok_and(|e| e.file_name().is_some_and(|n| n == plan::UNINSTALLER))
 }
 
 #[tauri::command]
@@ -416,6 +417,9 @@ fn relocate() -> bool {
     let Some(dir) = me.parent() else { return false };
     if me.file_name().is_none_or(|n| n != plan::UNINSTALLER) {
         return false;
+    }
+    if arg("--dir").is_some() {
+        return false; // already the relocated copy
     }
     let copy = std::env::temp_dir().join("capri-desinstalar.exe");
     if std::fs::copy(&me, &copy).is_err() {

@@ -75,6 +75,7 @@ nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
 .go.red { background: #c4173a; box-shadow: inset 0 -2px 0 #ff8095; }
 .go.red:hover:not(:disabled) { background: var(--red); }
 .ghost { background: var(--card); color: var(--dim); }
+.ghost.red-text:hover { color: #ff8095; }
 .ghost:hover { color: var(--fg); background: var(--card-hi); }
 @keyframes glitch { 0% { transform: translateX(-2px); text-shadow: 2px 0 var(--red), -2px 0 var(--accent-2); } 100% { transform: none; } }
 

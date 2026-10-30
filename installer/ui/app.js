@@ -57,6 +57,7 @@ async function boot() {
   await typeLines($("boot-log"), lines);
   $("to-options").disabled = !info.payload;
   $("to-options").textContent = info.instalada ? "Actualizar" : "Insertar chip";
+  $("to-remove").hidden = !info.instalada;
   $("to-options").focus();
 }
 
@@ -177,6 +178,11 @@ function alertLine(text) {
 }
 
 $("to-options").onclick = options;
+$("to-remove").onclick = () => {
+  info.dir = info.instalada;
+  info.modo = "uninstall";
+  removal();
+};
 $("back-boot").onclick = () => show("boot");
 $("install").onclick = install;
 $("ollama").onchange = space;

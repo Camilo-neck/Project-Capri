@@ -80,6 +80,9 @@ def path() -> Path:
     return Path(os.environ.get("CAPRI_CONFIG", DIR / "config.toml"))
 
 
+LEGACY_TTS = Path(r"D:\capri-models\tts")  # where her voices went before models_dir: a config that never set it keeps it
+
+
 def models_dir(kind: str) -> str:
     """Where her models go unless he chose a folder: this user's %LOCALAPPDATA%\Capri\modelos\<kind>."""
     return str(Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Capri" / "modelos" / kind)
@@ -122,7 +125,7 @@ def load() -> Settings:
         voice_log=bool(data.get("voz", {}).get("registro", True)),
         speak=bool(data.get("voz", {}).get("hablar", True)),
         tts_voice=_voice(data.get("voz", {})),
-        tts_dir=str(data.get("voz", {}).get("carpeta_tts", "") or models_dir("tts")),
+        tts_dir=str(data.get("voz", {}).get("carpeta_tts", "") or (LEGACY_TTS if LEGACY_TTS.is_dir() else models_dir("tts"))),
         tts_speed=min(1.5, max(0.7, float(data.get("voz", {}).get("velocidad", 1.0)))),
         tts_robot=min(1.0, max(0.0, float(data.get("voz", {}).get("robot", 0.0)))),
         tts_glitch=min(1.0, max(0.0, float(data.get("voz", {}).get("glitch", 0.0)))),

@@ -1,6 +1,11 @@
 # Configuración de Capri. Se crea sola la primera vez en %APPDATA%\Capri\config.toml;
 # edítala con cualquier editor. Los cambios valen desde la siguiente vez que Capri la use.
 
+# El asistente del primer arranque (elige su cerebro y su voz para este PC). Pon false para verlo otra vez,
+# o ábrelo desde el panel (General > Asistente de inicio).
+[inicio]
+listo = false
+
 # Nombres cortos para abrir apps (siempre te pide confirmación antes). nombre = "programa o ruta".
 # Capri también puede abrir cualquier otro programa por su nombre o ruta, con la misma confirmación.
 [apps]

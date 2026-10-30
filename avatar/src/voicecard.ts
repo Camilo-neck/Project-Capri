@@ -12,6 +12,6 @@ export function voiceCard(o: VoiceOption, chosen: boolean, downloading?: number)
     : o.descargable ? `<button class="mini v-get" data-get="${o.id}">Descargar · ${o.mb} MB</button>`
     : '<span class="v-off">Sin instalar</span>';
   return `<div class="voice${chosen ? " on" : ""}${o.disponible && o.descargada ? " pick" : " off"}" data-voice="${o.id}">
-    <div class="v-top"><b>${esc(o.nombre)}</b><span class="tag${o.gpu ? " gpu" : ""}">${o.gpu ? "GPU" : "CPU"}</span>${state}</div>
+    <div class="v-top"><b>${esc(o.nombre)}</b><span class="tag${o.gpu ? " gpu" : o.nube ? " nube" : ""}">${o.gpu ? "GPU" : o.nube ? "NUBE" : "CPU"}</span>${state}</div>
     <small>${esc(o.disponible ? o.nota : o.motivo)}</small></div>`;
 }

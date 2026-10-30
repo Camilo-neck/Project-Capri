@@ -50,6 +50,7 @@ export type VoiceOption = {
   motor: "qwen" | "kokoro" | "piper";
   nota: string;
   gpu: boolean;
+  nube: boolean; // a service: what she says leaves this PC
   descargada: boolean;
   descargable: boolean; // what's missing can be downloaded from the panel
   disponible: boolean; // this PC can run it

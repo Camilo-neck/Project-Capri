@@ -22,7 +22,7 @@ QWEN_GPU_MB = 6000  # total VRAM her clone needs (2.7 GB of its own, with room f
 class Voice:
     id: str
     nombre: str
-    motor: str  # qwen | kokoro | piper
+    motor: str  # qwen | kokoro | piper | edge
     es: str  # the Spanish voice (Kokoro: one of its voices or a tuned <name>.npy; Piper: the model's name)
     en: str
     nota: str
@@ -34,6 +34,8 @@ CATALOG = [
     Voice("dora", "Dora", "kokoro", "ef_dora", "af_heart", "Kokoro, en la CPU. La de respaldo."),
     Voice("daniela", "Daniela", "piper", "es_AR-daniela-high", "en_US-amy-medium", "Piper, acento argentino. En la CPU."),
     Voice("claude_mx", "Claude MX", "piper", "es_MX-claude-high", "en_US-amy-medium", "Piper, acento mexicano. En la CPU."),
+    Voice("aria", "Aria", "edge", "es-MX-DaliaNeural", "en-US-AriaNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft."),
+    Voice("jenny", "Jenny", "edge", "es-CO-SalomeNeural", "en-US-JennyNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft."),
     Voice("bella", "Bella", "kokoro", "af_bella", "af_bella", "Kokoro, americana: en español con acento."),
     Voice("emma", "Emma", "kokoro", "bf_emma", "bf_emma", "Kokoro, británica: en español con acento."),
 ]
@@ -59,6 +61,8 @@ def url_for(name: str) -> str:
 
 def needs(v: Voice) -> list[tuple[str, int, bool]]:
     """(file under the TTS folder, MB, whether it can be downloaded from the panel) for a voice."""
+    if v.motor == "edge":
+        return []  # nothing to download: it's a service
     if v.motor == "qwen":
         return [(f, 0, False) for f in ("qwen/env/Scripts/python.exe", "qwen/Qwen3-TTS-12Hz-0.6B-Base/config.json",
                                         f"qwen/{v.es}.wav", f"qwen/{v.es}.txt")]
@@ -76,6 +80,7 @@ class Option:
     motor: str
     nota: str
     gpu: bool
+    nube: bool  # a service: what she says leaves this PC
     descargada: bool
     descargable: bool  # what's missing can be downloaded from the panel
     disponible: bool  # this PC can run it
@@ -116,7 +121,7 @@ def options(folder: str, gpu: tuple[int, int] | None) -> list[Option]:
                 reason = "Necesita una tarjeta gráfica NVIDIA."
             elif gpu[1] < QWEN_GPU_MB:
                 reason = f"Tu GPU tiene {round(gpu[1] / 1024)} GB; necesita {QWEN_GPU_MB // 1000} GB."
-        out.append(Option(v.id, v.nombre, v.motor, v.nota, v.motor == "qwen", not missing,
+        out.append(Option(v.id, v.nombre, v.motor, v.nota, v.motor == "qwen", v.motor == "edge", not missing,
                           bool(missing) and all(ok for _, _, ok in missing), not reason, reason, sum(mb for _, mb, _ in missing)))
     return out
 
@@ -129,6 +134,8 @@ def make(voice_id: str, folder: str) -> Callable:
     if v.motor == "kokoro":
         return speech.kokoro(folder, {"es": v.es, "en": v.en})
     backup = get(BACKUP)
+    if v.motor == "edge":  # no internet: Dora, so she still talks
+        return speech.fallback(speech.edge({"es": v.es, "en": v.en}), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
     return speech.fallback(speech.qwen(folder, v.es), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
 
 

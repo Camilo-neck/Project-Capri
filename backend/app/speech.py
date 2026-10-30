@@ -179,6 +179,62 @@ def piper(folder: str, models: dict[str, str]) -> Callable[[str, str, float], tu
     return synth
 
 
+def holo(audio: np.ndarray, rate: int) -> np.ndarray:
+    """A "holographic construct" touch for the cloud voices: a short echo, a slow flanger and a light reverb, the same
+    audio effects (not a voice model) as run through FFmpeg elsewhere. Same length in and out, never clipping."""
+    if not audio.size:
+        return audio
+    x = audio.astype("float32")
+    n = len(x)
+    pad = np.concatenate([x, np.zeros(int(0.6 * rate), dtype="float32")])
+    out = pad.copy()
+    for delay, gain in ((0.11, 0.28), (0.23, 0.16)):  # echo
+        d = int(delay * rate)
+        out[d:] += gain * pad[:-d]
+    t = np.arange(len(pad)) / rate
+    sweep = (0.0035 + 0.0025 * np.sin(2 * np.pi * 0.35 * t) * 0.5 + 0.0025 * 0.5) * rate  # flanger: 3.5-6 ms, 0.35 Hz
+    idx = np.clip(np.arange(len(pad)) - sweep, 0, len(pad) - 1)
+    lo = idx.astype(int)
+    frac = (idx - lo).astype("float32")
+    delayed = pad[lo] * (1 - frac) + pad[np.minimum(lo + 1, len(pad) - 1)] * frac
+    out += 0.35 * delayed
+    for delay, gain in ((0.031, 0.12), (0.047, 0.1), (0.071, 0.08)):  # light reverb
+        d = int(delay * rate)
+        out[d:] += gain * out[:-d].copy()
+    peak = float(np.abs(out).max())
+    if peak > 0.98:
+        out *= 0.98 / peak
+    return out.astype("float32")[: n + int(0.6 * rate)]
+
+
+def _decode_mp3(data: bytes) -> np.ndarray:
+    import miniaudio
+
+    pcm = miniaudio.decode(data, output_format=miniaudio.SampleFormat.FLOAT32, nchannels=1, sample_rate=24000)
+    return np.asarray(pcm.samples, dtype="float32")
+
+
+def edge(voices: dict[str, str]) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
+    """Microsoft Edge's neural voices through edge-tts (a cloud service: what she says goes to Microsoft; no key),
+    by language, with the holographic touch. Needs internet: it raises without it (voices.make falls back to Dora)."""
+
+    def synth(text: str, lang: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
+        import asyncio
+
+        import edge_tts
+
+        async def fetch() -> bytes:
+            talk = edge_tts.Communicate(text, voices.get(lang, voices["es"]), rate=f"{round((speed - 1) * 100):+d}%", pitch="+0Hz")
+            return b"".join([c["data"] async for c in talk.stream() if c["type"] == "audio"])
+
+        data = asyncio.run(asyncio.wait_for(fetch(), 20))
+        if not data:
+            raise RuntimeError("Edge's voice sent no audio")
+        return holo(_decode_mp3(data), 24000), 24000
+
+    return synth
+
+
 def qwen(folder: str, voice: str = "capri", cmd: list[str] | None = None) -> Callable[..., tuple[Iterator[np.ndarray], int]]:
     """Her cloned voice (Qwen3-TTS) in its own process with its own Python (torch, CUDA graphs): app/qwen_worker.py
     with <folder>/qwen/env, the 0.6B model and her recording, <folder>/qwen/<voice>.wav + .txt (what it says).

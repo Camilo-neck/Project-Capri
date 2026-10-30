@@ -44,7 +44,7 @@ y luego `neutral`.
 ## Voz
 
 Oído: faster-whisper `large-v3-turbo` en GPU (o `small` en CPU sin NVIDIA) con VAD de Silero. Voz: Qwen3-TTS 0.6B
-clonado con `faster-qwen3-tts` en un proceso aparte con su propio entorno; Kokoro y Piper en CPU. El micrófono solo
+clonado con `faster-qwen3-tts` en un proceso aparte con su propio entorno; Kokoro y Piper en CPU; y, a elección, voces neuronales de Microsoft Edge (`edge-tts`, en la nube, sin clave, con un toque de holograma hecho en el código). El micrófono solo
 está abierto con la voz activa y el audio nunca se guarda. Detalles de uso en el asistente y en `/ayuda`.
 
 ## Seguridad
@@ -59,7 +59,7 @@ está abierto con la voz activa y el audio nunca se guarda. Detalles de uso en e
 
 Todo es local salvo, a petición del usuario: la API de su cerebro en la nube si lo elige; calendario por iCal;
 Spotify (PKCE, su propia app); leer páginas web públicas (nunca de su red ni de su PC); la búsqueda en su navegador;
-las descargas de modelos y paquetes del instalador y del asistente (Ollama, Hugging Face, PyPI, GitHub de `kokoro-onnx`).
+las voces de Edge si las eliges (solo el texto de cada frase, a Microsoft); las descargas de modelos y paquetes del instalador y del asistente (Ollama, Hugging Face, PyPI, GitHub de `kokoro-onnx`).
 
 ## Instalador (`installer/`)
 

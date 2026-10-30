@@ -412,3 +412,43 @@ def test_changing_her_voice_stops_her_frees_the_old_one_and_uses_the_new():
     sp = Speaker(synth=old, play=Card(), voice="capri")
     sp.use(new, "dora")
     assert closed == ["old"] and sp.voice == "dora" and sp.synth is new
+
+
+def test_the_holographic_touch_adds_echo_and_shimmer_and_a_tail_but_never_clips():
+    from app.speech import holo
+
+    rate = 24000
+    t = np.arange(rate) / rate
+    voice = (0.5 * np.sin(2 * np.pi * 220 * t)).astype("float32")
+    out = holo(voice, rate)
+    assert len(out) == len(voice) + int(0.6 * rate) and out.dtype == np.float32 and np.abs(out).max() <= 1.0  # room for the echo
+    assert np.abs(out[len(voice):]).max() > 0.01  # the echo outlives the word
+    assert np.array_equal(holo(voice, rate), out)  # same every time
+    assert holo(np.zeros(0, dtype="float32"), rate).size == 0
+
+
+def test_edge_speaks_through_the_service_decodes_it_and_tunes_pace(monkeypatch):
+    import sys
+    import types
+
+    from app import speech
+
+    asked = []
+
+    class Communicate:
+        def __init__(self, text, voice, rate="+0%", pitch="+0Hz"):
+            asked.append((text, voice, rate, pitch))
+
+        async def stream(self):
+            yield {"type": "audio", "data": b"mp3-1"}
+            yield {"type": "WordBoundary"}
+            yield {"type": "audio", "data": b"mp3-2"}
+
+    monkeypatch.setitem(sys.modules, "edge_tts", types.SimpleNamespace(Communicate=Communicate))
+    monkeypatch.setattr(speech, "_decode_mp3", lambda data: np.full(2400, 0.4, dtype="float32") if data == b"mp3-1mp3-2" else None)
+    synth = speech.edge({"es": "es-MX-DaliaNeural", "en": "en-US-AriaNeural"})
+    audio, rate = synth("Hello there.", "en", 1.25)
+    assert rate == 24000 and len(audio) == 2400 + int(0.6 * 24000) and np.abs(audio).max() <= 1.0
+    assert asked == [("Hello there.", "en-US-AriaNeural", "+25%", "+0Hz")]
+    synth("Hola.", "es", 0.8)
+    assert asked[1][1:3] == ("es-MX-DaliaNeural", "-20%")

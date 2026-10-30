@@ -22,7 +22,7 @@ def by_id(opts):
 
 def test_the_catalog():
     ids = [v.id for v in voices.CATALOG]
-    assert ids[:5] == ["capri", "capri_ligera", "dora", "daniela", "claude_mx"]
+    assert ids[:6] == ["aria", "capri", "capri_ligera", "dora", "daniela", "claude_mx"]  # Aria first, then her clone, then the rest
     assert {"bella", "emma"} <= set(ids) and len(ids) == len(set(ids))
     assert voices.get("nada") is voices.get(voices.DEFAULT)
     assert all(v.motor in ("qwen", "kokoro", "piper", "edge") for v in voices.CATALOG)
@@ -89,12 +89,12 @@ def test_an_unreachable_file_leaves_nothing_behind(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("voz, expected", [
-    ("", "capri"),
+    ("", "aria"),
     ('motor = "kokoro"\nvoz_tts = "capri"', "capri_ligera"),
     ('motor = "kokoro"\nvoz_tts = ""', "dora"),
     ('motor = "qwen"', "capri"),
     ('voz = "daniela"', "daniela"),
-    ('voz = "inventada"', "capri"),
+    ('voz = "inventada"', "aria"),
 ])
 def test_her_voice_from_config_old_and_new(monkeypatch, tmp_path, voz, expected):
     (tmp_path / "config.toml").write_text(f"[voz]\n{voz}\n", encoding="utf-8")

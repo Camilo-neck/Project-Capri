@@ -55,7 +55,7 @@ class Settings:
     voice_names: tuple[str, ...] = ("capri",)  # what she answers to (compared loosely: "Kapri", "Capry")
     voice_log: bool = True  # voz.log: what she heard that was meant for her
     speak: bool = True  # with the voice on, she answers out loud
-    tts_voice: str = "capri"  # one of voices.CATALOG ([voz] voz)
+    tts_voice: str = "aria"  # one of voices.CATALOG ([voz] voz)
     tts_dir: str = ""  # her voices (models_dir("tts") unless he set one)
     tts_speed: float = 1.0
     tts_robot: float = 0.0  # her metallic touch, 0-1
@@ -140,6 +140,8 @@ def _voice(voz: dict) -> str:
         return voices.get(str(voz["voz"])).id
     if voz.get("motor") == "kokoro":
         return "capri_ligera" if voz.get("voz_tts", "capri") else "dora"
+    if voz.get("motor") == "qwen":
+        return "capri"  # an older config that asked for her clone
     return voices.DEFAULT
 
 

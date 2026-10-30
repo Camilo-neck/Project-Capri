@@ -30,17 +30,17 @@ class Voice:
 
 
 CATALOG = [
+    Voice("aria", "Aria", "edge", "es-MX-DaliaNeural", "en-US-AriaNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 12),
     Voice("capri", "Capri", "qwen", "capri", "capri", "Su voz, clonada de su grabación. En la GPU."),
     Voice("capri_ligera", "Capri ligera", "kokoro", "capri", "capri", "Afinada a su voz, en la CPU. Se parece menos."),
     Voice("dora", "Dora", "kokoro", "ef_dora", "af_heart", "Kokoro, en la CPU. La de respaldo."),
     Voice("daniela", "Daniela", "piper", "es_AR-daniela-high", "en_US-amy-medium", "Piper, acento argentino. En la CPU."),
     Voice("claude_mx", "Claude MX", "piper", "es_MX-claude-high", "en_US-amy-medium", "Piper, acento mexicano. En la CPU."),
-    Voice("aria", "Aria", "edge", "es-MX-DaliaNeural", "en-US-AriaNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 12),
     Voice("jenny", "Jenny", "edge", "es-CO-SalomeNeural", "en-US-JennyNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 30),
     Voice("bella", "Bella", "kokoro", "af_bella", "af_bella", "Kokoro, americana: en español con acento."),
     Voice("emma", "Emma", "kokoro", "bf_emma", "bf_emma", "Kokoro, británica: en español con acento."),
 ]
-DEFAULT, BACKUP = "capri", "dora"
+DEFAULT, BACKUP = "aria", "dora"
 
 
 def get(voice_id: str) -> Voice:

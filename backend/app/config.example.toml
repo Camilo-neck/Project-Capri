@@ -79,7 +79,7 @@ modelo = "turbo"          # modelo de faster-whisper (large-v3-turbo; "small" ga
 carpeta_modelo = ""       # dónde se descarga el modelo ("" = %LOCALAPPDATA%\Capri\modelos\whisper)
 dispositivo = "auto"       # dónde corre Whisper: "auto" (la GPU si hay NVIDIA; si no, la CPU con "small"), "cuda" o "cpu"
 hablar = true             # con la voz activa, te contesta en voz alta
-voz = "capri"             # su voz (también en el panel): "capri" (clonada, GPU NVIDIA; si falla, Dora), "capri_ligera"
+voz = "aria"              # su voz (también en el panel): "aria" (Edge, en la nube: el texto va a Microsoft; sin internet, Dora), "capri" (clonada, GPU NVIDIA; si falla, Dora), "capri_ligera"
                           # (afinada a ella, CPU), "dora", "daniela", "claude_mx", "bella", "emma" (CPU). La clonada usa
                           # qwen/capri.wav (~10 s de ella) y qwen/capri.txt (lo que dice) en carpeta_tts
 carpeta_tts = ""          # dónde están sus voces ("" = %LOCALAPPDATA%\Capri\modelos\tts)

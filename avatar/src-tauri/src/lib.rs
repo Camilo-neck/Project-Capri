@@ -1,5 +1,5 @@
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -147,6 +147,16 @@ fn watch_mouse(app: tauri::AppHandle) {
     }
 }
 
+/// Where the backend is: installed next to this exe (`backend\` with its `.venv`, see the installer), else this
+/// checkout's (a build run from the project).
+fn backend_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("backend")))
+        .filter(|d| d.join(".venv/Scripts/python.exe").exists())
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../backend"))
+}
+
 /// Launches the Python backend and reads the ws URL (with its per-start token) from its first stdout line.
 /// With CAPRI_WS_URL set, attaches to an already running backend instead.
 fn start_backend() -> (String, Option<Child>) {
@@ -154,9 +164,7 @@ fn start_backend() -> (String, Option<Child>) {
         return (url, None);
     }
     ollama::ensure(); // /cierra may have stopped it
-    // ponytail: the backend runs from this checkout (its .venv), even in the release build; bundling
-    // Python (PyInstaller) only matters to install Capri on another PC.
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../backend");
+    let dir = backend_dir();
     // The venv python.exe is a launcher that spawns the real interpreter, so killing it is not enough:
     // the backend exits on its own when the stdin pipe we hold closes (normal exit or crash).
     let mut cmd = Command::new(dir.join(".venv/Scripts/python.exe"));

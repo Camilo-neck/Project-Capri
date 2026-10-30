@@ -100,3 +100,19 @@ def test_her_voice_from_config_old_and_new(monkeypatch, tmp_path, voz, expected)
     (tmp_path / "config.toml").write_text(f"[voz]\n{voz}\n", encoding="utf-8")
     monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
     assert settings.load().tts_voice == expected
+
+
+def test_her_models_default_to_this_users_local_app_data(monkeypatch, tmp_path):
+    (tmp_path / "config.toml").write_text("[voz]\n", encoding="utf-8")
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    s = settings.load()
+    assert s.tts_dir == str(tmp_path / "local" / "Capri" / "modelos" / "tts")
+    assert s.voice_dir == str(tmp_path / "local" / "Capri" / "modelos" / "whisper")
+    (tmp_path / "config.toml").write_text('[voz]\ncarpeta_tts = "E:/voces"\n', encoding="utf-8")
+    assert settings.load().tts_dir == "E:/voces"  # his own stays
+
+
+def test_a_fresh_config_carries_nothing_of_this_pc():
+    text = settings.EXAMPLE.read_text(encoding="utf-8")
+    assert "D:\\" not in text and "capri-models" not in text and "carco" not in text.lower()

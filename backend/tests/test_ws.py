@@ -367,6 +367,11 @@ def test_the_panel_picks_and_downloads_her_voice(monkeypatch, tmp_path):
     from app import settings, voices
 
     monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    tts = tmp_path / "Capri" / "modelos" / "tts"
+    tts.mkdir(parents=True)
+    for f in ("es_AR-daniela-high.onnx", "es_AR-daniela-high.onnx.json", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json"):
+        (tts / f).write_bytes(b"x")
     monkeypatch.setattr(voices, "gpu", lambda: None)
     monkeypatch.setattr(voices, "make", lambda v, folder: f"synth:{v}")
 

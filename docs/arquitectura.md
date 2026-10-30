@@ -1,4 +1,4 @@
-# Arquitectura
+# Arquitectura de Proyecto Capri
 
 ## Visión general
 

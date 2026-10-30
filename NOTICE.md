@@ -1,4 +1,4 @@
-# Qué NO cubre la licencia MIT
+# Proyecto Capri: qué NO cubre la licencia MIT
 
 La licencia MIT de [LICENSE](LICENSE) cubre el **código** de este repositorio. No cubre, y no se puede reutilizar
 sin permiso de quien corresponda:

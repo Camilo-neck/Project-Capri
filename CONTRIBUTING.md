@@ -1,4 +1,4 @@
-# Colaborar en Capri
+# Colaborar en Proyecto Capri
 
 ## Entorno
 

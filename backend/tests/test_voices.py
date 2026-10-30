@@ -25,7 +25,7 @@ def test_the_catalog():
     assert ids[:5] == ["capri", "capri_ligera", "dora", "daniela", "claude_mx"]
     assert {"bella", "emma"} <= set(ids) and len(ids) == len(set(ids))
     assert voices.get("nada") is voices.get(voices.DEFAULT)
-    assert all(v.motor in ("qwen", "kokoro", "piper") for v in voices.CATALOG)
+    assert all(v.motor in ("qwen", "kokoro", "piper", "edge") for v in voices.CATALOG)
 
 
 def test_what_is_downloaded_and_what_can_be(tmp_path):
@@ -128,3 +128,22 @@ def test_an_older_install_keeps_its_voices_where_they_were(monkeypatch, tmp_path
     assert settings.load().tts_dir == str(old)
     old.rmdir()
     assert settings.load().tts_dir.endswith("tts") and "old-tts" not in settings.load().tts_dir
+
+
+def test_the_edge_voices_are_cloud_ones_that_need_nothing_on_disk(tmp_path):
+    ids = {v.id: v for v in voices.CATALOG}
+    assert ids["aria"].en == "en-US-AriaNeural" and ids["jenny"].en == "en-US-JennyNeural" and ids["aria"].motor == "edge"
+    o = by_id(voices.options(str(tmp_path), gpu=None))
+    for vid in ("aria", "jenny"):
+        assert o[vid].nube and o[vid].descargada and o[vid].disponible and o[vid].mb == 0
+        assert "Microsoft" in o[vid].nota  # what she says goes to them: it says so
+    assert not o["dora"].nube
+
+
+def test_an_edge_voice_falls_back_to_dora_without_internet(monkeypatch, tmp_path):
+    made = []
+    monkeypatch.setattr(voices.speech, "edge", lambda v: made.append(("edge", v)) or (lambda *a: 1 / 0))
+    monkeypatch.setattr(voices.speech, "kokoro", lambda folder, styles: made.append(("kokoro", styles)) or (lambda *a: (None, 24000)))
+    synth = voices.make("aria", str(tmp_path))
+    assert synth("hola", "es", 1.0) == (None, 24000)  # edge failed: Dora said it
+    assert made[0] == ("edge", {"es": "es-MX-DaliaNeural", "en": "en-US-AriaNeural"})

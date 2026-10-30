@@ -76,6 +76,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 
 .tag { padding: 0 5px; background: var(--card-hi); color: var(--dim); font-size: 9.5px; letter-spacing: 0.08em; }
 .tag.gpu { background: rgb(182 255 59 / 0.14); color: var(--accent-2); }
+.tag.nube { background: rgb(255 176 32 / 0.16); color: #ffb020; }
 
 @media (prefers-reduced-motion: reduce) {
   .menu, .m-item:hover, .m-item:focus-visible { animation: none; }

@@ -97,6 +97,7 @@ class VoiceOption(BaseModel):
     motor: str
     nota: str
     gpu: bool
+    nube: bool
     descargada: bool
     descargable: bool
     disponible: bool

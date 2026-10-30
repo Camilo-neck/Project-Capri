@@ -2,82 +2,67 @@
 
 ![Hoja de sprites](capri-sprites.png)
 
-Capri es una mascota de escritorio en pixel art **generada por código**: no hay imágenes sueltas, sino un muñeco articulado (`avatar/src/pet/`) que se dibuja en cada fotograma. Así cada animación tiene tantos pasos como haga falta, las transiciones son suaves y se pueden añadir estados nuevos sin dibujar fotogramas a mano.
+Capri tiene dos estilos de arte para su cuerpo (más la cámara, que son primeros planos de la serie):
 
-- **Lienzo:** 80×96 px nativos, ampliados ×3 sin suavizado (240×288 en pantalla). La línea de suelo está a 18 px del borde inferior: ahí se sienta, sobre la barra de tareas, con las piernas colgando.
-- **Ritmo:** 20 fps. Al cambiar de estado, la postura se mezcla durante 320 ms.
-- **Paleta cerrada** (`stamps.ts`): contorno `#140a14`, pelo `#b82060`/`#861445`, piel `#3fe07c`, traje `#a61a4c`/`#6c0f30`/`#1f1622`, iris `#2f7dff`, más los colores de efectos (rosa, amarillo, cian, rojo).
-- **Cómo se dibuja:** cada pieza (pelo, piernas, torso, brazos, cabeza, flequillo) se pinta con formas en su propia capa. Luego se pasa a píxeles duros con los colores de esa pieza y recibe su contorno negro de 1 px. La cara y los efectos son sellos de píxeles dibujados a mano.
-- **Revisión en vivo:** con `npx vite` corriendo en `avatar/`, abre `http://localhost:1420/preview.html`; añade `?live` para ver todo animado, `?only=feliz,triste` para filtrar y `?scale=4` para ampliar.
+- **Pixel art (chibi):** 30 animaciones dibujadas con [PixelLab](https://pixellab.ai) a partir de un diseño chibi fiel
+  al original (`avatar/assets/pet/anim/<clip>/<clip>_NN.png`). Es lo que muestra esta hoja.
+- **Original:** las tiras animadas de la serie (`avatar/assets/original`, de lachydotmcg/capri-desktop).
+- La mascota antigua **generada por código** (`avatar/src/pet/draw.ts`, `rig.ts`, `stamps.ts`) sigue en el proyecto
+  solo como respaldo: se ve únicamente si a un estado le falta su clip.
 
-## Estados
+## Cómo se reproducen
 
-| Estado (`id`) | Qué hace | Cuándo | Duración |
-|---|---|---|---|
-| `sentada` | Sentada en el borde, balancea las piernas, respira, mira al ratón | Reposo por defecto | bucle |
-| `meditar` | Flota con las piernas cruzadas, sube y baja, la sombra se encoge | Reposo: 20 % de los turnos de 25 s | bucle |
-| `estirarse` | Sube los brazos, se estira y bosteza | Reposo: 15 % de los turnos | 2,6 s |
-| `dormir` | Piernas cruzadas, cabeza caída, respiración lenta, zZz | 3 min sin hablar, o sin conexión | bucle |
-| `saludar` | De pie, agita la mano | Al conectar con el backend | 1,8 s |
-| `escribir` | Teclea en un portátil sobre el regazo; a ratos se para a pensar (…) | Mientras el modelo piensa | bucle |
-| `hablar` | De pie, gesticula con una mano | Emoción `neutral` | bucle |
-| `feliz` | Saltitos, ojos ^^, sonrisa con dientes, destellos | Emoción `feliz` | bucle |
-| `enamorada` | Manos en las mejillas, ojos de corazón, rubor, corazones | Emoción `feliz` (variante al azar) | bucle |
-| `emocionada` | Salta con los brazos arriba, ojos de estrella, sombra | Emoción `emocionada` | bucle |
-| `traviesa` | Se tapa la boca y se ríe, guiño, mano en la cadera | Emoción `traviesa` | bucle |
-| `curiosa` | Se agacha, ladea la cabeza, mano en la barbilla, "?" | Emoción `curiosa` | bucle |
-| `pensativa` | Mano en la barbilla, mira arriba, puntos suspensivos | Emoción `pensativa` | bucle |
-| `sorprendida` | Salta hacia atrás, ojos muy abiertos, "!", tiembla | Emoción `sorprendida` | bucle |
-| `molesta` | Brazos cruzados, golpea el suelo con el pie, vena de enfado | Emoción `molesta` | bucle |
-| `triste` | Abraza las rodillas, cabeza baja, lágrima | Emoción `triste` | bucle |
-| `seria` | Manos a la espalda, mirada fija, asiente de vez en cuando | Emoción `seria` | bucle |
-| `pinchada` | Se aplasta y se tambalea, ojos en espiral, estrellas | Clic sobre ella | 1,3 s |
-| `acariciada` | Inclina la cabeza hacia la mano, ojos ^^, rubor, corazones | Pasar el ratón de lado a lado sobre su cabeza | mientras dure, +0,9 s |
+- **Lienzos:** 108 px de pie, 116 sentada y 136 con el portátil; el personaje mide unos 62×75 px. Se muestran ×2 sin
+  suavizado. `render/pet.ts` mide los pies del primer fotograma de cada clip para ponerlos en la línea de suelo, así
+  que los tamaños pueden variar entre clips.
+- **Ritmo:** cada clip declara sus fotogramas y su fps en `avatar/src/pet/clips.ts` (`CLIPS`). Los bucles
+  generados no siempre acaban donde empiezan, así que van y vuelven (`pingpong`).
+- **Transiciones:** un estado puede tener una cadena de entrada (`enter`) y luego su bucle (`loop`). Al cambiar de
+  estado se deshacen al revés las transiciones que el nuevo no comparte y se reproducen las que añade: de escribir a
+  hablar se cierra el portátil y se levanta; de sentada a escribir solo se abre el portátil.
+- **Clic:** la zona sensible sale de los píxeles opacos de cada fotograma.
+- **Dirección del director:** `behaviors.ts` elige el estado. Prioridad: pinchada > acariciada > escribir > emoción
+  (mientras habla y 15 s después) > dormir > saludar > reposo.
 
-Prioridad del director (`behaviors.ts`, `choose`): pinchada > acariciada > escribir > emoción (mientras habla y 15 s después) > dormir > saludar > reposo.
+## Estados y clips
 
-## Capas que se suman a cualquier estado
+`a → b` es «`a` una vez y luego `b` en bucle». Vista: *frente* (de pie) o *3/4* (sentada).
 
-- **Gestos del modelo:** `asentir` (la cabeza baja dos veces), `ladear_cabeza`, `guino` (ojo derecho), `saltar` (salto con aplastamiento), `senalar` (brazo derecho estirado) y `cruzar_brazos`.
-- **Habla:** mientras escribe el texto, la boca sigue las vocales: A, E/I, O/U y cerrada en signos de puntuación.
-- **Parpadeo:** cada 2-6 s, si los ojos están abiertos.
-- **Mirada:** los ojos abiertos siguen al cursor por todo el escritorio y vuelven a mirarte tras 4 s sin mover el ratón.
-- **Glitch:** destello corto al cambiar de emoción.
+| Estado | Clips | Fotogramas · fps | Vista | Cuándo |
+|---|---|---|---|---|
+| `sentada` (reposo) | `sentarse` → `sentada_idle` | 7·12 → 9·7 | 3/4 | reposo por defecto |
+| `estirarse` | `sentarse` → `estirarse` | 13·10 | 3/4 | reposo, a ratos |
+| `meditar` | `sentarse` → `meditar` | 9·6 | 3/4 | reposo, a ratos |
+| `dormir` | `sentarse` → `dormirse` → `dormir` | 9·6 → 5·3 | 3/4 | 20 min sin actividad, o sin enlace |
+| `escribir` | `sentarse` → `abrir_portatil` → `escribir` | 2·4 → 9·10 | 3/4 | mientras el modelo piensa |
+| `triste` | `sentarse` → `triste` | 9·6 | 3/4 | emoción `triste` |
+| `pinchada` | `sentarse` → `pinchada` | 9·12 | 3/4 | clic sobre ella |
+| `acariciada` | `sentarse` → `acariciada` | 9·8 | 3/4 | pasar el ratón sobre su cabeza |
+| `hablar` | `hablar` | 9·8 | frente | emoción `neutral` |
+| `feliz` | `feliz` | 9·10 | frente | emoción `feliz` |
+| `enamorada` | `enamorada` | 9·8 | frente | emoción `feliz` (variante) |
+| `emocionada` | `emocionada` | 9·12 | frente | emoción `emocionada` |
+| `traviesa` | `traviesa` | 9·10 | frente | emoción `traviesa` |
+| `curiosa` | `curiosa` | 9·8 | frente | emoción `curiosa` |
+| `pensativa` | `pensativa` | 9·6 | frente | emoción `pensativa` |
+| `sorprendida` | `sorprendida` | 9·12 | frente | emoción `sorprendida` |
+| `molesta` | `molesta` | 9·10 | frente | emoción `molesta` |
+| `seria` | `seria` | 5·5 | frente | emoción `seria` |
+| `saludar` | `saludar` | 9·10 | frente | al conectar; intro en pixel |
 
-## Ratón
+**Gestos del modelo** (sobre las poses de pie, mientras dura el gesto): `asentir`, `ladear` (`ladear_cabeza`),
+`guino`, `saltar`, `senalar` y `cruzar_brazos`.
 
-La ventana deja pasar los clics al escritorio salvo justo sobre Capri, o mientras la barra de entrada está abierta. Rust sondea el cursor a unos 30 Hz contra la caja de sus píxeles opacos (`set_hitbox`).
+**Sin estado todavía:** `peligro` (su transformación con ojos múltiples, pensada para confirmar acciones peligrosas;
+los ojos extra los pinta `scripts/import_chibi.py`), `de_pie_idle` y `hablar_sentada`.
 
-## Cómo añadir un estado
+## Regenerar y añadir
 
-1. Añade una entrada en `BEHAVIORS` (`avatar/src/pet/behaviors.ts`) con una función `pose(t, ctx)`. Parte de `standing`, `sitEdge` o `crossLegged` y coloca las manos con `hands()`, que usa IK.
-2. Si hacen falta ojos, bocas o efectos nuevos, dibújalos como sellos en `stamps.ts` (una letra por píxel) o como efecto en `draw.ts`.
-3. Decide cuándo se activa en `choose()` o en `EMOTION_BEHAVIOR`.
-4. Regenera esta hoja: con `npx vite` corriendo en `avatar/`, ejecuta `uv run --project backend python scripts/export_sprite_sheet.py` desde la raíz.
+- **La hoja de arriba:** `uv run --project backend python scripts/build_sprite_sheet.py` (desde la raíz).
+- **Reimportar todos los clips desde PixelLab:** `scripts/import_chibi.py` lee `scripts/chibi_manifest.json` (cada clip:
+  personaje, animación, fotogramas y los que se conservan), recorta el banco del portátil de `escribir`, pinta los ojos
+  de `peligro` y crea `abrir_portatil`. Imprime los fotogramas para `clips.ts`.
+- **Un clip nuevo:** añádelo al manifiesto y a `CLIPS` (fotogramas y fps), y a `SPRITE_FOR` si es de un estado.
+- **Revisar la mascota:** con `npx vite` en `avatar/`, abre `http://localhost:1420/preview.html` (`?live` animado).
 
-## Clips de PixelLab (arte definitivo, en curso)
-
-Las animaciones dibujadas con PixelLab (`avatar/assets/pet/anim/<clip>/<clip>_NN.png`) sustituyen a la mascota por código en los estados que ya las tienen:
-- `avatar/src/pet/clips.ts` declara los clips (`CLIPS`: fotogramas, fps y si van en ida y vuelta) y a qué estado pertenecen (`SPRITE_FOR`).
-- Al entrar en un estado con clips se reproduce su clip de entrada y luego el bucle. Al salir, el de entrada al revés; las reacciones al ratón cambian al instante.
-- Los fotogramas se muestran a ×2, con los pies de su primer fotograma en la misma línea de suelo que la mascota por código. La zona de clic sale de los píxeles de cada fotograma.
-
-Todos los estados tienen ya clip de PixelLab; la mascota por código solo se ve si falta alguno. En la tabla, `a → b` indica que se reproduce `a` una vez y después `b` en bucle (ida y vuelta).
-
-| Estado | Clips | Vista |
-|---|---|---|
-| `sentada` (reposo) | `sentarse` → `sentada_idle` | 3/4 |
-| `estirarse`, `meditar`, `triste`, `pinchada`, `acariciada` | `sentarse` → el clip del mismo nombre | 3/4 |
-| `dormir` | `sentarse` → `dormirse` → `dormir` | 3/4 |
-| `escribir` (pensando) | `sentarse` → `abrir_portatil` → `escribir` | 3/4 |
-| `hablar`, `feliz`, `enamorada`, `emocionada`, `traviesa`, `curiosa`, `pensativa`, `sorprendida`, `molesta`, `seria`, `saludar` | el clip del mismo nombre | frente |
-| Gestos `asentir`, `ladear_cabeza`, `guino`, `saltar`, `senalar`, `cruzar_brazos` | `asentir`, `ladear`, `guino`, `saltar`, `senalar`, `cruzar_brazos`, sobre las poses de pie | frente |
-| Sin uso aún | `peligro` (transformación hacia ojos múltiples, para confirmar acciones en la fase 5), `de_pie_idle`, `hablar_sentada` | frente / 3/4 |
-
-Al cambiar de estado se deshacen al revés las transiciones que el nuevo no comparte y se reproducen las que añade. Por ejemplo, de escribir a hablar se cierra el portátil y se levanta, y de sentada a escribir solo se abre el portátil. Las reacciones al ratón no esperan transiciones.
-
-**Para añadir un clip:**
-1. Descárgalo con `scripts/fetch_pet_anim.py <clip> <urls…>`.
-2. Añádelo a `CLIPS` y a `SPRITE_FOR`.
-
-El plan completo y su estado están en `docs/arte-pixellab.md`.
+El plan de arte y su historia están en [arte-pixellab.md](arte-pixellab.md).

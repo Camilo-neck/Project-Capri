@@ -4,3 +4,16 @@ __pycache__/
 assets/inspo/
 dist/
 installer/payload/
+
+# Claude Code and its tooling: local only, never in git
+CLAUDE.md
+PLAN.md
+AGENTS.md
+.claude/
+.superpowers/
+.mcp.json
+docs/superpowers/
+*.local.*
+.ruff_cache/
+node_modules/
+target/

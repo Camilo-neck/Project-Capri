@@ -23,7 +23,7 @@ calculadora = "calc.exe"
 # tipo = "cancion"          # una playlist o un álbum solo se abren: hay que darle play
 
 # Scripts que puede ejecutar por su nombre (siempre con confirmación, sin argumentos).
-# (Los archivos y comandos ya no necesitan lista: ver "niveles" en CLAUDE.md.)
+# (Los archivos y comandos ya no necesitan lista: ver "Seguridad" en docs/arquitectura.md.)
 # nombre = "ruta al .ps1, .bat, .cmd, .py o .exe"
 [scripts]
 

@@ -146,4 +146,4 @@ def test_an_edge_voice_falls_back_to_dora_without_internet(monkeypatch, tmp_path
     monkeypatch.setattr(voices.speech, "kokoro", lambda folder, styles: made.append(("kokoro", styles)) or (lambda *a: (None, 24000)))
     synth = voices.make("aria", str(tmp_path))
     assert synth("hola", "es", 1.0) == (None, 24000)  # edge failed: Dora said it
-    assert made[0] == ("edge", {"es": "es-MX-DaliaNeural", "en": "en-US-AriaNeural"}, 40)  # pitched up toward hers
+    assert made[0] == ("edge", {"es": "es-MX-DaliaNeural", "en": "en-US-AriaNeural"}, 12)  # pitched up toward hers

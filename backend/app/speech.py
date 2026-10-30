@@ -181,7 +181,7 @@ def piper(folder: str, models: dict[str, str]) -> Callable[[str, str, float], tu
 
 # Her recording's long-term spectrum minus a plain Edge voice's (measured on 65 s of her and 40 s of Aria, scripts in
 # the history): more body under 200 Hz and more air above 5 kHz. Hz -> dB, applied smoothly in between.
-HOLO_EQ = ((60, 5.0), (150, 6.0), (300, 2.0), (500, 2.0), (1000, 1.0), (1600, 0.0), (3000, 0.0), (4000, 2.5), (6000, 5.0), (9000, 7.0), (12000, 7.0))
+HOLO_EQ = ((60, 5.0), (150, 6.0), (300, 3.0), (500, 2.5), (1000, 1.0), (1600, 0.0), (3000, 0.0), (4000, 1.0), (6000, 2.0), (9000, 3.0), (12000, 3.0))
 
 
 def _eq(x: np.ndarray, rate: int) -> np.ndarray:
@@ -202,7 +202,7 @@ def holo(audio: np.ndarray, rate: int) -> np.ndarray:
     n = len(x)
     pad = _eq(np.concatenate([x, np.zeros(int(0.6 * rate), dtype="float32")]), rate)
     out = pad.copy()
-    for delay, gain in ((0.11, 0.28), (0.23, 0.16)):  # echo
+    for delay, gain in ((0.11, 0.13), (0.23, 0.07)):  # echo
         d = int(delay * rate)
         out[d:] += gain * pad[:-d]
     t = np.arange(len(pad)) / rate

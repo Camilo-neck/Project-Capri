@@ -8,10 +8,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import launch, pcsense, settings, voices
+from app import firstrun, launch, pcsense, settings, voices
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
+                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -25,7 +25,7 @@ ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri:/
 async def model_info(error: str = "") -> ModelInfo:
     s = settings.load()
     return ModelInfo(proveedor=s.model_provider, nombre=s.model_name, opciones=await providers.options(),
-                     claves={p: bool(providers.key(p)) for p in providers.ENV}, error=error)
+                     claves={p: bool(providers.key(p)) for p in providers.ENV}, nombres=providers.NAMES, error=error)
 
 
 def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, voice: Voice | None = None,
@@ -254,6 +254,23 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         task = asyncio.create_task(download_voice(vid))
                         tasks.add(task)
                         task.add_done_callback(tasks.discard)
+                    case SetupGet():
+                        pc = await asyncio.to_thread(firstrun.detect)
+                        s = settings.load()
+                        ready = [o.id for o in voices.options(s.tts_dir, (0, pc.vram_mb) if pc.gpu else None) if o.descargada and o.disponible]
+                        prov, model, voz, why = firstrun.recommend(pc, ready)
+                        await send(SetupInfo(**vars(pc), proveedor=prov, modelo=model, voz=voz, por_que=why))
+                    case SetupSave(campo=campo, valor=valor):
+                        try:
+                            if campo == "calendario":
+                                settings.save_calendar_url(valor)
+                            else:
+                                settings.save_spotify_client_id(valor)
+                            await send(SetupSaved(campo=campo, ok=True))
+                        except ValueError as e:
+                            await send(SetupSaved(campo=campo, ok=False, error=str(e)))
+                    case SetupDone():
+                        firstrun.finish()
                     case RoutinesGet():
                         await send(Routines(rutinas=[RoutineInfo(nombre=n, frases=list(r.phrases), apps=list(r.apps), musica=r.music)
                                                      for n, r in settings.load().routines.items()]))

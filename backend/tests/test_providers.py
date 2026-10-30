@@ -132,3 +132,101 @@ def test_the_local_model_runs_at_a_steady_temperature(monkeypatch):
 
     asyncio.run(run())
     assert got["options"]["temperature"] == config.TEMPERATURE < 1
+
+
+class FakeOpenAI:
+    """openai.AsyncOpenAI: records how it was made and what it was asked; streams one reply."""
+
+    made: list = []
+    asked: list = []
+    refuse_json = False
+
+    def __init__(self, api_key=None, base_url=None):
+        FakeOpenAI.made.append((api_key, base_url))
+        outer = self
+
+        class Completions:
+            async def create(self, **kw):
+                FakeOpenAI.asked.append(kw)
+                if "response_format" in kw and FakeOpenAI.refuse_json:
+                    import httpx
+                    import openai
+
+                    raise openai.BadRequestError("response_format not supported", response=httpx.Response(400, request=httpx.Request("POST", "http://x")), body=None)
+
+                async def stream():
+                    from types import SimpleNamespace as N
+
+                    yield N(choices=[N(delta=N(content='{"emocion":"feliz","gesto":"ninguno","accion":null,"texto":"hola"}'))], usage=None)
+                    yield N(choices=[], usage=N(total_tokens=42))
+
+                return stream()
+
+        class Models:
+            def list(self):
+                async def ids():
+                    from types import SimpleNamespace as N
+
+                    for i in ("models/gemini-2.5-flash", "models/text-embedding-004", "models/gemini-2.5-pro"):
+                        yield N(id=i)
+
+                return ids()
+
+        self.chat = type("Chat", (), {"completions": Completions()})()
+        self.models = Models()
+
+
+def run_brain(monkeypatch, provider, model):
+    import openai
+
+    from app import settings
+    from app.llm import providers
+
+    FakeOpenAI.made, FakeOpenAI.asked = [], []
+    monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
+    monkeypatch.setattr(settings, "load", lambda: settings.Settings(model_provider=provider, model_name=model))
+    monkeypatch.setattr(providers, "key", lambda p: f"key-{p}")
+
+    async def go():
+        return [p async for p in providers.generate([{"role": "user", "content": "hola"}])]
+
+    return asyncio.run(go())
+
+
+def test_more_cloud_brains_through_their_openai_compatible_address(monkeypatch):
+    from app.llm import providers
+
+    for p in ("gemini", "openrouter", "groq", "mistral", "deepseek", "xai"):
+        out = run_brain(monkeypatch, p, "some-model")
+        assert out[-1] == 42 and "hola" in out[0]
+        assert FakeOpenAI.made == [(f"key-{p}", providers.COMPATIBLE[p].url)]
+        assert FakeOpenAI.asked[0]["model"] == "some-model"
+    run_brain(monkeypatch, "openai", "gpt-5")
+    assert FakeOpenAI.made == [("key-openai", None)]  # OpenAI's own address
+
+
+def test_a_provider_without_json_mode_is_asked_again_without_it(monkeypatch):
+    FakeOpenAI.refuse_json = True
+    try:
+        out = run_brain(monkeypatch, "gemini", "gemini-2.5-flash")
+    finally:
+        FakeOpenAI.refuse_json = False
+    assert "hola" in out[0] and len(FakeOpenAI.asked) == 2 and "response_format" not in FakeOpenAI.asked[1]
+
+
+def test_each_keyed_provider_lists_its_chat_models(monkeypatch):
+    import openai
+
+    from app.llm import providers
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
+    monkeypatch.setattr(providers, "key", lambda p: "k" if p == "gemini" else "")
+
+    async def no_ollama():
+        raise ConnectionError
+
+    monkeypatch.setattr(providers.ollama, "list", no_ollama)
+    out = asyncio.run(providers.options())
+    assert out["gemini"] == ["gemini-2.5-pro", "gemini-2.5-flash"]  # no embeddings, no "models/" prefix
+    assert out["groq"] == [] and set(providers.ENV) >= {"anthropic", "openai", "gemini", "openrouter", "groq", "mistral", "deepseek", "xai"}
+    assert providers.NAMES["xai"] == "Grok" and providers.NAMES["gemini"] == "Gemini"

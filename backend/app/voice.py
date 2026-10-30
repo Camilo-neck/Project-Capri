@@ -209,9 +209,21 @@ class SileroVad:
         return float(out[0])
 
 
+CPU_MODEL = "small"  # without an NVIDIA GPU: int8 on the CPU, about 1 s a sentence, still good Spanish
+
+
+def whisper_setup(device: str, model: str, nvidia: bool) -> tuple[str, str, str]:
+    """(device, model, compute type) for Whisper: the GPU when there's an NVIDIA one ("auto"), else the CPU with a
+    smaller model unless he picked one himself."""
+    if device == "cuda" or (device == "auto" and nvidia):
+        return "cuda", model, "int8_float16"
+    return "cpu", CPU_MODEL if model == "turbo" else model, "int8"
+
+
 class Voice:
     def __init__(self, model: str = "turbo", model_dir: str = "", silence_ms: int = 900, wake: bool = True, autostart: bool = False,
-                 log_path: Path | None = None, names: Sequence[str] = (spoken.NAME,)):
+                 log_path: Path | None = None, names: Sequence[str] = (spoken.NAME,), device: str = "auto"):
+        self.device = device
         self.autostart = autostart
         self.names = tuple(names)
         self.voice_log = VoiceLog(log_path) if log_path else None
@@ -323,12 +335,23 @@ class Voice:
 
     def _load(self):
         if self._whisper is None:
-            cuda_dlls()
             from faster_whisper import WhisperModel
 
+            from app import voices
+
             t = time.perf_counter()
-            self._whisper = WhisperModel(self.model_name, device="cuda", compute_type="int8_float16", download_root=self.model_dir)
-            log.info("voice: %s loaded in %.1f s", self.model_name, time.perf_counter() - t)
+            device, name, compute = whisper_setup(self.device, self.model_name, voices.gpu() is not None)
+            try:
+                if device == "cuda":
+                    cuda_dlls()
+                self._whisper = WhisperModel(name, device=device, compute_type=compute, download_root=self.model_dir)
+            except Exception:
+                if device != "cuda":
+                    raise
+                log.exception("voice: Whisper didn't load on the GPU, on the CPU then")
+                device, name, compute = whisper_setup("cpu", self.model_name, False)
+                self._whisper = WhisperModel(name, device=device, compute_type=compute, download_root=self.model_dir)
+            log.info("voice: %s loaded on the %s in %.1f s", name, device, time.perf_counter() - t)
         return self._whisper
 
     def transcribe(self, audio: np.ndarray) -> tuple[str, str] | None:

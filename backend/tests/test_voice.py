@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import pytest
 
 from app.voice import CHUNK, Gate, Segmenter, junk, level
 
@@ -314,3 +315,38 @@ def test_turning_the_voice_off_frees_whisper(monkeypatch):
     monkeypatch.setattr(vo, "_load", broken)
     vo._run()
     assert vo._whisper is None and vo.state == "off"
+
+
+@pytest.mark.parametrize("device, model, nvidia, expected", [
+    ("auto", "turbo", True, ("cuda", "turbo", "int8_float16")),
+    ("auto", "turbo", False, ("cpu", "small", "int8")),  # no NVIDIA: a model a CPU keeps up with
+    ("cpu", "turbo", True, ("cpu", "small", "int8")),
+    ("cpu", "medium", False, ("cpu", "medium", "int8")),  # a model he chose stays
+    ("cuda", "turbo", False, ("cuda", "turbo", "int8_float16")),
+])
+def test_whisper_runs_where_this_pc_can(device, model, nvidia, expected):
+    from app.voice import whisper_setup
+
+    assert whisper_setup(device, model, nvidia) == expected
+
+
+def test_whisper_falls_back_to_the_cpu_if_cuda_fails(monkeypatch):
+    import faster_whisper
+
+    from app import voice as vmod
+    from app import voices
+
+    made = []
+
+    class Model:
+        def __init__(self, name, device, compute_type, download_root=None):
+            made.append((name, device, compute_type))
+            if device == "cuda":
+                raise RuntimeError("CUDA driver not found")
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", Model)
+    monkeypatch.setattr(voices, "gpu", lambda: (1000, 8000))
+    monkeypatch.setattr(vmod, "cuda_dlls", lambda: None)
+    vo = vmod.Voice()
+    assert vo._load() is not None
+    assert made == [("turbo", "cuda", "int8_float16"), ("small", "cpu", "int8")]

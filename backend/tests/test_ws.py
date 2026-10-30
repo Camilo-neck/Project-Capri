@@ -155,7 +155,7 @@ def test_settings_panel_picks_her_brain(client, monkeypatch, tmp_path):
     with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
         ws.send_json({"type": "model_get"})
         info = ws.receive_json()
-        assert info["type"] == "model_info" and info["proveedor"] == "ollama" and info["claves"] == {"anthropic": False, "openai": False}
+        assert info["type"] == "model_info" and info["proveedor"] == "ollama" and info["claves"] == dict.fromkeys(providers.ENV, False) and info["nombres"]["gemini"] == "Gemini"
         ws.send_json({"type": "model_set", "proveedor": "ollama", "nombre": "gemma3:12b"})
         info = ws.receive_json()
         assert info["nombre"] == "gemma3:12b" and unloaded == ["qwen3-vl:8b-instruct"]  # the old one leaves the GPU
@@ -367,6 +367,11 @@ def test_the_panel_picks_and_downloads_her_voice(monkeypatch, tmp_path):
     from app import settings, voices
 
     monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    tts = tmp_path / "Capri" / "modelos" / "tts"
+    tts.mkdir(parents=True)
+    for f in ("es_AR-daniela-high.onnx", "es_AR-daniela-high.onnx.json", "en_US-amy-medium.onnx", "en_US-amy-medium.onnx.json"):
+        (tts / f).write_bytes(b"x")
     monkeypatch.setattr(voices, "gpu", lambda: None)
     monkeypatch.setattr(voices, "make", lambda v, folder: f"synth:{v}")
 
@@ -391,3 +396,31 @@ def test_the_panel_picks_and_downloads_her_voice(monkeypatch, tmp_path):
         assert [m["type"] for m in progress] == ["voice_progress", "voice_progress", "voice_info"]
         assert progress[1] == {"type": "voice_progress", "voz": "claude_mx", "completado": 100, "total": 100, "error": ""}
     assert settings.load().tts_voice == "daniela"
+
+
+def test_the_wizard_gets_this_pc_saves_his_choices_and_finishes(client, monkeypatch, tmp_path):
+    from app import firstrun, settings
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.setattr(firstrun, "detect", lambda: firstrun.Pc("RTX 4070", 12282, 32.0, 200.0, True, False, False))
+    settings.load()
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "setup_get"})
+        got = ws.receive_json()
+        assert got["type"] == "setup_info" and got["gpu"] == "RTX 4070" and (got["proveedor"], got["modelo"]) == ("ollama", "gemma3:12b")
+        ws.send_json({"type": "setup_save", "campo": "calendario", "valor": "webcal://p01-caldav.icloud.com/published/2/abc"})
+        assert ws.receive_json() == {"type": "setup_saved", "campo": "calendario", "ok": True, "error": ""}
+        ws.send_json({"type": "setup_save", "campo": "calendario", "valor": "no es nada"})
+        bad = ws.receive_json()
+        assert not bad["ok"] and bad["error"]
+        ws.send_json({"type": "setup_save", "campo": "spotify", "valor": " 0123456789abcdef0123456789abcdef "})
+        assert ws.receive_json()["ok"]
+        ws.send_json({"type": "setup_save", "campo": "spotify", "valor": "no-un-id"})
+        assert not ws.receive_json()["ok"]
+        assert not firstrun.done()
+        ws.send_json({"type": "setup_done"})
+        ws.send_json({"type": "setup_get"})  # answered after setup_done ran
+        ws.receive_json()
+    s = settings.load()
+    assert s.calendar_url == "https://p01-caldav.icloud.com/published/2/abc" and s.spotify_client_id == "0123456789abcdef0123456789abcdef"
+    assert firstrun.done()

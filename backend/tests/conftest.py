@@ -6,6 +6,9 @@ def isolated_config(tmp_path, monkeypatch):
     """Tests never read or write the user's real %APPDATA%\\Capri (config and audit log)."""
     path = tmp_path / "capri" / "config.toml"
     monkeypatch.setenv("CAPRI_CONFIG", str(path))
+    from app import settings
+
+    monkeypatch.setattr(settings, "LEGACY_TTS", tmp_path / "no-legacy-tts")  # nor this PC's old voices folder
     return path
 
 

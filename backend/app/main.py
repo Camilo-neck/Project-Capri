@@ -51,7 +51,8 @@ def main() -> None:
     print(f"ws://{HOST}:{PORT}/ws?token={token}", flush=True)
     cfg = settings.load()
     voice = None if args.demo else Voice(cfg.voice_model, cfg.voice_dir, cfg.voice_silence_ms, cfg.voice_wake, cfg.voice_on,
-                                         log_path=settings.path().parent / "voz.log" if cfg.voice_log else None, names=cfg.voice_names)
+                                         log_path=settings.path().parent / "voz.log" if cfg.voice_log else None, names=cfg.voice_names,
+                                         device=cfg.voice_device)
     speaker = None
     if voice:
         speaker = Speaker(voices.make(cfg.tts_voice, cfg.tts_dir), voice=cfg.tts_voice)

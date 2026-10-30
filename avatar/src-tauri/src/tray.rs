@@ -14,6 +14,7 @@ use crate::{ollama, user_config};
 
 const PANEL: (f64, f64) = (340.0, 660.0); // in tabs: a longer one scrolls inside
 const QUICK: (f64, f64) = (268.0, 344.0); // her quick menu (right click on her), `quick.html`
+const SETUP: (f64, f64) = (520.0, 640.0); // the first-run wizard, `setup.html`
 
 /// The toggles by id, so the panel shows the real state when it opens and when a mode changes by other means.
 pub struct States(Mutex<HashMap<&'static str, bool>>);
@@ -51,6 +52,7 @@ pub fn tray_action(id: String, app: AppHandle) {
                 eprintln!("could not save {id}: {e}");
             }
         }
+        "setup" => show_setup(&app),
         "quit" | "quit-ollama" => {
             // she vanishes first, but a stuck page must not keep her from closing
             let with_ollama = id == "quit-ollama";
@@ -106,6 +108,49 @@ fn place(cursor: (i32, i32), size: (i32, i32), area: (i32, i32, i32, i32)) -> (i
     let x = if cursor.0 + size.0 > ax + aw { cursor.0 - size.0 } else { cursor.0 };
     let y = if cursor.1 + size.1 > ay + ah { cursor.1 - size.1 } else { cursor.1 };
     (x.clamp(ax, (ax + aw - size.0).max(ax)), y.clamp(ay, (ay + ah - size.1).max(ay)))
+}
+
+/// The first-run wizard, in the middle of the screen (on its own on a fresh install; from the panel otherwise).
+pub fn show_setup(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("setup") else { return };
+    let _ = w.center();
+    let _ = w.emit("setup-open", ());
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
+/// The pages the wizard may open in his browser (getting Ollama, a cloud key, a Spotify app): these and nothing else.
+const WEB: [&str; 10] = [
+    "https://ollama.com/download",
+    "https://console.anthropic.com/settings/keys",
+    "https://platform.openai.com/api-keys",
+    "https://aistudio.google.com/apikey",
+    "https://openrouter.ai/keys",
+    "https://console.groq.com/keys",
+    "https://console.mistral.ai/api-keys",
+    "https://platform.deepseek.com/api_keys",
+    "https://console.x.ai",
+    "https://developer.spotify.com/dashboard",
+];
+
+fn allowed(url: &str) -> bool {
+    WEB.contains(&url)
+}
+
+#[tauri::command]
+pub fn open_web(url: String) -> Result<(), String> {
+    if !allowed(&url) {
+        return Err(format!("{url} no está entre las páginas del asistente"));
+    }
+    std::process::Command::new("explorer").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// The wizard is over: its window goes.
+#[tauri::command]
+pub fn setup_close(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("setup") {
+        let _ = w.hide();
+    }
 }
 
 /// A right click on her: her quick menu at the pointer.
@@ -188,6 +233,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         }
     });
 
+    WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("setup.html".into()))
+        .title("Capri · primer arranque")
+        .inner_size(SETUP.0, SETUP.1)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .visible(false)
+        .build()?;
+    if !user_config::load().inicio.listo {
+        show_setup(app);
+    }
+
     TrayIconBuilder::with_id("capri")
         .icon(app.default_window_icon().expect("the app has an icon").clone())
         .tooltip("Capri")
@@ -206,7 +265,16 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::place;
+    use super::{allowed, place};
+
+    #[test]
+    fn the_wizard_opens_only_its_own_pages() {
+        assert!(allowed("https://ollama.com/download"));
+        assert!(allowed("https://developer.spotify.com/dashboard"));
+        assert!(!allowed("https://ollama.com/download?x=1"));
+        assert!(!allowed("file:///C:/Windows/System32/calc.exe"));
+        assert!(!allowed("https://evil.example"));
+    }
 
     const AREA: (i32, i32, i32, i32) = (0, 0, 1920, 1032);
 

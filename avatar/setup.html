@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Capri · primer arranque</title>
+    <script type="module" src="/src/setup.ts"></script>
+  </head>
+  <body>
+    <main class="panel wizard">
+      <header>
+        <img id="face" alt="" />
+        <div>
+          <h1>Capri <span class="slash">//</span> <span class="sub">primer arranque</span></h1>
+          <p id="step-of">paso 1 de 7</p>
+        </div>
+      </header>
+
+      <ol class="rail" id="rail" aria-label="Pasos">
+        <li>Hola</li><li>Tu PC</li><li>Cerebro</li><li>Voz</li><li>Agenda</li><li>Spotify</li><li>Listo</li>
+      </ol>
+
+      <div class="tab steps" id="steps">
+        <section class="step" data-step="0">
+          <h2>Hola</h2>
+          <p class="big">Soy Capri. Vivo en tu PC: te hago compañía, te ayudo con tus cosas y miro tu pantalla solo cuando me lo pides.</p>
+          <p>En un minuto me dejas lista para este PC: quién piensa por mí, mi voz, tu calendario y tu música. Todo se puede cambiar luego con un clic derecho sobre mí.</p>
+        </section>
+
+        <section class="step" data-step="1" hidden>
+          <h2>Tu PC</h2>
+          <div id="pc" class="checks"><p class="note">Mirando tu PC…</p></div>
+          <button class="mini wide" id="get-ollama" data-web="https://ollama.com/download" hidden>Descargar Ollama (para un cerebro en tu PC)</button>
+          <small class="note">Con Ollama ya instalado, cierra y vuelve a abrir Capri para que lo encuentre.</small>
+        </section>
+
+        <section class="step" data-step="2" hidden>
+          <h2>Quién piensa por ella</h2>
+          <div id="advice" class="advice"></div>
+          <div class="seg seg3" id="brain-kind">
+            <button data-kind="ollama">Local</button>
+            <button data-kind="claude_code">Mi Claude</button>
+            <button data-kind="nube">Nube</button>
+          </div>
+          <div id="brain-local" class="sub-step">
+            <select id="local-model" class="field-input" aria-label="Modelo local"></select>
+            <button class="mini wide" id="pull-rec" hidden></button>
+            <div id="pull-bar" class="bar" hidden><i></i></div>
+          </div>
+          <div id="brain-claude" class="sub-step" hidden>
+            <p class="note" id="claude-note"></p>
+          </div>
+          <div id="brain-cloud" class="sub-step" hidden>
+            <select id="cloud" class="field-input" aria-label="Servicio"></select>
+            <button class="mini wide" id="get-key" data-web="">Conseguir una clave</button>
+            <div class="field">
+              <input id="key" class="field-input" type="password" autocomplete="off" spellcheck="false" placeholder="Pega tu clave de API" />
+              <button id="key-save" class="mini">Guardar</button>
+            </div>
+            <select id="cloud-model" class="field-input" aria-label="Modelo"></select>
+          </div>
+          <small id="brain-note" class="note"></small>
+        </section>
+
+        <section class="step" data-step="3" hidden>
+          <h2>Su voz</h2>
+          <p class="note" id="voice-advice"></p>
+          <div id="voices" class="voices"></div>
+          <small class="note">Tócala para oírla y quedártela. Su voz clonada se instala con el instalador.</small>
+        </section>
+
+        <section class="step" data-step="4" hidden>
+          <h2>Tu calendario <span class="opt">opcional</span></h2>
+          <p>Para avisarte antes de tus eventos y decirte qué tienes hoy. Pega su dirección iCal:</p>
+          <ul class="how">
+            <li><b>Google:</b> calendar.google.com › Configuración › tu calendario › «Dirección secreta en formato iCal».</li>
+            <li><b>Outlook.com:</b> Configuración › Calendario › Calendarios compartidos › Publicar › el vínculo ICS.</li>
+            <li><b>iCloud:</b> comparte el calendario como público y copia el enlace (webcal://).</li>
+            <li>O escribe <b>outlook</b> (Outlook para Windows) o la ruta de un archivo .ics.</li>
+          </ul>
+          <div class="field">
+            <input id="cal" class="field-input" spellcheck="false" placeholder="https://… o webcal://…" />
+            <button id="cal-save" class="mini">Guardar</button>
+          </div>
+          <small id="cal-note" class="note">Sin calendario, sus recordatorios y las alarmas de Windows siguen funcionando.</small>
+        </section>
+
+        <section class="step" data-step="5" hidden>
+          <h2>Tu música <span class="opt">opcional</span></h2>
+          <p>Para que ponga la música que le pidas en Spotify, necesita tu propia app de Spotify (gratis, dos minutos):</p>
+          <ol class="how">
+            <li><button class="link" data-web="https://developer.spotify.com/dashboard">Abre el panel de desarrollador de Spotify</button> e inicia sesión.</li>
+            <li>«Create app»: de nombre <b>Capri</b>, marca <b>Web API</b> y en Redirect URI pon<br />
+              <code id="redirect">http://127.0.0.1:5173/callback</code> <button class="link" id="copy-redirect">copiar</button></li>
+            <li>Copia su <b>Client ID</b> y pégalo aquí:</li>
+          </ol>
+          <div class="field">
+            <input id="spotify" class="field-input" spellcheck="false" placeholder="Client ID (32 letras y números)" />
+            <button id="spotify-save" class="mini">Guardar</button>
+          </div>
+          <small id="spotify-note" class="note">Luego dile «conecta Spotify» y acepta en tu navegador.</small>
+        </section>
+
+        <section class="step" data-step="6" hidden>
+          <h2>Lista</h2>
+          <p class="big">¡Ya está! Algunas cosas para empezar:</p>
+          <ul class="how">
+            <li><b>Clic derecho sobre mí:</b> mi voz, mi cerebro, mi aspecto y los modos.</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Espacio</kbd> para escribirme; con la voz activa, llámame: «Capri, …».</li>
+            <li><b>/ayuda</b> en mi barra: todos mis comandos.</li>
+            <li>El icono junto al reloj: mis ajustes completos.</li>
+          </ul>
+        </section>
+      </div>
+
+      <nav class="wiz-nav">
+        <button class="mini" id="back">Atrás</button>
+        <button class="mini go" id="next">Empezar</button>
+      </nav>
+    </main>
+  </body>
+</html>

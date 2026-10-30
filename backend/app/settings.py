@@ -42,20 +42,21 @@ class Settings:
     quiet: tuple[time, time] | None = (time(23), time(8))  # no chatter from..to (may wrap midnight)
     spotify_client_id: str = ""
     spotify_redirect: str = SPOTIFY_REDIRECT
-    model_provider: str = "ollama"  # "ollama", "anthropic" (Claude) or "openai" (GPT)
+    model_provider: str = "ollama"  # one of providers.PROVIDERS: "ollama", "claude_code", "anthropic", "openai", "gemini"...
     model_name: str = "qwen3-vl:8b-instruct"
     model_effort: str = "low"  # Claude: low | medium | high (more is slower)
     voice_on: bool = True  # the microphone opens at start
     pc_react: bool = True  # she reacts to the PC: processor, battery, network, USB, devices, games ([avatar] reaccionar_pc)
     voice_model: str = "turbo"  # faster-whisper model
-    voice_dir: str = ""  # where the model is downloaded ("" = the Hugging Face cache)
+    voice_dir: str = ""  # where Whisper is downloaded (models_dir("whisper") unless he set one)
+    voice_device: str = "auto"  # Whisper on "cuda", "cpu", or "auto" (the GPU if there's an NVIDIA one)
     voice_silence_ms: int = 900  # silence that ends a sentence (600 cut "pon... algo de Bad Bunny" in two)
     voice_wake: bool = True  # only what starts with "hey Capri" counts
     voice_names: tuple[str, ...] = ("capri",)  # what she answers to (compared loosely: "Kapri", "Capry")
     voice_log: bool = True  # voz.log: what she heard that was meant for her
     speak: bool = True  # with the voice on, she answers out loud
     tts_voice: str = "capri"  # one of voices.CATALOG ([voz] voz)
-    tts_dir: str = r"D:\capri-models\tts"  # Kokoro's model (and tuned voices)
+    tts_dir: str = ""  # her voices (models_dir("tts") unless he set one)
     tts_speed: float = 1.0
     tts_robot: float = 0.0  # her metallic touch, 0-1
     tts_glitch: float = 0.0  # how often her voice stutters, 0-1
@@ -77,6 +78,14 @@ def parse_quiet(text: str) -> tuple[time, time] | None:
 
 def path() -> Path:
     return Path(os.environ.get("CAPRI_CONFIG", DIR / "config.toml"))
+
+
+LEGACY_TTS = Path(r"D:\capri-models\tts")  # where her voices went before models_dir: a config that never set it keeps it
+
+
+def models_dir(kind: str) -> str:
+    """Where her models go unless he chose a folder: this user's %LOCALAPPDATA%\Capri\modelos\<kind>."""
+    return str(Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Capri" / "modelos" / kind)
 
 
 def load() -> Settings:
@@ -108,14 +117,15 @@ def load() -> Settings:
         voice_on=bool(data.get("voz", {}).get("activa", True)),
         pc_react=bool(data.get("avatar", {}).get("reaccionar_pc", True)),
         voice_model=data.get("voz", {}).get("modelo", "turbo"),
-        voice_dir=data.get("voz", {}).get("carpeta_modelo", ""),
+        voice_dir=data.get("voz", {}).get("carpeta_modelo", "") or models_dir("whisper"),
+        voice_device=v if (v := str(data.get("voz", {}).get("dispositivo", "auto"))) in ("auto", "cuda", "cpu") else "auto",
         voice_silence_ms=int(data.get("voz", {}).get("silencio_ms", 900)),
         voice_wake=bool(data.get("voz", {}).get("llamada", True)),
         voice_names=tuple(n.lower() for n in data.get("voz", {}).get("nombres", ["capri"]) if n.strip()) or ("capri",),
         voice_log=bool(data.get("voz", {}).get("registro", True)),
         speak=bool(data.get("voz", {}).get("hablar", True)),
         tts_voice=_voice(data.get("voz", {})),
-        tts_dir=str(data.get("voz", {}).get("carpeta_tts", r"D:\capri-models\tts")),
+        tts_dir=str(data.get("voz", {}).get("carpeta_tts", "") or (LEGACY_TTS if LEGACY_TTS.is_dir() else models_dir("tts"))),
         tts_speed=min(1.5, max(0.7, float(data.get("voz", {}).get("velocidad", 1.0)))),
         tts_robot=min(1.0, max(0.0, float(data.get("voz", {}).get("robot", 0.0)))),
         tts_glitch=min(1.0, max(0.0, float(data.get("voz", {}).get("glitch", 0.0)))),
@@ -165,6 +175,14 @@ def calendar_source(text: str) -> str:
     if Path(t).suffix.lower() == ".ics" and Path(t).is_file():
         return str(Path(t))
     raise ValueError("no es una dirección iCal (https o webcal), un archivo .ics de este PC ni «outlook»")
+
+
+def save_spotify_client_id(text: str) -> None:
+    """His own Spotify app's Client ID (32 hex characters), from developer.spotify.com."""
+    t = text.strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", t):
+        raise ValueError("un Client ID de Spotify son 32 letras y números (a-f, 0-9)")
+    set_value("spotify", "client_id", t.lower())
 
 
 def save_calendar_url(url: str) -> None:

@@ -74,8 +74,15 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const prov = $("prov"), model = $<HTMLSelectElement>("model"), note = $("brain-note");
 const keyRow = $("key-row"), key = $<HTMLInputElement>("key"), pull = $<HTMLInputElement>("pull");
 const pullRow = $("pull-row"), bar = $("pull-bar");
-const KEYED = ["anthropic", "openai"];
-const KEY_HINT: Record<string, string> = { anthropic: "Clave de API de Anthropic (sk-ant-…)", openai: "Clave de API de OpenAI (sk-…)" };
+const cloud = $<HTMLSelectElement>("cloud");
+// where each cloud brain gives its API keys
+const KEY_WHERE: Record<string, string> = {
+  anthropic: "console.anthropic.com", openai: "platform.openai.com", gemini: "aistudio.google.com (tiene uso gratis)",
+  openrouter: "openrouter.ai/keys (muchos modelos, algunos gratis)", groq: "console.groq.com (rápido, tiene uso gratis)",
+  mistral: "console.mistral.ai", deepseek: "platform.deepseek.com", xai: "console.x.ai",
+};
+const LOCALS = ["ollama", "claude_code"];
+let lastCloud = "anthropic"; // the cloud brain "Nube" shows
 const SUGGESTED = ["gemma3:12b", "qwen3-vl:8b-instruct", "gemma3:4b"];
 $("suggest").innerHTML = SUGGESTED.map((m) => `<option value="${m}">`).join("");
 
@@ -84,9 +91,14 @@ let shown = "ollama"; // the provider whose models are listed (picking one saves
 
 function render(error = info?.error ?? ""): void {
   if (!info) return;
-  prov.querySelectorAll<HTMLElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.prov === shown));
-  const cloud = shown !== "ollama";
-  const keyed = KEYED.includes(shown);
+  const keyedAll = Object.keys(info.claves);
+  if (keyedAll.includes(shown)) lastCloud = shown;
+  const seg = LOCALS.includes(shown) ? shown : "nube";
+  prov.querySelectorAll<HTMLElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.prov === seg));
+  cloud.hidden = seg !== "nube";
+  cloud.replaceChildren(...keyedAll.map((p) => new Option(`${info!.nombres[p] ?? p}${info!.claves[p] ? "" : "  · sin clave"}`, p, false, p === shown)));
+  const isCloud = shown !== "ollama";
+  const keyed = keyedAll.includes(shown);
   const hasKey = !keyed || info.claves[shown];
   const list = info.opciones[shown] ?? [];
   const current = info.proveedor === shown ? info.nombre : "";
@@ -96,18 +108,19 @@ function render(error = info?.error ?? ""): void {
   model.replaceChildren(...(current ? [] : [pick]), ...names.map((m) => new Option(m, m, false, m === current)));
   model.disabled = !hasKey || !list.length;
   keyRow.hidden = !keyed;
-  key.placeholder = info.claves[shown] ? "Clave guardada · pega otra para cambiarla" : KEY_HINT[shown] ?? "";
-  pullRow.hidden = cloud;
-  const away = `Tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ${shown === "openai" ? "OpenAI" : "Anthropic"}.`;
-  note.className = "note" + (error ? " err" : cloud ? " warn" : "");
-  note.textContent = error || {
-    ollama: list.length ? "Todo en tu PC. Los modelos locales gastan GPU: uno a la vez." : "Ollama no responde o no tiene modelos.",
-    claude_code: list.length
-      ? `Usa tu plan de Claude a través de Claude Code, sin clave: gasta de tu cupo y tarda unos segundos más en empezar a hablar. ${away}`
-      : "No encuentro Claude Code (el comando `claude`) en este PC.",
-    anthropic: `API de Anthropic, pago por uso aparte de tu plan. ${away} ${hasKey ? "" : "Pega tu clave para elegir modelo."}`,
-    openai: `${away} ${hasKey ? "" : "Pega tu clave para elegir modelo."}`,
-  }[shown] || "";
+  const name = info.nombres[shown] ?? shown;
+  key.placeholder = info.claves[shown] ? "Clave guardada · pega otra para cambiarla" : `Tu clave de API de ${name}`;
+  pullRow.hidden = isCloud;
+  const company = shown === "claude_code" ? "Anthropic" : name;
+  const away = `Tus mensajes, lo que recuerda de ti y las capturas de /mira se envían a ${company}.`;
+  note.className = "note" + (error ? " err" : isCloud ? " warn" : "");
+  note.textContent = error || (shown === "ollama"
+    ? (list.length ? "Todo en tu PC. Los modelos locales gastan GPU: uno a la vez." : "Ollama no responde o no tiene modelos.")
+    : shown === "claude_code"
+      ? (list.length
+        ? `Usa tu plan de Claude a través de Claude Code, sin clave: gasta de tu cupo y tarda unos segundos más en empezar a hablar. ${away}`
+        : "No encuentro Claude Code (el comando `claude`) en este PC.")
+      : `${name}: pago por uso con tu clave. ${away} ${hasKey ? "" : `Consigue tu clave en ${KEY_WHERE[shown] ?? "su web"} y pégala aquí para elegir modelo.`}`);
 }
 
 // ---- her voice: speed and her digital touches ----
@@ -251,9 +264,13 @@ voiceList.addEventListener("click", (e) => {
 prov.addEventListener("click", (e) => {
   const p = (e.target as HTMLElement).closest<HTMLElement>("button")?.dataset.prov;
   if (p) {
-    shown = p;
+    shown = p === "nube" ? lastCloud : p;
     render("");
   }
+});
+cloud.addEventListener("change", () => {
+  shown = cloud.value;
+  render("");
 });
 model.addEventListener("change", () => model.value && link.send({ type: "model_set", proveedor: shown, nombre: model.value }));
 $("key-save").addEventListener("click", () => {

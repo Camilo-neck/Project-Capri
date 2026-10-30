@@ -142,7 +142,8 @@ class ModelInfo(BaseModel):
     proveedor: str
     nombre: str
     opciones: dict[str, list[str]]
-    claves: dict[str, bool]
+    claves: dict[str, bool]  # the cloud ones that take a key: whether it's saved
+    nombres: dict[str, str] = {}  # how each provider is called
     error: str = ""
 
 

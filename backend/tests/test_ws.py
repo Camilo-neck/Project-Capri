@@ -155,7 +155,7 @@ def test_settings_panel_picks_her_brain(client, monkeypatch, tmp_path):
     with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
         ws.send_json({"type": "model_get"})
         info = ws.receive_json()
-        assert info["type"] == "model_info" and info["proveedor"] == "ollama" and info["claves"] == {"anthropic": False, "openai": False}
+        assert info["type"] == "model_info" and info["proveedor"] == "ollama" and info["claves"] == dict.fromkeys(providers.ENV, False) and info["nombres"]["gemini"] == "Gemini"
         ws.send_json({"type": "model_set", "proveedor": "ollama", "nombre": "gemma3:12b"})
         info = ws.receive_json()
         assert info["nombre"] == "gemma3:12b" and unloaded == ["qwen3-vl:8b-instruct"]  # the old one leaves the GPU

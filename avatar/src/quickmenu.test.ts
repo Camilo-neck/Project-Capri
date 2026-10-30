@@ -20,14 +20,15 @@ test("only the voices this PC can use right now, hers marked", () => {
 test("the brains: models of each provider it can use, keys needed for the cloud ones", () => {
   const info: ModelInfo = {
     type: "model_info", proveedor: "ollama", nombre: "gemma3:12b", error: "",
-    opciones: { ollama: ["gemma3:12b", "qwen3-vl:8b"], claude_code: ["sonnet"], anthropic: ["claude-opus-5-5"], openai: [] },
-    claves: { anthropic: false, openai: true },
+    opciones: { ollama: ["gemma3:12b", "qwen3-vl:8b"], claude_code: ["sonnet"], anthropic: ["claude-opus-5-5"], openai: [], gemini: ["gemini-2.5-flash"] },
+    claves: { anthropic: false, openai: true, gemini: true },
+    nombres: { ollama: "Ollama", claude_code: "Claude de tu plan", anthropic: "Claude API", openai: "GPT", gemini: "Gemini" },
   };
   const items = brainItems(info);
   assert.deepEqual(items.map((i) => [i.proveedor, i.nombre, i.on]), [
-    ["ollama", "gemma3:12b", true], ["ollama", "qwen3-vl:8b", false], ["claude_code", "sonnet", false],
+    ["ollama", "gemma3:12b", true], ["ollama", "qwen3-vl:8b", false], ["claude_code", "sonnet", false], ["gemini", "gemini-2.5-flash", false],
   ]); // no key for the API one; GPT has a key but no models
-  assert.equal(items[2].grupo, "Mi Claude");
+  assert.deepEqual(items.map((i) => i.grupo), ["Local", "Local", "Mi Claude", "Gemini"]);
 });
 
 test("arrow keys go round the items", () => {

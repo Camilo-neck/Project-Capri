@@ -2,8 +2,10 @@
 // voices or models and pasting keys stay in the full panel. Pure: quick.ts draws them.
 import type { ModelInfo, VoiceInfo } from "./net/protocol.ts";
 
-export const PROVIDERS: Record<string, string> = { ollama: "Local", claude_code: "Mi Claude", anthropic: "API", openai: "GPT" };
-const KEYED = ["anthropic", "openai"];
+const LOCAL: Record<string, string> = { ollama: "Local", claude_code: "Mi Claude" };
+
+/** How a provider is shown: its short local name, or the one the backend gives the cloud ones. */
+export const providerName = (info: ModelInfo, p: string): string => LOCAL[p] ?? info.nombres[p] ?? p;
 
 export interface VoiceItem {
   id: string;
@@ -26,10 +28,10 @@ export function voiceItems(info: VoiceInfo): VoiceItem[] {
 
 /** Every model of every provider it can use (the cloud ones only with their key), the one in use marked. */
 export function brainItems(info: ModelInfo): BrainItem[] {
-  return Object.keys(PROVIDERS)
-    .filter((p) => !KEYED.includes(p) || info.claves[p])
-    .flatMap((p) => (info.opciones[p] ?? []).map((nombre) => ({
-      proveedor: p, nombre, grupo: PROVIDERS[p], on: info.proveedor === p && info.nombre === nombre,
+  return Object.keys(info.opciones)
+    .filter((p) => !(p in info.claves) || info.claves[p])
+    .flatMap((p) => info.opciones[p].map((nombre) => ({
+      proveedor: p, nombre, grupo: providerName(info, p), on: info.proveedor === p && info.nombre === nombre,
     })));
 }
 

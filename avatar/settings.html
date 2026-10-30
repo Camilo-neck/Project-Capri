@@ -96,12 +96,12 @@
       <div class="tab" id="tab-cerebro" role="tabpanel" hidden>
         <section id="brain">
           <h2>Quién piensa por ella</h2>
-          <div class="seg seg4" id="prov">
-            <button data-prov="ollama">Local</button>
+          <div class="seg seg3" id="prov">
+            <button data-prov="ollama" title="En tu PC, con Ollama">Local</button>
             <button data-prov="claude_code" title="Tu plan de Claude, por Claude Code: sin clave">Mi Claude</button>
-            <button data-prov="anthropic" title="API de Anthropic: pago por uso, con clave">API</button>
-            <button data-prov="openai">GPT</button>
+            <button data-prov="nube" title="Un servicio en la nube con tu clave de API: Claude, GPT, Gemini, OpenRouter…">Nube</button>
           </div>
+          <select id="cloud" class="field-input" aria-label="Servicio en la nube" hidden></select>
           <select id="model" class="field-input"></select>
           <div id="key-row" class="field" hidden>
             <input id="key" class="field-input" type="password" autocomplete="off" spellcheck="false" />

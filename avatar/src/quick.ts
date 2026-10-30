@@ -10,7 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ModelInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
-import { brainItems, PROVIDERS, step, voiceItems } from "./quickmenu.ts";
+import { brainItems, providerName, step, voiceItems } from "./quickmenu.ts";
 
 type View = "root" | "voz" | "cerebro";
 const menu = document.getElementById("menu")!;
@@ -60,7 +60,7 @@ function brains(): string {
     return `${head}<button class="m-item pick${b.on ? " on" : ""}" data-prov="${b.proveedor}" data-model="${esc(b.nombre)}" ` +
       `role="menuitemradio" aria-checked="${b.on}"><span class="k">${esc(b.nombre)}</span></button>`;
   }).join("");
-  const now = brain && brain.proveedor !== "ollama" ? `Ahora: ${PROVIDERS[brain.proveedor] ?? brain.proveedor}. ` : "";
+  const now = brain && brain.proveedor !== "ollama" ? `Ahora: ${providerName(brain, brain.proveedor)}. ` : "";
   return BACK + (rows || '<p class="m-note">Cargando sus modelos…</p>') + `<p class="m-note">${now}Claves y descargas: Más ajustes › Cerebro.</p>`;
 }
 

@@ -110,7 +110,8 @@ export interface ModelInfo {
   proveedor: string;
   nombre: string;
   opciones: Record<string, string[]>;
-  claves: Record<string, boolean>;
+  claves: Record<string, boolean>; // the cloud ones that take a key, and whether it is saved
+  nombres: Record<string, string>; // how each provider is called
   error: string;
 }
 

@@ -42,7 +42,7 @@ class Settings:
     quiet: tuple[time, time] | None = (time(23), time(8))  # no chatter from..to (may wrap midnight)
     spotify_client_id: str = ""
     spotify_redirect: str = SPOTIFY_REDIRECT
-    model_provider: str = "ollama"  # "ollama", "anthropic" (Claude) or "openai" (GPT)
+    model_provider: str = "ollama"  # one of providers.PROVIDERS: "ollama", "claude_code", "anthropic", "openai", "gemini"...
     model_name: str = "qwen3-vl:8b-instruct"
     model_effort: str = "low"  # Claude: low | medium | high (more is slower)
     voice_on: bool = True  # the microphone opens at start

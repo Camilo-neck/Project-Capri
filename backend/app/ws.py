@@ -25,7 +25,7 @@ ALLOWED_ORIGINS = {"http://tauri.localhost", "https://tauri.localhost", "tauri:/
 async def model_info(error: str = "") -> ModelInfo:
     s = settings.load()
     return ModelInfo(proveedor=s.model_provider, nombre=s.model_name, opciones=await providers.options(),
-                     claves={p: bool(providers.key(p)) for p in providers.ENV}, error=error)
+                     claves={p: bool(providers.key(p)) for p in providers.ENV}, nombres=providers.NAMES, error=error)
 
 
 def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, voice: Voice | None = None,

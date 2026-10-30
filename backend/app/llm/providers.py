@@ -1,5 +1,6 @@
 """Her brain, from config.toml [modelo]: a local model through Ollama, Claude through Claude Code on the
-user's own plan (`claude -p`, no key), or Claude (Anthropic API) or GPT (OpenAI) with a key. Read on
+user's own plan (`claude -p`, no key), or a cloud one with a key: Claude (Anthropic API), GPT (OpenAI), or
+Gemini, OpenRouter, Groq, Mistral, DeepSeek and Grok through their OpenAI-compatible addresses. Read on
 every call, so switching applies to the next message.
 
 All of them take the same messages (Ollama's shape: system/user/assistant, images as bytes on a user
@@ -14,6 +15,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import keyring
@@ -23,9 +25,27 @@ from app import config, settings
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = ("ollama", "claude_code", "anthropic", "openai")
-NAMES = {"ollama": "Ollama", "claude_code": "Claude de tu plan", "anthropic": "Claude API", "openai": "GPT"}
-ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+@dataclass(frozen=True)
+class Compatible:
+    """A cloud brain that speaks OpenAI's API at another address."""
+
+    url: str
+    keep: tuple[str, ...] = ()  # model ids worth listing start with one of these ("" = all of them)
+
+
+COMPATIBLE = {
+    "gemini": Compatible("https://generativelanguage.googleapis.com/v1beta/openai/", ("gemini",)),
+    "openrouter": Compatible("https://openrouter.ai/api/v1"),
+    "groq": Compatible("https://api.groq.com/openai/v1"),
+    "mistral": Compatible("https://api.mistral.ai/v1"),
+    "deepseek": Compatible("https://api.deepseek.com"),
+    "xai": Compatible("https://api.x.ai/v1", ("grok",)),
+}
+PROVIDERS = ("ollama", "claude_code", "anthropic", "openai", *COMPATIBLE)
+NAMES = {"ollama": "Ollama", "claude_code": "Claude de tu plan", "anthropic": "Claude API", "openai": "GPT", "gemini": "Gemini",
+         "openrouter": "OpenRouter", "groq": "Groq", "mistral": "Mistral", "deepseek": "DeepSeek", "xai": "Grok"}
+ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY", "openrouter": "OPENROUTER_API_KEY",
+       "groq": "GROQ_API_KEY", "mistral": "MISTRAL_API_KEY", "deepseek": "DEEPSEEK_API_KEY", "xai": "XAI_API_KEY"}
 # Claude Code's aliases for the latest of each; it runs on the user's Claude plan, no key
 PLAN_MODELS = ["sonnet", "haiku", "opus"]
 # offered before a key lets her ask the provider for its list
@@ -104,8 +124,8 @@ async def generate(messages: list[dict], json: bool = True) -> AsyncIterator[str
     s = settings.load()
     if s.model_provider == "anthropic":
         gen = _anthropic(messages, s.model_name, s.model_effort)
-    elif s.model_provider == "openai":
-        gen = _openai(messages, s.model_name, json)
+    elif s.model_provider == "openai" or s.model_provider in COMPATIBLE:
+        gen = _openai(messages, s.model_name, json, s.model_provider)
     elif s.model_provider == "claude_code":
         gen = _claude_code(messages, s.model_name, s.model_effort, json)
     else:
@@ -157,13 +177,24 @@ async def _anthropic(messages: list[dict], model: str, effort: str) -> AsyncIter
     yield u.input_tokens + (u.cache_read_input_tokens or 0) + (u.cache_creation_input_tokens or 0) + u.output_tokens
 
 
-async def _openai(messages: list[dict], model: str, json: bool) -> AsyncIterator[str | int]:
+def _openai_client(provider: str):
     import openai
 
-    client = openai.AsyncOpenAI(api_key=key("openai") or None)
-    stream = await client.chat.completions.create(model=model, messages=to_openai(messages), stream=True,
-                                                  stream_options={"include_usage": True},
-                                                  **({"response_format": {"type": "json_object"}} if json else {}))
+    return openai.AsyncOpenAI(api_key=key(provider) or None, base_url=COMPATIBLE[provider].url if provider in COMPATIBLE else None)
+
+
+async def _openai(messages: list[dict], model: str, json: bool, provider: str = "openai") -> AsyncIterator[str | int]:
+    import openai
+
+    client = _openai_client(provider)
+    ask = {"model": model, "messages": to_openai(messages), "stream": True, "stream_options": {"include_usage": True}}
+    try:
+        stream = await client.chat.completions.create(**ask, **({"response_format": {"type": "json_object"}} if json else {}))
+    except openai.BadRequestError:
+        if not json:
+            raise
+        # not every compatible provider (or model) takes JSON mode: the prompt asks for JSON anyway, and it's validated
+        stream = await client.chat.completions.create(**ask)
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
@@ -254,7 +285,7 @@ async def _claude_code(messages: list[dict], model: str, effort: str, json: bool
 async def options() -> dict[str, list[str]]:
     """The models each provider offers: installed local ones, and the cloud ones the key can use."""
     out: dict[str, list[str]] = {"ollama": [], "claude_code": list(PLAN_MODELS) if shutil.which("claude") else [],
-                                 "anthropic": list(CLAUDE_MODELS), "openai": []}
+                                 "anthropic": list(CLAUDE_MODELS), "openai": [], **{p: [] for p in COMPATIBLE}}
     try:
         out["ollama"] = sorted(m.model for m in (await ollama.list()).models)
     except Exception as e:  # Ollama not running
@@ -275,6 +306,14 @@ async def options() -> dict[str, list[str]]:
             out["openai"] = sorted((i for i in ids if i.startswith(("gpt", "o")) and not any(n in i for n in NOT_CHAT)), reverse=True)
         except Exception as e:
             log.warning("openai models: %s", e)
+    for p, c in COMPATIBLE.items():
+        if not key(p):
+            continue
+        try:
+            ids = [m.id.removeprefix("models/") async for m in _openai_client(p).models.list()]
+            out[p] = sorted((i for i in ids if i.startswith(c.keep or ("",)) and not any(n in i for n in NOT_CHAT)), reverse=True)
+        except Exception as e:  # a wrong key, no network
+            log.warning("%s models: %s", p, e)
     return out
 
 

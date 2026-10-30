@@ -449,6 +449,6 @@ def test_edge_speaks_through_the_service_decodes_it_and_tunes_pace(monkeypatch):
     synth = speech.edge({"es": "es-MX-DaliaNeural", "en": "en-US-AriaNeural"})
     audio, rate = synth("Hello there.", "en", 1.25)
     assert rate == 24000 and len(audio) == 2400 + int(0.6 * 24000) and np.abs(audio).max() <= 1.0
-    assert asked == [("Hello there.", "en-US-AriaNeural", "+25%", "+0Hz")]
+    assert asked == [("Hello there.", "en-US-AriaNeural", "+35%", "+0Hz")]  # 1.25 x the playful 1.08
     synth("Hola.", "es", 0.8)
-    assert asked[1][1:3] == ("es-MX-DaliaNeural", "-20%")
+    assert asked[1][1:3] == ("es-MX-DaliaNeural", "-14%")

@@ -230,6 +230,9 @@ def _decode_mp3(data: bytes) -> np.ndarray:
     return np.asarray(pcm.samples, dtype="float32")
 
 
+PLAYFUL = 1.08  # Edge voices a little quicker than their own pace: livelier, more playful (the speed control still scales it)
+
+
 def edge(voices: dict[str, str], pitch: int = 0) -> Callable[[str, str, float], tuple[np.ndarray, int]]:
     """Microsoft Edge's neural voices through edge-tts (a cloud service: what she says goes to Microsoft; no key),
     by language, `pitch` Hz higher (hers is ~286 Hz median, Aria's plain ~220), with the holographic touch. Needs internet: it raises without it (voices.make falls back to Dora)."""
@@ -240,7 +243,7 @@ def edge(voices: dict[str, str], pitch: int = 0) -> Callable[[str, str, float], 
         import edge_tts
 
         async def fetch() -> bytes:
-            talk = edge_tts.Communicate(text, voices.get(lang, voices["es"]), rate=f"{round((speed - 1) * 100):+d}%", pitch=f"{pitch:+d}Hz")
+            talk = edge_tts.Communicate(text, voices.get(lang, voices["es"]), rate=f"{round((speed * PLAYFUL - 1) * 100):+d}%", pitch=f"{pitch:+d}Hz")
             return b"".join([c["data"] async for c in talk.stream() if c["type"] == "audio"])
 
         data = asyncio.run(asyncio.wait_for(fetch(), 20))

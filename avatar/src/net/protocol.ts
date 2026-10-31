@@ -47,7 +47,7 @@ export interface Mode {
 export type VoiceOption = {
   id: string;
   nombre: string;
-  motor: "qwen" | "kokoro" | "piper";
+  motor: "qwen" | "kokoro" | "piper" | "edge" | "nube";
   nota: string;
   gpu: boolean;
   nube: boolean; // a service: what she says leaves this PC
@@ -58,6 +58,19 @@ export type VoiceOption = {
   mb: number; // left to download
 };
 /** Her voice and its touches (settings panel). */
+/** A voice service as the panel shows it: whether there's a key, never the key. */
+export type CloudVoice = {
+  id: string;
+  nombre: string;
+  clave: boolean;
+  voz: string;
+  modelo: string;
+  modelo_base: string;
+  pide_voz: boolean;
+  ayuda: string;
+  web: string;
+};
+
 export interface VoiceInfo {
   type: "voice_info";
   velocidad: number;
@@ -65,6 +78,7 @@ export interface VoiceInfo {
   glitch: number;
   voz: string;
   voces: VoiceOption[];
+  nube: CloudVoice[];
 }
 /** A voice downloading (bytes). */
 export interface VoiceProgress {
@@ -298,9 +312,17 @@ export interface ModelKey {
   proveedor: string;
   clave: string;
 }
+/** His key (empty keeps the one there is), voice and model for a voice service; the backend tries them. */
+export interface VoiceCloudSave {
+  type: "voice_cloud_save";
+  servicio: string;
+  clave: string;
+  voz: string;
+  modelo: string;
+}
 export interface ModelPull {
   type: "model_pull";
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | VoiceCloudSave | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey;

@@ -25,7 +25,7 @@ def test_the_catalog():
     assert ids[:6] == ["aria", "capri", "capri_ligera", "dora", "daniela", "claude_mx"]  # Aria first, then her clone, then the rest
     assert {"bella", "emma"} <= set(ids) and len(ids) == len(set(ids))
     assert voices.get("nada") is voices.get(voices.DEFAULT)
-    assert all(v.motor in ("qwen", "kokoro", "piper", "edge") for v in voices.CATALOG)
+    assert all(v.motor in ("qwen", "kokoro", "piper", "edge", "nube") for v in voices.CATALOG)
 
 
 def test_what_is_downloaded_and_what_can_be(tmp_path):

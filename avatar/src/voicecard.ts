@@ -10,6 +10,7 @@ export function voiceCard(o: VoiceOption, chosen: boolean, downloading?: number)
     : downloading !== undefined ? `<span class="bar"><i style="width:${Math.round(downloading * 100)}%"></i></span>`
     : o.descargada ? ""
     : o.descargable ? `<button class="mini v-get" data-get="${o.id}">Descargar · ${o.mb} MB</button>`
+    : o.motor === "nube" ? '<span class="v-off">Sin configurar</span>'
     : '<span class="v-off">Sin instalar</span>';
   return `<div class="voice${chosen ? " on" : ""}${o.disponible && o.descargada ? " pick" : " off"}" data-voice="${o.id}">
     <div class="v-top"><b>${esc(o.nombre)}</b><span class="tag${o.gpu ? " gpu" : o.nube ? " nube" : ""}">${o.gpu ? "GPU" : o.nube ? "NUBE" : "CPU"}</span>${state}</div>

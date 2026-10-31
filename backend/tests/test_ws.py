@@ -334,6 +334,29 @@ def test_the_panel_tunes_her_voice(monkeypatch, tmp_path):
     assert (s.tts_speed, s.tts_robot, s.tts_glitch) == (1.2, 0.4, 1.0)
 
 
+def test_the_panel_sets_up_a_voice_service_and_hears_what_went_wrong(monkeypatch, tmp_path):
+    from app import cloudvoice
+
+    monkeypatch.setenv("CAPRI_CONFIG", str(tmp_path / "config.toml"))
+    monkeypatch.delenv("FISH_API_KEY", raising=False)
+    saved = {}
+    monkeypatch.setattr(cloudvoice.keyring, "get_password", lambda _, name: saved.get(name))
+    monkeypatch.setattr(cloudvoice.keyring, "set_password", lambda _, name, value: saved.__setitem__(name, value))
+
+    def refuse(service):
+        raise cloudvoice.CloudVoiceError("Fish Audio rechazó la clave.")
+
+    monkeypatch.setattr(cloudvoice, "probe", refuse)
+    client, voice, speaker = talking_app()
+    with client.websocket_connect(f"/ws?token={TOKEN}&panel=1", headers=ORIGIN) as ws:
+        ws.send_json({"type": "voice_cloud_save", "servicio": "fish", "clave": "clave-secreta", "voz": "v", "modelo": ""})
+        got = ws.receive_json()
+        assert got["type"] == "voice_info" and "clave-secreta" not in str(got)
+        assert next(c for c in got["nube"] if c["id"] == "fish")["clave"] is True
+        assert ws.receive_json() == {"type": "voice_progress", "voz": "fish", "completado": 0, "total": 0, "error": "Fish Audio rechazó la clave."}
+    assert saved == {"fish": "clave-secreta"}
+
+
 def test_he_can_cut_her_off_with_a_click_or_the_listen_hotkey():
     client, voice, speaker = talking_app()
     with client.websocket_connect(f"/ws?token={TOKEN}", headers=ORIGIN) as ws:

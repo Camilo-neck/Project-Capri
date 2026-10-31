@@ -213,3 +213,9 @@ def test_closing_always_asks_and_offers_force_if_it_stays(monkeypatch):
         ws.send_json({"type": "pressed", "id": buttons["id"], "boton": buttons["botones"][0]["id"]})
         until_idle(ws)
     assert closed == ["Discord"] and forced == ["Discord"]
+
+
+def test_similar_names_come_from_what_is_installed():
+    items = [launch.Item("Discord", "app", "d"), launch.Item("Disney+", "app", "x"), launch.Item("Blender", "app", "b")]
+    assert launch.similar("discrod", items)[0] == "Discord"
+    assert launch.similar("zzzz", items) == []

@@ -145,3 +145,16 @@ def test_every_tool_she_has_is_in_her_prompt_and_it_stays_short():
 
     assert [t for t in tools.TOOLS if f"`{t}`" not in SYSTEM_PROMPT] == []
     assert len(SYSTEM_PROMPT) < 11_000
+
+
+def test_confusable_requests_carry_a_hint_for_the_tool():
+    hint = lambda text: build_messages([{"role": "user", "content": text}])[-1]["content"].split("]\n")[0]  # noqa: E731
+    assert "`recordatorio`" in hint("avísame en media hora que apague el horno")
+    assert "`que_suena`" in hint("¿qué estoy escuchando?")
+    assert "`buscar`" in hint("abre en YouTube una búsqueda de arepas")
+    assert "Pista" not in hint("hola, ¿qué tal?")
+
+
+def test_a_tool_result_carries_no_hint():
+    msg = {"role": "user", "content": "[resultado de calendario para «avísame»]\nnada"}
+    assert "Pista" not in build_messages([msg])[-1]["content"]

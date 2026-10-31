@@ -228,8 +228,9 @@ def open_app(a: AppArgs, s: Settings) -> str:
             return f"Abrí {item.name}."
         link = None if pathlike else shortcut(target)
         if link is None:
-            raise ToolError(f"no encontré «{a.nombre}» entre sus programas ni juegos ({e.strerror or e}); pregúntale cómo se "
-                            "llama en el menú Inicio o su ruta") from e
+            close = launch.similar(target, launch.launchables())
+            raise ToolError(f"no encontré «{a.nombre}» entre sus programas ni juegos ({e.strerror or e}); " + (
+                f"se parece a: {', '.join(close)}" if close else "pregúntale cómo se llama en el menú Inicio o su ruta")) from e
         os.startfile(str(link))  # noqa: S606  (the Start menu shortcut of the program he confirmed)
     return f"Abrí {a.nombre}."
 
@@ -306,9 +307,12 @@ unclosed: list[launch.Item] = []  # an app the last cerrar_app couldn't close (h
 
 
 def app_to_close(nombre: str) -> launch.Item:
-    item = launch.match(launch.open_apps(), nombre)
+    running = launch.open_apps()
+    item = launch.match(running, nombre)
     if not item:
-        raise ToolError(f"no veo abierta ninguna app llamada «{nombre}» (las de Windows, Claude, Ollama y yo no se cierran desde aquí)")
+        close = launch.similar(nombre, running)
+        raise ToolError(f"no veo abierta ninguna app llamada «{nombre}» " + (
+            f"(abiertas parecidas: {', '.join(close)})" if close else "(las de Windows, Claude, Ollama y yo no se cierran desde aquí)"))
     return item
 
 

@@ -91,6 +91,19 @@ SERIOUS = re.compile(
 )
 
 
+# The pairs of tools she mixes up (scripts/eval_tools.py measures it). A nudge in the last message, so the prompt stays
+# the same and Ollama keeps its cache; the hint says when it applies, so "recuérdame qué dije" can still be something else.
+HINTS = (
+    (re.compile(r"\b(rec[uú]erdame|av[ií]same|remind me)\b", re.I), "Si pide un aviso para un momento, es `recordatorio`, no `recordar`."),
+    (re.compile(r"qu[eé] (estoy escuchando|est[aá] sonando|suena|canci[oó]n es)|what song|what'?s playing", re.I), "Lo que suena en el PC se mira con `que_suena`."),
+    (re.compile(r"\b(abre|abrir|open)\b.*\b(b[uú]squeda|search)\b", re.I), "Abrir una búsqueda en un sitio es `buscar`."),
+)
+
+
+def tool_hint(text: str) -> str:
+    return " ".join(hint for pattern, hint in HINTS if pattern.search(text))
+
+
 def slang_allowed(history: list[dict]) -> bool:
     """Her words are for light moments in a conversation with the user, never for something heavy or automatic."""
     last = history[-1]["content"] if history else ""
@@ -113,6 +126,9 @@ def build_messages(
     context += "]"
     *turns, last = history or [{"role": "user", "content": ""}]
     last = {"role": last["role"], "content": last["content"]}
+    hint = tool_hint(last["content"]) if last["role"] == "user" and not last["content"].startswith("[") else ""
+    if hint:
+        context = context[:-1] + f"\nPista: {hint}]"
     if image is not None:
         # The image only rides on this call; the history keeps the text (see Orchestrator.turn).
         last = {"role": "user", "content": f"{SCREEN_NOTE}\nPregunta: {last['content']}", "images": [image]}

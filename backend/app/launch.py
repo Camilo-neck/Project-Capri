@@ -2,6 +2,7 @@
 like Spotify or WhatsApp included), Steam's and Epic's games, and a Roblox game by its name. Adapted
 from mochiiwuff/capri-desktop's launch.js. Windows only."""
 
+import difflib
 import json
 import logging
 import os
@@ -137,6 +138,12 @@ def match(items: list[Item], text: str) -> Item | None:
         if r > rank:
             best, rank = item, r
     return best
+
+
+def similar(name: str, items: list[Item], n: int = 3) -> list[str]:
+    """The names of `items` closest to a misheard or mistyped one, best first."""
+    names = {i.name.lower(): i.name for i in items}
+    return [names[m] for m in difflib.get_close_matches(name.lower(), names, n=n, cutoff=0.6)]
 
 
 def find(name: str) -> Item | None:

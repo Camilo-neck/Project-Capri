@@ -155,6 +155,14 @@ def test_confusable_requests_carry_a_hint_for_the_tool():
     assert "Pista" not in hint("hola, ¿qué tal?")
 
 
+def test_a_request_for_several_things_carries_a_hint_to_give_them_all():
+    hint = lambda text: build_messages([{"role": "user", "content": text}])[-1]["content"].split("]\n")[0]  # noqa: E731
+    for text in ("dime 10 datos de la revolución industrial", "Dame los 10 datos", "dame cinco datos curiosos de Japón",
+                 "explícame paso a paso cómo se hacen unas arepas", "give me 3 fun facts about Mars"):
+        assert "sin anunciarlo" in hint(text), text
+    assert "sin anunciarlo" not in hint("abre 2 ventanas de Word")
+
+
 def test_a_tool_result_carries_no_hint():
     msg = {"role": "user", "content": "[resultado de calendario para «avísame»]\nnada"}
     assert "Pista" not in build_messages([msg])[-1]["content"]

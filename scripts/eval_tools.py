@@ -3,13 +3,15 @@ Needs GPU + Ollama (close Capri first: they share the one resident model).
 
 Run: uv run --project backend python scripts/eval_tools.py [--runs 3] [--save results.json]
 Each request is a fresh conversation, run --runs times (the model varies). Scores: the right tool (or none at all),
-the right argument (a word that has to be in them), and, for the questions that need today's data, whether she searched.
+the right argument (a word that has to be in them), for the questions that need today's data, whether she searched,
+and, where a case sets min_chars or max_chars, whether she said what was asked (not just announced it).
 """
 
 import argparse
 import asyncio
 import json
 import os
+import re
 import statistics
 import sys
 import tempfile
@@ -22,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 from app.llm.client import SYSTEM_PROMPT, reply  # noqa: E402
 
 CASES = Path(__file__).with_name("tool_cases.json")
+NUMBERED = re.compile(r"(^|\s)[12][.)]\s")  # "1. ..." at the start of a line or in the middle of one
 
 
 def load_cases() -> list[dict]:
@@ -43,11 +46,19 @@ def score(case: dict, accion) -> tuple[bool, bool]:
     return True, case["arg"] is None or plain(case["arg"]) in args
 
 
+def delivered(case: dict, texto: str) -> bool | None:
+    """She said as much as the request needs: announcing «10 datos» without giving them is a miss. None: not measured."""
+    if "min_chars" not in case and "max_chars" not in case:
+        return None
+    return case.get("min_chars", 0) <= len(texto) <= case.get("max_chars", len(texto))
+
+
 def summary(rows: list[dict]) -> dict:
     def rate(rs: list[dict], key: str) -> float:
         return sum(r[key] for r in rs) / len(rs) if rs else 0.0
 
     acting = [r for r in rows if r["case"]["tool"] is not None]
+    measured = [r for r in rows if r.get("delivered") is not None]
     silent = [r for r in rows if r["case"]["tool"] is None]
     web = [r for r in rows if r["case"].get("needs_web")]
     right_tool = [r for r in acting if r["tool_ok"]]
@@ -56,6 +67,8 @@ def summary(rows: list[dict]) -> dict:
         "arg_ok": rate(right_tool, "arg_ok"),
         "needs_web_searched": rate(web, "tool_ok"),
         "false_actions": 1 - rate(silent, "tool_ok"),  # asked for a tool when none was needed
+        "delivered": rate(measured, "delivered"),
+        "numbered": rate(measured, "numbered"),  # the prompt says no lists: "1. ..." is read out and looks like one
         "json_first_try": rate(rows, "clean"),
         "first_char_ms": round(statistics.median(r["first_ms"] for r in rows if r["first_ms"])) if any(r["first_ms"] for r in rows) else 0,
         "system_prompt_chars": len(SYSTEM_PROMPT),
@@ -92,11 +105,12 @@ async def main() -> int:
         for _ in range(args.runs):
             r, clean, ms = await ask(case["msg"])
             tool_ok, arg_ok = score(case, r.accion)
-            rows.append({"case": case, "tool_ok": tool_ok, "arg_ok": arg_ok, "clean": clean, "first_ms": ms,
+            rows.append({"case": case, "tool_ok": tool_ok, "arg_ok": arg_ok, "clean": clean, "first_ms": ms, "texto": r.texto,
+                         "delivered": delivered(case, r.texto), "numbered": bool(NUMBERED.search(r.texto)),
                          "got": None if r.accion is None else {"nombre": r.accion.nombre, "args": r.accion.args}})
-        bad = [x for x in rows[-args.runs:] if not x["tool_ok"] or not x["arg_ok"]]
+        bad = [x for x in rows[-args.runs:] if not x["tool_ok"] or not x["arg_ok"] or x["delivered"] is False]
         mark = "OK " if not bad else f"{args.runs - len(bad)}/{args.runs}"
-        print(f"[{mark:>4}] {case['msg'][:60]:60} -> {(bad[0]['got'] if bad else rows[-1]['got'])}", flush=True)
+        print(f"[{mark:>4}] {case['msg'][:60]:60} -> {(bad[0]['got'] if bad else rows[-1]['got'])} ({len(rows[-1]['texto'])} chars)", flush=True)
     out = summary(rows)
     print("\n" + json.dumps(out, indent=2))
     if args.save:

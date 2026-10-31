@@ -169,6 +169,10 @@ def public(url: str) -> str:
     return u.geturl()
 
 
+BOT_CHECK = re.compile(r"captcha|unusual traffic|are you (a )?(human|robot)|verify you are human|eres humano|no eres un robot", re.I)
+BOT_CHECK_MAX = 2000  # chars: a longer page may just mention it
+
+
 class Text(HTMLParser):
     """Visible text of a page: no scripts or styles, a line break at block tags."""
 
@@ -216,7 +220,10 @@ def get(url: str, http: httpx.Client | None = None) -> str:
             kind = r.headers.get("content-type", "")
             text = body.decode(r.encoding or "utf-8", errors="replace")
         if "html" in kind:
-            return page_text(text)
+            page = page_text(text)
+            if len(page) < BOT_CHECK_MAX and BOT_CHECK.search(page):  # a human's to answer: never gone around
+                raise ToolError("ese sitio pide comprobar que eres humano: no lo esquivo, ábrelo en tu navegador")
+            return page
         if kind.startswith("text/") or "json" in kind or "xml" in kind:
             return text
         raise ToolError(f"eso no es una página de texto ({kind or 'tipo desconocido'})")

@@ -21,7 +21,7 @@ import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, launch, media_now, power, settings, spotify, steam, vision
+from app import calendar_ics, launch, media_now, power, research, settings, spotify, steam, vision
 from app.memory import STOPWORDS, content_words, fold
 from app.power import ToolError
 from app.settings import Settings
@@ -29,6 +29,7 @@ from app.settings import Settings
 MAX_RESULTS = 20
 MAX_SCANNED = 300_000  # files looked at per search
 SEARCH_S = 10  # seconds a file search may take
+NEARLY_EMPTY = 200  # chars of a page: under this it's a shell its scripts fill in
 MAX_TEXT = 3000  # chars of tool output handed to the model (~800 tokens: one page read must not force a trim)
 
 SETUP_STEPS = (
@@ -75,6 +76,12 @@ class CommandArgs(BaseModel):
 
 class PageArgs(BaseModel):
     url: str
+    pregunta: str = Field(default="", max_length=200)  # what she wants from it: keeps those parts of a long page
+
+
+class ResearchArgs(BaseModel):
+    tema: Literal["clima", "divisas", "wikipedia", "noticias"]
+    consulta: str = Field(min_length=2, max_length=200)
 
 
 class QueryArgs(BaseModel):
@@ -471,9 +478,23 @@ def run_command(a: CommandArgs, s: Settings) -> str:
 
 def read_page(a: PageArgs, s: Settings) -> str:
     try:
-        return power.get(a.url)
+        text = research.cached(("page", a.url), lambda: power.get(a.url))
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403, 429, 503):
+            raise ToolError("ese sitio no deja leerlo a un programa: prueba otra página o buscar_web") from e
+        raise ToolError(f"la página respondió con error {e.response.status_code}") from e
     except httpx.HTTPError as e:
         raise ToolError(f"no pude abrir la página: {e}") from e
+    if len(text) < NEARLY_EMPTY:
+        return f"{text}\n(La página casi no trae texto: seguramente la dibuja con JavaScript. Prueba otra página o buscar_web.)"
+    return research.relevant(text, a.pregunta, MAX_TEXT)
+
+
+def investigate(a: ResearchArgs, s: Settings) -> str:
+    try:
+        return research.consult(a.tema, a.consulta)
+    except research.ResearchError as e:
+        raise ToolError(str(e)) from None
 
 
 
@@ -656,6 +677,7 @@ TOOLS: dict[str, Tool] = {
     "escribir_archivo": Tool(WriteArgs, True, write_file, describe_write, write_risk, named=lambda a: Path(a.ruta).stem),
     "ejecutar_comando": Tool(CommandArgs, True, run_command, lambda a: f"Ejecutar en PowerShell: {a.comando}", command_risk, log=True),
     "leer_web": Tool(PageArgs, False, read_page, log=True),
+    "investigar": Tool(ResearchArgs, False, investigate, log=True),  # to answer him; opening things is `buscar` and `youtube`
     "buscar_web": Tool(QueryArgs, True, None),  # in his browser, after a click: Orchestrator.search_in_browser
     "leer_portapapeles": Tool(NoArgs, False, read_clipboard),
     "copiar_al_portapapeles": Tool(TextArgs, False, copy_text,  # nothing breaks: never a button

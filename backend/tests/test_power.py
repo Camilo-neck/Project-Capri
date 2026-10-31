@@ -176,3 +176,52 @@ def test_after_a_no_the_turn_ends_even_if_she_asks_again(opened):
         ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": False})
         until_idle(ws)
     assert len(calls) == 2 and opened == []  # the second try never asked
+
+
+def failing_tool(monkeypatch, name: str = "abrir_app"):
+    ran = []
+
+    def fail(a, s):
+        ran.append(a)
+        raise tools.ToolError("no encontré eso; ¿quizá Discord?")
+
+    monkeypatch.setitem(tools.TOOLS, name, tools.Tool(tools.AppArgs, False, fail))
+    return ran
+
+
+def test_a_failed_tool_gets_one_retry_and_is_told_to_stop(monkeypatch):
+    ran = failing_tool(monkeypatch)
+    action = {"nombre": "abrir_app", "args": {"nombre": "discrod"}}
+    generate, calls = scripted(say("Abro.", action), say("Otra vez.", action), say("Y otra.", action), say("Nada."))
+    with connect(Orchestrator(generate)) as ws:
+        ws.send_json({"type": "text_input", "text": "abre discrod"})
+        until_idle(ws)
+    assert len(ran) == 2  # the third call never runs
+    first, second = results(calls)[:2]
+    assert "reintenta una vez" in first and "no reintentes" in second
+
+
+def test_a_tool_that_worked_is_not_told_to_retry(monkeypatch):
+    monkeypatch.setitem(tools.TOOLS, "abrir_app", tools.Tool(tools.AppArgs, False, lambda a, s: "Abrí."))
+    generate, calls = scripted(say("Abro.", {"nombre": "abrir_app", "args": {"nombre": "x"}}), say("Listo."))
+    with connect(Orchestrator(generate)) as ws:
+        ws.send_json({"type": "text_input", "text": "abre x"})
+        until_idle(ws)
+    assert "reintenta" not in results(calls)[0]
+
+
+def test_retrying_with_her_own_guess_still_asks_for_the_click(monkeypatch):
+    from app.launch import Item
+    monkeypatch.setattr(tools.launch, "launchables", lambda: [Item("Discord", "app", "d")])
+    monkeypatch.setattr(tools.launch, "find", lambda name: None)
+    monkeypatch.setattr(tools, "shortcut", lambda name: None)
+    monkeypatch.setattr(tools.os, "startfile", lambda t: (_ for _ in ()).throw(OSError("no")), raising=False)
+    generate, calls = scripted(say("Abro.", {"nombre": "abrir_app", "args": {"nombre": "discrod"}}),
+                               say("¿Era este?", {"nombre": "abrir_app", "args": {"nombre": "Discord"}}), say("Vale."))
+    with connect(Orchestrator(generate)) as ws:
+        ws.send_json({"type": "text_input", "text": "abre discrod"})
+        ask = until(ws, "confirm_request")[-1]  # he never said "Discord": her idea, her button
+        assert "Discord" in ask["texto"]
+        ws.send_json({"type": "confirm_response", "id": ask["id"], "ok": False})
+        until_idle(ws)
+    assert "Discord" in results(calls)[0]

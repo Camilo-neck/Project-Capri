@@ -921,12 +921,17 @@ body {
 /* Her player card ("¿qué suena?"): a Cyberpunk radio plate: station tag, equalizer, title, segmented bar, media keys. */
 .player {
   --tone: var(--accent-2);
-  position: relative;
+  position: absolute;
+  right: 24px;
   width: 330px;
-  margin-bottom: 20px;
   filter: drop-shadow(5px 5px 0 var(--accent));
   cursor: pointer;
   animation: cpanel-in 210ms steps(3, jump-end) both;
+}
+
+.player.seated .player-meta,
+.player.seated .player-main {
+  padding-left: 52px; /* her legs */
 }
 
 .player[data-playing="false"] {

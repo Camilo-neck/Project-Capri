@@ -25,7 +25,8 @@ export interface Player {
   readonly el: HTMLElement;
 }
 
-export function mountPlayer(el: HTMLElement, send: (m: ClientMessage) => void): Player {
+/** `changed`: the card came up or went away (she may be sitting on it). */
+export function mountPlayer(el: HTMLElement, send: (m: ClientMessage) => void, changed: () => void): Player {
   const $ = <T extends HTMLElement>(sel: string) => el.querySelector(sel) as T;
   const bar = $("[data-bar]");
   bar.replaceChildren(...Array.from({ length: SEGMENTS }, () => document.createElement("i")));
@@ -46,6 +47,7 @@ export function mountPlayer(el: HTMLElement, send: (m: ClientMessage) => void): 
     el.hidden = true;
     clearInterval(tick);
     clearTimeout(closeTimer);
+    changed();
   };
   const keepOpen = () => {
     clearTimeout(closeTimer);
@@ -86,6 +88,7 @@ export function mountPlayer(el: HTMLElement, send: (m: ClientMessage) => void): 
       clearInterval(tick);
       tick = window.setInterval(draw, 500);
       keepOpen();
+      changed();
     },
   };
 }

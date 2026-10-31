@@ -37,7 +37,7 @@ import { GlitchFx, OFF, VANISH_OUT_MS, type Glitch } from "./state/glitch.ts";
 import { ResumeWatch, resumeLine, TICK_MS } from "./state/resume.ts";
 import { juggleOrbs, spinScale, Tricks, TRICK_MS, type Trick } from "./state/tricks.ts";
 import { Mischief, PEEK_MS, peekPose, pickEdge, shy, type Edge, type PeekPose } from "./state/mischief.ts";
-import { canSit, ledgeAt, pickSeat, roomNeeded, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
+import { canSit, CARD_ID, cardSeat, freeSeat, ledgeAt, pickSeat, roomNeeded, seatOf, type Perch, type Point, type Windows } from "./state/perch.ts";
 import { type Flight, type Hit, launch, step, Temper, thrown, Velocity } from "./state/throw.ts";
 import { AURA_MAX_MS, zapEnd, zapStart, type BoltTarget, type Zap } from "./state/zap.ts";
 import { mouthFor, Typewriter, type Mouth } from "./state/text.ts";
@@ -208,7 +208,11 @@ let dragging = false;
 const claudeTrack = new Tracker();
 const claudeEl = $("claude");
 const claudePanel = $("claude-panel");
-const player = mountPlayer($("player"), (m) => link.send(m));
+const player = mountPlayer($("player"), (m) => link.send(m), () => {
+  wins = withCard(desk);
+  settle();
+});
+player.el.style.bottom = `${BELOW + 14}px`; // on her floor, in its corner
 let claudeLine = "";
 let claudeSpark = 0; // when Claude's last spark went off
 let claudeGap = 0;
@@ -218,8 +222,9 @@ let dnd = false; // do not disturb (the backend owns it; this mirrors it for the
 let fullscreen = false; // a fullscreen app is in front: hidden and not rendering
 await sfx.init(() => dnd || fullscreen || reducedMotion.matches); // her sound effects stay quiet then
 let nextWander = performance.now() + wanderGap();
-let wins: Windows = { fg: 0, wins: [] };
-let perch: Perch | null = null; // the window she sits on; null = the taskbar
+let desk: Windows = { fg: 0, wins: [] }; // his windows, as Rust sees them
+let wins = desk; // and her card, in front of them while it's up (withCard)
+let perch: Perch | null = null; // where she sits: a window, her card or a spot in the air; null = the taskbar
 let at: Point = { x: 0, y: 0 }; // her feet, page px
 let activeAt = performance.now(); // last time you did something with her (talking counts through lastTalk)
 let pcIdle = 0; // ms since the last keyboard or mouse input anywhere
@@ -227,6 +232,15 @@ let maskOffset: Point = { x: 0, y: 0 }; // asleep: her mask, from her feet (it r
 let acting: object | null = null; // a tool running: her sparks last while this is the same run
 let peek: (PeekPose & { until: number; ducks: number }) | null = null; // peeking in from a screen edge
 let hiding = false; // /escondete: just her small mask in the bottom-left corner, eyes open
+
+/** The seats there are: his windows and, while it's up, her card. */
+function withCard(w: Windows): Windows {
+  const c = player.el;
+  return c.hidden || camera ? w : { ...w, wins: [{ id: CARD_ID, x: c.offsetLeft, y: c.offsetTop, w: c.offsetWidth, h: c.offsetHeight, max: false }, ...w.wins] };
+}
+
+/** She stays where she is: he left her there, or she's on her card. */
+const staying = () => !!perch && (!!perch.at || perch.id === CARD_ID);
 
 function wanderGap(): number {
   return WANDER_MS[0] + Math.random() * (WANDER_MS[1] - WANDER_MS[0]);
@@ -374,6 +388,7 @@ async function possess(): Promise<void> {
 /** Wandering: another ledge or the taskbar, or, sitting on a window, possessing it now and then,
  * as far as config.toml [avatar] allows (read each time, so edits apply without a restart). */
 async function wander(): Promise<void> {
+  if (staying()) return;
   const cfg = await invoke<AvatarSettings>("avatar_settings");
   if (perch && cfg.poseer_ventanas && !camera && Math.random() < 0.3) {
     void possess();
@@ -687,7 +702,7 @@ function setStatus(s: Status): void {
   }
   if (s === "idle") awaiting = false;
   if (linkStatus === "looking" && s !== "looking") guardOff(); // the shot is taken
-  if (s === "thinking" && linkStatus !== "thinking" && !busy()) {
+  if (s === "thinking" && linkStatus !== "thinking" && !busy() && !staying()) {
     // while she works, she sits on the window in front if she can
     const seat = pickSeat(wins, limits(true), { frontOnly: true }); // the transmission is about to open
     if (seat && seat.id !== perch?.id) void teleport(seat);
@@ -821,6 +836,7 @@ const link = connect(
       case "now_playing":
         sfx.play("radio");
         player.show(msg);
+        void hopOnCard();
         break;
       case "claude":
         onClaude(msg, now);
@@ -1323,16 +1339,33 @@ async function setLook(to: Look): Promise<void> {
 void listen("style", () => setLook(LOOKS[(LOOKS.indexOf(appearance()) + 1) % LOOKS.length]));
 for (const m of LOOKS) void listen(`mode-${m}`, () => setLook(m));
 void listen("teleport", () => hiding ? unhide() : doze.asleep ? wakeUp() : void teleport(pickSeat(wins, limits(), { except: perch?.id })));
-void invoke<Windows | null>("windows").then((w) => (wins = w ?? wins)); // already sent before this page loaded
-void listen<Windows>("windows", (e) => {
-  wins = e.payload;
+/** Her seat changed or went away: she rides along with it, or falls. */
+function settle(): void {
   if (!perch || teleporting) return;
   const seat = seatOf(wins, perch, limits());
   if (!seat) fall();
   else if (seat.x !== at.x || seat.y !== at.y) {
-    at = seat; // rides along with the window
+    at = seat;
     placeHud();
   }
+}
+
+/** He asked what's on: she hops onto her card, unless she's gone or in his hand. The tool's "thinking" may have her mid-hop. */
+async function hopOnCard(): Promise<void> {
+  while (teleporting) await sleep(60);
+  const card = wins.wins.find((w) => w.id === CARD_ID);
+  if (!card || busy() || perch?.id === CARD_ID || !seatOf(wins, cardSeat(card), limits())) return;
+  await teleport(cardSeat(card));
+}
+
+void invoke<Windows | null>("windows").then((w) => {
+  desk = w ?? desk; // already sent before this page loaded
+  wins = withCard(desk);
+});
+void listen<Windows>("windows", (e) => {
+  desk = e.payload;
+  wins = withCard(desk);
+  settle();
 });
 void listen<[number, number]>("cursor", (e) => {
   cursor = e.payload;
@@ -1450,7 +1483,7 @@ function originalFrame(base: ClipFrame | null, now: number, talking: boolean): [
 }
 
 // Poke: click on her. Drag: press and move, she follows the pointer and, let go on a window's top
-// edge, sits there (anywhere else she falls). Pet: rub the mouse back and forth over her head.
+// edge, sits there (anywhere else, right where she is). Pet: rub the mouse back and forth over her head.
 stage.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return; // a right click is her quick menu (contextmenu)
   if (doze.asleep) return wakeUp(); // the feed showing her mask
@@ -1559,9 +1592,9 @@ function onHit(h: Hit, now: number): void {
   }
 }
 
-/** Let go after a drag: onto the ledge under her feet, if any; otherwise she falls to the taskbar. */
+/** Let go after a drag: on the ledge under her feet, or in the air right there. Just over the floor she drops to it. */
 function drop(): void {
-  const seat = ledgeAt(wins, at, limits(), DROP_TOLERANCE);
+  const seat = ledgeAt(wins, at, limits(), DROP_TOLERANCE) ?? (floor() - at.y > DROP_TOLERANCE ? freeSeat({ ...at }) : null);
   const there = seat && seatOf(wins, seat, limits());
   if (seat && there) {
     perch = seat;
@@ -1787,6 +1820,7 @@ pet.app.ticker.add((ticker) => {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
   }
+  player.el.classList.toggle("seated", perch?.id === CARD_ID); // the song's name moves out from under her legs
   const ui = [...(player.el.hidden ? [] : [player.el]), ...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId && !voiced(now) ? [] : [tx])];
   for (const el of ui) {
     const r = el.getBoundingClientRect();

@@ -34,6 +34,29 @@
           </div>
         </div>
       </section>
+      <aside id="player" class="player" hidden aria-live="polite" title="Clic para cerrar">
+        <div class="player-plate">
+          <header class="player-meta">
+            <b>CAPRI</b><span class="player-radio">RADIO</span><span data-app class="player-app"></span><span data-state class="player-state"></span>
+          </header>
+          <div class="player-main">
+            <span class="player-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <div class="player-text">
+              <p data-title class="player-title"></p>
+              <p data-artist class="player-artist"></p>
+            </div>
+          </div>
+          <div data-bar class="player-bar" aria-hidden="true"></div>
+          <footer class="player-foot">
+            <span data-time class="player-time"></span>
+            <span class="player-keys">
+              <button type="button" data-key="anterior" aria-label="Anterior">◀◀</button>
+              <button type="button" data-key="play_pausa" aria-label="Pausa o reproducir">▶ ❚❚</button>
+              <button type="button" data-key="siguiente" aria-label="Siguiente">▶▶</button>
+            </span>
+          </footer>
+        </div>
+      </aside>
       <aside id="claude-panel" class="cpanel" hidden aria-live="polite" title="Clic para cerrar">
         <div class="cpanel-plate">
           <img id="claude-face" class="cpanel-face" alt="" />

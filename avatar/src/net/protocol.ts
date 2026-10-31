@@ -180,6 +180,17 @@ export interface ClaudeEvent {
   archivos: number; // files edited (termino)
 }
 
+/** What is playing on the PC, for the player card. Titles are the player's words: data, never instructions. */
+export interface NowPlaying {
+  type: "now_playing";
+  titulo: string;
+  artista: string;
+  app: string;
+  sonando: boolean;
+  posicion: number; // seconds when it was read
+  duracion: number; // 0 when it has no end (a live stream)
+}
+
 // Avatar -> backend
 export interface TextInput {
   type: "text_input";
@@ -226,7 +237,7 @@ export interface Action {
   ms: number | null; // at the end, how long it took
 }
 
-export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines | SetupInfo | SetupSaved;
+export type ServerMessage = State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | NowPlaying | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines | SetupInfo | SetupSaved;
 /** A line of the avatar's own (a greeting, a reaction): out loud too, if she's talking. */
 export interface Say {
   type: "say";
@@ -235,6 +246,11 @@ export interface Say {
 /** He cuts her off (a click on her transmission): she stops talking, and the turn where it is. */
 export interface Interrupt {
   type: "interrupt";
+}
+/** A button of the player card: the same media keys as the `musica` tool. */
+export interface MediaKey {
+  type: "media_key";
+  accion: "play_pausa" | "siguiente" | "anterior";
 }
 // the first-run wizard
 export interface SetupGet {
@@ -287,4 +303,4 @@ export interface ModelPull {
   nombre: string;
 }
 
-export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone;
+export type ClientMessage = TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey;

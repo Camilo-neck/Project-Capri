@@ -325,10 +325,10 @@ class SetupGet(BaseModel):
 
 
 class SetupSave(BaseModel):
-    """A wizard step he filled in: his calendar's address or his Spotify app's Client ID."""
+    """A wizard step he filled in: his calendar's address, his Spotify app's Client ID, or his SteamID and Steam key."""
 
     type: Literal["setup_save"] = "setup_save"
-    campo: Literal["calendario", "spotify"]
+    campo: Literal["calendario", "spotify", "steam_id", "steam_clave"]
     valor: str = Field(max_length=2000)
 
 

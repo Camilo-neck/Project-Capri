@@ -42,6 +42,7 @@ class Settings:
     quiet: tuple[time, time] | None = (time(23), time(8))  # no chatter from..to (may wrap midnight)
     spotify_client_id: str = ""
     spotify_redirect: str = SPOTIFY_REDIRECT
+    steam_id: str = ""  # his SteamID64 ([steam] id); the key is in the Credential Manager
     model_provider: str = "ollama"  # one of providers.PROVIDERS: "ollama", "claude_code", "anthropic", "openai", "gemini"...
     model_name: str = "qwen3-vl:8b-instruct"
     model_effort: str = "low"  # Claude: low | medium | high (more is slower)
@@ -111,6 +112,7 @@ def load() -> Settings:
         quiet=parse_quiet(pro.get("silencio", "23:00-08:00")),
         spotify_client_id=data.get("spotify", {}).get("client_id", ""),
         spotify_redirect=data.get("spotify", {}).get("redirect_uri", SPOTIFY_REDIRECT),
+        steam_id=str(data.get("steam", {}).get("id", "")),
         model_provider=data.get("modelo", {}).get("proveedor", "ollama"),
         model_name=data.get("modelo", {}).get("nombre", "qwen3-vl:8b-instruct"),
         model_effort=data.get("modelo", {}).get("esfuerzo", "low"),
@@ -185,6 +187,12 @@ def save_spotify_client_id(text: str) -> None:
     if not re.fullmatch(r"[0-9a-fA-F]{32}", t):
         raise ValueError("un Client ID de Spotify son 32 letras y números (a-f, 0-9)")
     set_value("spotify", "client_id", t.lower())
+
+
+def save_steam_id(text: str) -> None:
+    from app import steam
+
+    set_value("steam", "id", steam.parse_id(text))
 
 
 def save_calendar_url(url: str) -> None:

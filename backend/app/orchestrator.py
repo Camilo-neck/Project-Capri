@@ -37,7 +37,7 @@ SEARCH_LOAD_S = 3  # a search opened in his browser gets this long to load befor
 GUARD_S = 0.25  # after "looking", before a capture: time for the avatar to keep herself out of it
 # What these bring in may be written by someone else (a page, a file, a program's output): once one
 # ran in a turn (or a command that wasn't plainly read-only), any action that asks for a click asks in red.
-EXTERNAL = {"que_suena", "leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
+EXTERNAL = {"que_suena", "steam", "leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
 DENIED = "El usuario no lo autorizó. No se hizo nada."
 LABELS = {"vscode": "VSCode", "warp": "Warp"}  # how she says some programs of a routine
 FORGET_CMD = "/olvida"

@@ -142,9 +142,9 @@ const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&pan
     else downloading.set(m.voz, m.total ? m.completado / m.total : 0);
     showVoices();
   } else if (m.type === "setup_saved") {
-    const note = $(m.campo === "calendario" ? "cal-note" : "spotify-note");
+    const note = $(m.campo === "calendario" ? "cal-note" : m.campo.startsWith("steam") ? "steam-note" : "spotify-note");
     note.className = m.ok ? "note okay" : "note err";
-    note.textContent = m.ok ? (m.campo === "calendario" ? "Guardado. Te avisaré antes de tus eventos." : "Guardado. Dile «conecta Spotify» cuando quieras.") : m.error;
+    note.textContent = m.ok ? (m.campo === "calendario" ? "Guardado. Te avisaré antes de tus eventos." : m.campo.startsWith("steam") ? "Guardado." : "Guardado. Dile «conecta Spotify» cuando quieras.") : m.error;
   }
 }, (up) => up && refresh());
 
@@ -184,7 +184,12 @@ document.addEventListener("click", (e) => {
     key.value = "";
   } else if (t.id === "cal-save") link.send({ type: "setup_save", campo: "calendario", valor: $<HTMLInputElement>("cal").value });
   else if (t.id === "spotify-save") link.send({ type: "setup_save", campo: "spotify", valor: $<HTMLInputElement>("spotify").value });
-  else if (t.id === "copy-redirect") void navigator.clipboard.writeText($("redirect").textContent ?? "");
+  else if (t.id === "steam-id-save") link.send({ type: "setup_save", campo: "steam_id", valor: $<HTMLInputElement>("steam-id").value });
+  else if (t.id === "steam-key-save") {
+    const key = $<HTMLInputElement>("steam-key");
+    link.send({ type: "setup_save", campo: "steam_clave", valor: key.value });
+    key.value = "";
+  } else if (t.id === "copy-redirect") void navigator.clipboard.writeText($("redirect").textContent ?? "");
   else if (t.dataset.get) {
     if (link.send({ type: "voice_download", voz: t.dataset.get })) downloading.set(t.dataset.get, 0);
     showVoices();

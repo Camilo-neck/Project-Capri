@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import firstrun, launch, pcsense, settings, tools, voices
+from app import firstrun, launch, pcsense, settings, steam, tools, voices
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
                           Heard, Interrupt, MediaKey, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
@@ -266,6 +266,10 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         try:
                             if campo == "calendario":
                                 settings.save_calendar_url(valor)
+                            elif campo == "steam_id":
+                                settings.save_steam_id(valor)
+                            elif campo == "steam_clave":
+                                steam.set_key(valor)
                             else:
                                 settings.save_spotify_client_id(valor)
                             await send(SetupSaved(campo=campo, ok=True))

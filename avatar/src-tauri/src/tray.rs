@@ -44,7 +44,7 @@ pub fn tray_states(states: tauri::State<States>) -> HashMap<&'static str, bool> 
 pub fn tray_action(id: String, app: AppHandle) {
     match id.as_str() {
         "open-input" => focus_input(&app),
-        "deambular" | "poseer_ventanas" | "reaccionar_pc" | "seguir_pantallas" => {
+        "deambular" | "poseer_ventanas" | "reaccionar_pc" | "seguir_pantallas" | "sonido" => {
             let on = !app.state::<States>().0.lock().unwrap().get(id.as_str()).copied().unwrap_or(true);
             set_state(&app, &id, on);
             // the frontend reads the key the next time she wanders, the backend every few seconds
@@ -195,6 +195,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ("poseer_ventanas", cfg.poseer_ventanas),
         ("reaccionar_pc", cfg.reaccionar_pc),
         ("seguir_pantallas", cfg.seguir_pantallas),
+        ("sonido", cfg.sonido),
     ]))));
 
     let panel = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))

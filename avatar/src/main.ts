@@ -9,6 +9,9 @@ import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
 import { mountPlayer } from "./player.ts";
+import * as sfx from "./sfx.ts";
+import type { SfxKind } from "./sfxrecipes.ts";
+import type { GlitchKind } from "./state/glitch.ts";
 import type { Action, Buttons, ClaudeEvent, Emocion, PcEvent, ServerMessage, VoiceState } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
@@ -105,13 +108,15 @@ const intro = { // whichever is on
   skip() { showIntro.skip(); pixelIntro.skip(); },
 };
 const director = new Director();
-type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean; camara_ancho: number };
+type AvatarSettings = { deambular: boolean; poseer_ventanas: boolean; estilo: string; dormir_min: number; camara: boolean; seguir_pantallas: boolean; camara_ancho: number; sonido: boolean; sonido_volumen: number };
 const settings = await invoke<AvatarSettings>("avatar_settings");
 let style: Style = settings.estilo === "pixel" ? "pixel" : "original";
 let sleepAfter = settings.dormir_min * 60_000;
 await pet.setStyle(style);
 let clips = new ClipPlayer(style);
 const glitch = new GlitchFx(performance.now());
+const KICK_SFX: Record<GlitchKind, SfxKind | null> = { twitch: null, change: "blip", poke: "poke", hurt: "hurt", vanish: "vanish", arrive: "arrive", doze: "sleep" };
+glitch.onKick = (kind) => sfx.play(KICK_SFX[kind]);
 const mischief = new Mischief(performance.now());
 const tricks = new Tricks(performance.now());
 let trick: { name: Trick; since: number } | null = null; // a pirouette or juggling, while she has nothing to do
@@ -211,6 +216,7 @@ let claudePending: Panel | null = null; // Claude finished while she was hiding
 let claudeTimer = 0;
 let dnd = false; // do not disturb (the backend owns it; this mirrors it for the status bar)
 let fullscreen = false; // a fullscreen app is in front: hidden and not rendering
+await sfx.init(() => dnd || fullscreen || reducedMotion.matches); // her sound effects stay quiet then
 let nextWander = performance.now() + wanderGap();
 let wins: Windows = { fg: 0, wins: [] };
 let perch: Perch | null = null; // the window she sits on; null = the taskbar
@@ -757,6 +763,7 @@ const link = connect(
         break;
       case "utterance_start":
         wakeUp();
+        if (!awaiting) sfx.play("notify"); // she speaks up on her own: a reminder, a greeting
         if (confirming) hideChoices(); // the confirmation timed out: the turn moved on
         else if (buttonsId) hideButtons(); // what she says next replaces them
         // Also covers a retry: the new utterance replaces the text shown so far.
@@ -812,6 +819,7 @@ const link = connect(
         zap(msg);
         break;
       case "now_playing":
+        sfx.play("radio");
         player.show(msg);
         break;
       case "claude":
@@ -849,6 +857,8 @@ const link = connect(
 /** Claude mode: the ticker follows the session that moved last; she reacts and shows Claude's words unless hiding or on do-not-disturb. */
 function onClaude(msg: ClaudeEvent, now: number): void {
   claudeTrack.push(msg, now);
+  if (msg.estado === "termino") sfx.play("notify");
+  else if (msg.estado === "necesita") sfx.play("alert");
   if (msg.estado === "termino") claudeDone = { project: msg.project, at: Date.now() };
   if (msg.estado === "necesita") void comeToHim(); // Claude asks him something: she comes to his screen
   const react = reaction(msg);
@@ -1018,6 +1028,7 @@ async function cutin(shot: ShotName): Promise<void> {
 async function onPc(e: PcEvent): Promise<void> {
   const r = pcReaction(e);
   if (!r) return;
+  sfx.play("notify");
   if (r.hide && !hiding) {
     gameHid = true;
     if (!dnd && !fullscreen) sayLocal(r);
@@ -1125,6 +1136,7 @@ function showChoices(id: string, what: string, red = false): void {
   hideButtons(); // a confirmation takes their place
   confirming = id;
   confirmingRed = red;
+  sfx.play(red ? "alert_red" : "alert");
   const option = (n: 1 | 2, label: string) => {
     const li = document.createElement("li");
     const b = document.createElement("button");
@@ -1152,6 +1164,7 @@ function showButtons(msg: Buttons): void {
     btn.type = "button";
     btn.textContent = `▸ ${b.texto}`;
     btn.addEventListener("click", () => {
+      sfx.play("click");
       link.send({ type: "pressed", id: msg.id, boton: b.id });
       hideButtons();
     });
@@ -1186,6 +1199,7 @@ function hideChoices(): void {
 
 function answer(ok: boolean): void {
   if (!confirming) return;
+  sfx.play("click");
   link.send({ type: "confirm_response", id: confirming, ok });
   hideChoices();
 }
@@ -1631,6 +1645,7 @@ pet.app.ticker.add((ticker) => {
   const now = performance.now();
   const revealed = typewriter.tick(ticker.deltaMS);
   if (revealed) {
+    if (!voiced(now)) sfx.play("tick"); // out loud she needs no typing under her voice
     txText.textContent += revealed;
     txText.parentElement!.scrollTop = txText.parentElement!.scrollHeight;
     if (latency === null && sentAt) {
@@ -1790,6 +1805,7 @@ pet.app.ticker.add((ticker) => {
 async function playIntro(): Promise<void> {
   const view = style === "pixel" ? pixelIntro : showIntro;
   if (!fullscreen && (await view.load())) {
+    sfx.play("boot");
     const [x, y] = headOnPage();
     await view.play({ to: { x, y, size: body().size * 0.45 }, label: "¡HOLA!", caption: "CAPRI · PROJECT CAPRICORN",
       still: reducedMotion.matches });

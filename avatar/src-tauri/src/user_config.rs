@@ -43,11 +43,14 @@ pub struct Avatar {
     pub seguir_pantallas: bool,
     /// Camera mode's frame width, CSS px (resized from its corners; the avatar keeps it within its limits).
     pub camara_ancho: u32,
+    /// Sound effects (teleports, typing, alerts...) and their volume, 0 to 100.
+    pub sonido: bool,
+    pub sonido_volumen: u32,
 }
 
 impl Default for Avatar {
     fn default() -> Self {
-        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true, seguir_pantallas: true, camara_ancho: 336 }
+        Self { deambular: true, poseer_ventanas: true, estilo: "original".into(), dormir_min: 20, camara: false, reaccionar_pc: true, seguir_pantallas: true, camara_ancho: 336, sonido: true, sonido_volumen: 50 }
     }
 }
 
@@ -153,6 +156,12 @@ pub fn save_cam_width(ancho: u32) -> Result<(), String> {
     save("camara_ancho", toml_edit::value(i64::from(ancho.clamp(240, 600))))
 }
 
+/// The sound effects' volume from the panel's slider.
+#[tauri::command]
+pub fn save_sfx_volume(volumen: u32) -> Result<(), String> {
+    save("sonido_volumen", toml_edit::value(i64::from(volumen.min(100))))
+}
+
 /// Camera mode on or off (its shortcut), for next time.
 #[tauri::command]
 pub fn save_camera(on: bool) -> Result<(), String> {
@@ -177,6 +186,7 @@ camara = \"Ctrl+Alt+C\"
         assert_eq!(old.atajos.apariencia, "Ctrl+Alt+P"); // an older config still works
         let partial: UserConfig = toml::from_str("[avatar]\nposeer_ventanas = false\n").unwrap();
         assert!(partial.avatar.deambular && !partial.avatar.poseer_ventanas);
+        assert!(partial.avatar.sonido && partial.avatar.sonido_volumen == 50);
         assert_eq!(partial.atajos.escribir, "Ctrl+Alt+Space");
         assert_eq!(partial.avatar.estilo, "original");
         assert_eq!(partial.avatar.dormir_min, 20);

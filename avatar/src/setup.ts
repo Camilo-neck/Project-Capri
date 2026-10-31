@@ -12,6 +12,7 @@ import { KEY_PAGES } from "./cloudkeys.ts";
 import type { ModelInfo, ServerMessage, SetupInfo, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { voiceCard } from "./voicecard.ts";
+import { cloudForm } from "./cloudform.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 ($("face") as HTMLImageElement).src = face;
@@ -137,7 +138,9 @@ const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&pan
     voice = m;
     showVoices();
     showPc();
+    cloudVoices.show(m);
   } else if (m.type === "voice_progress") {
+    if (m.error && cloudVoices.error(m.voz, m.error)) return;
     if (m.error || m.completado >= m.total) downloading.delete(m.voz);
     else downloading.set(m.voz, m.total ? m.completado / m.total : 0);
     showVoices();
@@ -147,6 +150,8 @@ const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&pan
     note.textContent = m.ok ? (m.campo === "calendario" ? "Guardado. Te avisaré antes de tus eventos." : m.campo.startsWith("steam") ? "Guardado." : "Guardado. Dile «conecta Spotify» cuando quieras.") : m.error;
   }
 }, (up) => up && refresh());
+
+const cloudVoices = cloudForm($("cloud-voices"), (m) => link.send(m), (url) => void invoke("open_web", { url }).catch((err) => console.warn("open_web", err)));
 
 function refresh(): void {
   link.send({ type: "setup_get" });

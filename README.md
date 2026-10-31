@@ -40,7 +40,7 @@ ventanas y tiene un buen puñado de emociones:
 ## Qué hace
 
 - 🎙️ **Voz y chat:** ventana flotante transparente; llámala por su nombre («Capri, …») o con `Ctrl+Alt+V`.
-  Entiende español e inglés y contesta con voz propia: **clonada** (Qwen3-TTS, GPU NVIDIA), voces en CPU o, opcionalmente, voces de la nube de Edge con un toque de holograma.
+  Entiende español e inglés y contesta con voz propia: **clonada** (Qwen3-TTS, GPU NVIDIA), voces en CPU o, opcionalmente, voces de la nube: las de Edge con un toque de holograma, o Fish Audio, ElevenLabs y OpenAI con tu propia clave.
 - 🧠 **Cerebro a elección:** un modelo local con **Ollama** (por defecto), tu plan de **Claude** (Claude Code) o una
   API con tu clave: Claude, GPT, Gemini, OpenRouter, Groq, Mistral, DeepSeek o Grok.
 - 🔐 **Permisos por niveles:** lo irreparable siempre pide un clic. Lo que hay en pantalla son datos, nunca órdenes.

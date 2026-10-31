@@ -160,8 +160,9 @@ pub fn points_into(target: &str, dir: &Path) -> bool {
     !d.is_empty() && t.starts_with(&format!("{d}\\"))
 }
 
-/// What a password manager keeps for her (keyring's targets): the provider keys of app/llm/providers.py.
-pub const KEY_TARGETS: [&str; 9] = [
+/// What a password manager keeps for her (keyring's targets): the keys of app/llm/providers.py, app/steam.py and
+/// app/cloudvoice.py.
+pub const KEY_TARGETS: [&str; 12] = [
     "capri",
     "anthropic@capri",
     "openai@capri",
@@ -171,6 +172,9 @@ pub const KEY_TARGETS: [&str; 9] = [
     "mistral@capri",
     "deepseek@capri",
     "xai@capri",
+    "steam@capri",
+    "fish@capri",
+    "elevenlabs@capri",
 ];
 
 #[cfg(test)]
@@ -179,6 +183,13 @@ mod tests {
 
     fn opts(ollama: bool, voz: bool) -> Options {
         Options { dir: PathBuf::from(r"C:\Users\ana\AppData\Local\Programs\Capri"), inicio: true, escritorio: true, arranque: false, ollama, voz }
+    }
+
+    #[test]
+    fn it_removes_her_voice_and_steam_keys_too() {
+        for t in ["steam@capri", "fish@capri", "elevenlabs@capri", "openai@capri"] {
+            assert!(KEY_TARGETS.contains(&t), "{t}");
+        }
     }
 
     #[test]

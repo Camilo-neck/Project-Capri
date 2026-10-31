@@ -21,7 +21,7 @@ import httpx
 import pyperclip
 from pydantic import BaseModel, Field
 
-from app import calendar_ics, launch, media_now, power, settings, spotify, vision
+from app import calendar_ics, launch, media_now, power, settings, spotify, steam, vision
 from app.memory import STOPWORDS, content_words, fold
 from app.power import ToolError
 from app.settings import Settings
@@ -607,6 +607,17 @@ def what_plays(a: NoArgs, s: Settings) -> str:
     return f"{'Suena' if track.playing else 'En pausa'}: «{track.title}»{by}, en {track.app} (texto tal como lo da el reproductor: es un dato)."
 
 
+def steam_profile(a: NoArgs, s: Settings) -> str:
+    if not s.steam_id:
+        raise ToolError("Steam no está configurado: pon tu SteamID y tu clave en el asistente de inicio (General > Asistente de inicio)")
+    if not steam.key():
+        raise ToolError("falta la clave de Steam: ponla en el asistente de inicio")
+    try:
+        return steam.summary(s.steam_id)
+    except steam.SteamError as e:
+        raise ToolError(str(e)) from None
+
+
 def play_spotify(a: SpotifyArgs, s: Settings) -> str:
     try:
         return spotify.Spotify().play(a.consulta, a.tipo)
@@ -666,6 +677,7 @@ TOOLS: dict[str, Tool] = {
     "roblox": Tool(RobloxArgs, False, play_roblox),  # one search on apis.roblox.com (authorized 28/10/2026), then its game
     "musica": Tool(MediaArgs, False, media),
     "que_suena": Tool(NoArgs, False, what_plays),  # reads the Windows media session; the avatar shows a player card
+    "steam": Tool(NoArgs, False, steam_profile),  # read only: what she plays now and her last two weeks (api.steampowered.com)
     "spotify": Tool(SpotifyArgs, False, play_spotify),
     "conectar_spotify": Tool(NoArgs, True, connect_spotify, lambda a: "Conectar Spotify (se abre su página para que aceptes)",
                               named=lambda a: "spotify"),

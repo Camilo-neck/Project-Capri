@@ -417,6 +417,10 @@ def test_the_wizard_gets_this_pc_saves_his_choices_and_finishes(client, monkeypa
         assert ws.receive_json()["ok"]
         ws.send_json({"type": "setup_save", "campo": "spotify", "valor": "no-un-id"})
         assert not ws.receive_json()["ok"]
+        ws.send_json({"type": "setup_save", "campo": "steam_id", "valor": "76561198000000001"})
+        assert ws.receive_json()["ok"]
+        ws.send_json({"type": "setup_save", "campo": "steam_id", "valor": "cami"})
+        assert not ws.receive_json()["ok"]
         assert not firstrun.done()
         ws.send_json({"type": "setup_done"})
         ws.send_json({"type": "setup_get"})  # answered after setup_done ran

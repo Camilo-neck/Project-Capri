@@ -120,7 +120,7 @@ pub fn show_setup(app: &AppHandle) {
 }
 
 /// The pages the wizard may open in his browser (getting Ollama, a cloud key, a Spotify app): these and nothing else.
-const WEB: [&str; 10] = [
+const WEB: [&str; 11] = [
     "https://ollama.com/download",
     "https://console.anthropic.com/settings/keys",
     "https://platform.openai.com/api-keys",
@@ -131,6 +131,7 @@ const WEB: [&str; 10] = [
     "https://platform.deepseek.com/api_keys",
     "https://console.x.ai",
     "https://developer.spotify.com/dashboard",
+    "https://steamcommunity.com/dev/apikey",
 ];
 
 fn allowed(url: &str) -> bool {
@@ -271,6 +272,7 @@ mod tests {
     fn the_wizard_opens_only_its_own_pages() {
         assert!(allowed("https://ollama.com/download"));
         assert!(allowed("https://developer.spotify.com/dashboard"));
+        assert!(allowed("https://steamcommunity.com/dev/apikey"));
         assert!(!allowed("https://ollama.com/download?x=1"));
         assert!(!allowed("file:///C:/Windows/System32/calc.exe"));
         assert!(!allowed("https://evil.example"));

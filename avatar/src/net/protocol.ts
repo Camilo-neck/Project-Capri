@@ -258,7 +258,7 @@ export interface SetupGet {
 }
 export interface SetupSave {
   type: "setup_save";
-  campo: "calendario" | "spotify";
+  campo: "calendario" | "spotify" | "steam_id" | "steam_clave";
   valor: string;
 }
 export interface SetupDone {

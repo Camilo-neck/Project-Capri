@@ -42,6 +42,12 @@ aviso_minutos = 10
 client_id = ""
 redirect_uri = "http://127.0.0.1:5173/callback"
 
+# Steam (opcional, solo lectura): a qué juegas y tus horas recientes. Tu SteamID de 17 cifras; la clave gratis de
+# https://steamcommunity.com/dev/apikey va al Administrador de credenciales (asistente de inicio), nunca aquí.
+# Tu perfil y "Detalles del juego" deben ser públicos.
+[steam]
+id = ""
+
 # Lo que Capri hace sola en el escritorio. Se aplica la próxima vez que le toque moverse.
 [avatar]
 deambular = true        # se teletransporta de vez en cuando a otro sitio de la barra o a una ventana

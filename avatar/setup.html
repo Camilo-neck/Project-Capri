@@ -17,7 +17,7 @@
       </header>
 
       <ol class="rail" id="rail" aria-label="Pasos">
-        <li>Hola</li><li>Tu PC</li><li>Cerebro</li><li>Voz</li><li>Agenda</li><li>Spotify</li><li>Listo</li>
+        <li>Hola</li><li>Tu PC</li><li>Cerebro</li><li>Voz</li><li>Agenda</li><li>Cuentas</li><li>Listo</li>
       </ol>
 
       <div class="tab steps" id="steps">
@@ -86,7 +86,7 @@
         </section>
 
         <section class="step" data-step="5" hidden>
-          <h2>Tu música <span class="opt">opcional</span></h2>
+          <h2>Tus cuentas <span class="opt">opcional</span></h2>
           <p>Para que ponga la música que le pidas en Spotify, necesita tu propia app de Spotify (gratis, dos minutos):</p>
           <ol class="how">
             <li><button class="link" data-web="https://developer.spotify.com/dashboard">Abre el panel de desarrollador de Spotify</button> e inicia sesión.</li>
@@ -99,6 +99,20 @@
             <button id="spotify-save" class="mini">Guardar</button>
           </div>
           <small id="spotify-note" class="note">Luego dile «conecta Spotify» y acepta en tu navegador.</small>
+          <p>Y si juegas en Steam, puede leer a qué juegas (solo lectura; tu perfil y «Detalles del juego» deben ser públicos):</p>
+          <ol class="how">
+            <li><button class="link" data-web="https://steamcommunity.com/dev/apikey">Saca tu clave gratis de Steam</button> (de dominio pon <b>localhost</b>).</li>
+            <li>Pégala aquí y pon tu SteamID de 17 cifras (o el enlace de tu perfil con ese número):</li>
+          </ol>
+          <div class="field">
+            <input id="steam-key" type="password" class="field-input" autocomplete="off" spellcheck="false" placeholder="Clave de Steam" />
+            <button id="steam-key-save" class="mini">Guardar</button>
+          </div>
+          <div class="field">
+            <input id="steam-id" class="field-input" spellcheck="false" placeholder="SteamID (7656119…)" />
+            <button id="steam-id-save" class="mini">Guardar</button>
+          </div>
+          <small id="steam-note" class="note">Luego pregúntale «¿a qué he jugado esta semana?».</small>
         </section>
 
         <section class="step" data-step="6" hidden>

@@ -56,6 +56,8 @@ estilo = "original"     # "original" (el arte de la serie) o "pixel"; el atajo d
 camara = false          # modo cámara: sus primeros planos de la serie en un recuadro de transmisión; el atajo lo alterna
 dormir_min = 20         # minutos sin usar el PC ni hablarle para dormirse hasta quedar en la máscara; 0 = nunca
 reaccionar_pc = true    # reacciona a tu PC: procesador al máximo, cargador, batería, red, USB, mando o teléfono, juegos
+sonido = true            # efectos de sonido (teletransportes, escritura, avisos); callan con No molestar y con juegos a pantalla completa
+sonido_volumen = 50     # 0 a 100 (también en el panel)
 
 # Cuándo habla sin que le escribas: saludo del día y algún comentario si lleva rato sin hablaros.
 # Los avisos del calendario no cuentan para el máximo, pero el modo no molestar los calla también.

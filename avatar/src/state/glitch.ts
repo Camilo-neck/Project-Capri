@@ -79,8 +79,12 @@ export class GlitchFx {
     return 5000 + this.rand() * 8000;
   }
 
+  /** Called for each effect that starts (the sound effects hang here). */
+  onKick: ((kind: GlitchKind) => void) | null = null;
+
   kick(kind: GlitchKind, now: number): void {
     if (this.kind === "doze" && kind !== "arrive") return; // asleep: only waking brings her body back
+    this.onKick?.(kind);
     this.kind = kind;
     this.start = now;
   }

@@ -166,3 +166,8 @@ select.field-input option { background: #17132a; }
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }
 }
+
+/* the sound effects' volume slider */
+.vol { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; padding: 2px 8px 8px 8px; font-size: 11px; color: var(--dim); }
+.vol input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.vol output { color: var(--fg); }

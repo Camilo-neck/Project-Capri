@@ -22,7 +22,8 @@
         "decorations": false,
         "shadow": false,
         "alwaysOnTop": true,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {

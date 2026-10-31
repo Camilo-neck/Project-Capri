@@ -18,6 +18,17 @@ document.querySelector<HTMLImageElement>("#face")!.src = face;
 const act = (id: string): void => void invoke("tray_action", { id });
 const close = (): void => void getCurrentWindow().hide();
 
+// the sound effects' volume: saved when the slider is let go
+const vol = document.querySelector<HTMLInputElement>("#sfx-vol")!;
+const volN = document.querySelector<HTMLElement>("#sfx-vol-n")!;
+const showVol = (): void => void (volN.textContent = `${vol.value}%`);
+void invoke<{ sonido_volumen: number }>("avatar_settings").then((c) => {
+  vol.value = String(c.sonido_volumen);
+  showVol();
+});
+vol.addEventListener("input", showVol);
+vol.addEventListener("change", () => void invoke("save_sfx_volume", { volumen: Number(vol.value) }));
+
 const looks = { style: false, camera: false }; // how she looks: the camera over the art, or the art (original | pixel)
 
 function show(name: string, on: boolean): void {

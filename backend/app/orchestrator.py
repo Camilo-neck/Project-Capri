@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app import calendar_ics, claude_link, commands, winalarm, launch, presence, reminders, routines, settings, spoken, tools, vision
 from app.llm.client import Generate, ollama_generate, ollama_summarize, read_results, reply
 from app.memory import Memory, content_words, fold, mentions, said
-from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, Remembered, ServerMessage, State, TextDelta,
+from app.protocol import (Action, Button, Buttons, ClaudeEvent, ConfirmRequest, Mode, NowPlaying, Remembered, ServerMessage, State, TextDelta,
                           UtteranceEnd, UtteranceStart)
 from app.schema import Accion, Reply
 
@@ -37,7 +37,7 @@ SEARCH_LOAD_S = 3  # a search opened in his browser gets this long to load befor
 GUARD_S = 0.25  # after "looking", before a capture: time for the avatar to keep herself out of it
 # What these bring in may be written by someone else (a page, a file, a program's output): once one
 # ran in a turn (or a command that wasn't plainly read-only), any action that asks for a click asks in red.
-EXTERNAL = {"leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
+EXTERNAL = {"que_suena", "leer_web", "buscar_web", "leer_archivo", "listar_carpeta", "buscar_archivos", "leer_portapapeles"}
 DENIED = "El usuario no lo autorizó. No se hizo nada."
 LABELS = {"vscode": "VSCode", "warp": "Warp"}  # how she says some programs of a routine
 FORGET_CMD = "/olvida"
@@ -507,6 +507,9 @@ class Orchestrator:
         await send(Action(nombre=accion.nombre, fase="fin", ok=ok, ms=round((time.monotonic() - start) * 1000)))
         if asks or tool.log:
             tools.audit({"accion": accion.nombre, "resultado": tools.clip(result)})
+        if accion.nombre == "que_suena" and ok and tools.playing:
+            t = tools.playing[0]
+            await send(NowPlaying(titulo=t.title, artista=t.artist, app=t.app, sonando=t.playing, posicion=t.position, duracion=t.duration))
         if accion.nombre == "buscar_archivos" and ok and tools.found:
             self.after.append(self.file_buttons(list(tools.found)))
         if accion.nombre == "cerrar_app" and ok and tools.unclosed:

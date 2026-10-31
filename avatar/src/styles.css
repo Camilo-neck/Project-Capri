@@ -917,3 +917,169 @@ body {
 .cam-grip[data-corner="tr"] { right: -5px; top: -5px; border-width: 3px 3px 0 0; cursor: nesw-resize; }
 .cam-grip[data-corner="bl"] { left: -5px; bottom: -5px; border-width: 0 0 3px 3px; cursor: nesw-resize; }
 .cam-grip[data-corner="br"] { right: -5px; bottom: -5px; border-width: 0 3px 3px 0; cursor: nwse-resize; }
+
+/* Her player card ("¿qué suena?"): a Cyberpunk radio plate: station tag, equalizer, title, segmented bar, media keys. */
+.player {
+  --tone: var(--accent-2);
+  position: relative;
+  width: 330px;
+  margin-bottom: 20px;
+  filter: drop-shadow(5px 5px 0 var(--accent));
+  cursor: pointer;
+  animation: cpanel-in 210ms steps(3, jump-end) both;
+}
+
+.player[data-playing="false"] {
+  --tone: var(--dim);
+}
+
+.player-plate {
+  padding: 10px 14px 12px;
+  background: rgb(11 9 22);
+  clip-path: polygon(0 var(--cut), var(--cut) 0, 55% 0, 57% 6px, 59% 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+}
+
+.player-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+.player-radio {
+  color: var(--dim);
+}
+
+.player-radio::before {
+  content: "/ ";
+  color: var(--accent);
+}
+
+.player-app {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+
+.player-state {
+  margin-left: auto;
+  padding: 1px 6px;
+  color: rgb(11 9 22);
+  background: var(--tone);
+}
+
+.player-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.player-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+  width: 34px;
+  height: 36px;
+}
+
+.player-eq i {
+  flex: 1;
+  height: 30%;
+  background: var(--tone);
+}
+
+.player[data-playing="true"] .player-eq i {
+  animation: player-eq 700ms steps(4, jump-none) infinite alternate;
+}
+
+.player-eq i:nth-child(2) { animation-delay: -180ms; }
+.player-eq i:nth-child(3) { animation-delay: -420ms; }
+.player-eq i:nth-child(4) { animation-delay: -90ms; }
+.player-eq i:nth-child(5) { animation-delay: -310ms; }
+
+@keyframes player-eq {
+  from { height: 18%; }
+  to { height: 100%; }
+}
+
+.player-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.player-title,
+.player-artist {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-title {
+  font: 700 15px/1.25 var(--font-head);
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+
+.player-artist {
+  color: var(--tone);
+  font-size: 12px;
+}
+
+.player-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  margin: 10px 0 6px;
+}
+
+.player-bar i {
+  flex: 1;
+  background: rgb(122 118 150 / 0.3);
+}
+
+.player-bar i.on {
+  background: var(--tone);
+}
+
+.player-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.player-keys {
+  display: flex;
+  gap: 6px;
+}
+
+.player-keys button {
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--fg);
+  font: 600 11px var(--font-head);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+
+.player-keys button:hover,
+.player-keys button:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player,
+  .player[data-playing="true"] .player-eq i {
+    animation: none;
+  }
+}

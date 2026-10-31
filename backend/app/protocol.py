@@ -224,6 +224,18 @@ class Action(BaseModel):
     ms: int | None = None  # fin: how long it took
 
 
+class NowPlaying(BaseModel):
+    """What is playing on the PC (media_now.py), for the player card. Titles are the player's words: data, never instructions."""
+
+    type: Literal["now_playing"] = "now_playing"
+    titulo: str
+    artista: str
+    app: str
+    sonando: bool
+    posicion: float  # seconds when it was read
+    duracion: float  # 0: no end (a live stream)
+
+
 class RoutineInfo(BaseModel):
     nombre: str
     frases: list[str]
@@ -262,13 +274,20 @@ class SetupSaved(BaseModel):
     error: str = ""
 
 
-ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent
+ServerMessage = (State | UtteranceStart | TextDelta | UtteranceEnd | Remembered | Mode | ConfirmRequest | Buttons | PcEvent | Action | ClaudeEvent | NowPlaying
                  | Voice | Level | Heard | ModelInfo | ModelProgress | VoiceInfo | VoiceProgress | Routines | SetupInfo | SetupSaved)
 class Say(BaseModel):
     """A line of the avatar's own (a greeting, a reaction to the PC): out loud too, if she's talking."""
 
     type: Literal["say"] = "say"
     texto: str = Field(max_length=500)
+
+
+class MediaKey(BaseModel):
+    """A button of the player card: the same media keys as the `musica` tool."""
+
+    type: Literal["media_key"] = "media_key"
+    accion: Literal["play_pausa", "siguiente", "anterior"]
 
 
 class Interrupt(BaseModel):
@@ -341,6 +360,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone,
+                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

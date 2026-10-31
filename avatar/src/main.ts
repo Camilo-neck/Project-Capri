@@ -8,6 +8,7 @@ import { camHeight, camResize, camWidth, type Corner } from "./state/camsize.ts"
 import grinFace from "../assets/faces/grin.png";
 import lookFace from "../assets/faces/look.png";
 
+import { mountPlayer } from "./player.ts";
 import type { Action, Buttons, ClaudeEvent, Emocion, PcEvent, ServerMessage, VoiceState } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 import { BEHAVIORS, Director, LINGER_MS } from "./pet/behaviors.ts";
@@ -202,6 +203,7 @@ let dragging = false;
 const claudeTrack = new Tracker();
 const claudeEl = $("claude");
 const claudePanel = $("claude-panel");
+const player = mountPlayer($("player"), (m) => link.send(m));
 let claudeLine = "";
 let claudeSpark = 0; // when Claude's last spark went off
 let claudeGap = 0;
@@ -808,6 +810,9 @@ const link = connect(
         break;
       case "action":
         zap(msg);
+        break;
+      case "now_playing":
+        player.show(msg);
         break;
       case "claude":
         onClaude(msg, now);
@@ -1767,7 +1772,7 @@ pet.app.ticker.add((ticker) => {
     const r = stage.getBoundingClientRect();
     boxes.push([r.left + b.x, r.top + b.y, b.w, b.h]);
   }
-  const ui = [...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId && !voiced(now) ? [] : [tx])];
+  const ui = [...(player.el.hidden ? [] : [player.el]), ...(claudePanel.hidden ? [] : [claudePanel]), ...(inputRow.hidden ? [] : [inputRow, status]), ...(inputRow.hidden && !confirming && !buttonsId && !voiced(now) ? [] : [tx])];
   for (const el of ui) {
     const r = el.getBoundingClientRect();
     if (r.width) boxes.push([r.left, r.top, r.width, r.height]);

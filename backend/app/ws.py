@@ -8,10 +8,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import firstrun, launch, pcsense, settings, voices
+from app import firstrun, launch, pcsense, settings, tools, voices
 from app.llm import providers
 from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, Interrupt, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
+                          Heard, Interrupt, MediaKey, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -196,6 +196,8 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         spawn(orchestrator.turn(text, send, charla=charla))
                     case Look(text=text, rect=rect):
                         spawn(orchestrator.look(text, rect, send))
+                    case MediaKey(accion=accion):
+                        tools.press_key(tools.MEDIA_KEYS[accion])
                     case Pressed(id=id, boton=boton):
                         spawn(orchestrator.press(id, boton, send))
                     case ConfirmResponse(id=id, ok=ok):

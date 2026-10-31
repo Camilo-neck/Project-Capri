@@ -43,6 +43,7 @@ class Settings:
     spotify_client_id: str = ""
     spotify_redirect: str = SPOTIFY_REDIRECT
     steam_id: str = ""  # his SteamID64 ([steam] id); the key is in the Credential Manager
+    cloud_voices: dict = field(default_factory=dict)  # [voz_nube]: the voice and model of each service (cloudvoice.py)
     model_provider: str = "ollama"  # one of providers.PROVIDERS: "ollama", "claude_code", "anthropic", "openai", "gemini"...
     model_name: str = "qwen3-vl:8b-instruct"
     model_effort: str = "low"  # Claude: low | medium | high (more is slower)
@@ -113,6 +114,7 @@ def load() -> Settings:
         spotify_client_id=data.get("spotify", {}).get("client_id", ""),
         spotify_redirect=data.get("spotify", {}).get("redirect_uri", SPOTIFY_REDIRECT),
         steam_id=str(data.get("steam", {}).get("id", "")),
+        cloud_voices=data.get("voz_nube", {}),
         model_provider=data.get("modelo", {}).get("proveedor", "ollama"),
         model_name=data.get("modelo", {}).get("nombre", "qwen3-vl:8b-instruct"),
         model_effort=data.get("modelo", {}).get("esfuerzo", "low"),

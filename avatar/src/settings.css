@@ -113,7 +113,8 @@ footer { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padd
 }
 .field-input:focus { border-bottom-color: var(--accent-2); }
 .field-input:disabled { opacity: 0.45; }
-select.field-input { width: 100%; }
+select.field-input, section > input.field-input { width: 100%; }
+section > input.field-input { margin-top: 4px; }
 select.field-input option { background: #17132a; }
 .mini { padding: 0 11px; border: 0; background: var(--card-hi); clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
 .mini:hover { background: var(--accent); color: #fff; }

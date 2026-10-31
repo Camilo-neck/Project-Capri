@@ -10,7 +10,7 @@ import face from "../assets/faces/grin.png";
 import { entries, matches, SECTIONS } from "./commandlist.ts";
 import { voiceCard } from "./voicecard.ts";
 import { KEY_PAGES } from "./cloudkeys.ts";
-import type { ModelInfo, RoutineInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
+import type { CloudVoice, ModelInfo, RoutineInfo, ServerMessage, VoiceInfo } from "./net/protocol.ts";
 import { connect } from "./net/ws.ts";
 
 document.querySelector<HTMLImageElement>("#face")!.src = face;
@@ -140,13 +140,45 @@ const downloading = new Map<string, number>(); // voice -> 0-1
 function showVoice(v: VoiceInfo): void {
   voice = v;
   voiceList.innerHTML = v.voces.map((o) => voiceCard(o, o.id === v.voz, downloading.get(o.id))).join("");
-  const qwen = v.voces.find((o) => o.id === v.voz)?.motor === "qwen";
-  sliders.velocidad.disabled = qwen;
+  const motor = v.voces.find((o) => o.id === v.voz)?.motor;
+  const ownPace = motor === "qwen" || motor === "nube";
+  sliders.velocidad.disabled = ownPace;
   voiceNote.className = "note";
-  voiceNote.textContent = qwen ? "Su voz clonada habla a su ritmo: la velocidad es para las demás." : "Toca una voz para oírla y quedártela.";
+  voiceNote.textContent = ownPace ? "Esta voz habla a su ritmo: la velocidad es para las demás." : "Toca una voz para oírla y quedártela.";
   for (const [k, input] of Object.entries(sliders)) {
     input.value = String(v[k as keyof typeof sliders]);
     input.nextElementSibling!.textContent = k === "velocidad" ? `${Number(input.value).toFixed(2)}×` : `${Math.round(Number(input.value) * 100)} %`;
+  }
+  showCloud(v);
+}
+
+const vcService = $<HTMLSelectElement>("vc-service"), vcKey = $<HTMLInputElement>("vc-key"), vcVoice = $<HTMLInputElement>("vc-voice"), vcModel = $<HTMLInputElement>("vc-model"), vcNote = $("vc-note");
+const CLOUD_NOTE = "Lo que ella dice va a ese servicio. Usa solo voces que puedas usar: nunca clones a una persona sin su permiso.";
+let vcFilled = ""; // the service the boxes show: a voice_info mustn't wipe what he's typing
+let vcSaving = false;
+
+const vcPicked = (): CloudVoice | undefined => voice?.nube.find((c) => c.id === vcService.value);
+
+function showCloud(v: VoiceInfo): void {
+  if (!vcService.options.length) vcService.innerHTML = v.nube.map((c) => `<option value="${c.id}">${c.nombre}</option>`).join("");
+  const c = vcPicked();
+  if (!c) return;
+  vcKey.placeholder = c.clave ? "Clave guardada (escribe otra para cambiarla)" : "Tu clave";
+  vcVoice.placeholder = c.pide_voz ? "ID de tu voz" : "Voz (opcional)";
+  vcModel.placeholder = `Modelo: ${c.modelo_base}`;
+  if (vcFilled !== c.id) {
+    vcFilled = c.id;
+    vcVoice.value = c.voz;
+    vcModel.value = c.modelo;
+    vcKey.value = "";
+    vcNote.className = "note";
+    vcNote.textContent = `${c.ayuda} ${CLOUD_NOTE}`;
+  }
+  if (vcSaving) {
+    vcSaving = false;
+    vcKey.value = "";
+    vcNote.className = "note";
+    vcNote.textContent = "Listo: funciona. Tócala arriba para que hable con ella.";
   }
 }
 
@@ -202,6 +234,11 @@ void listen<string>("panel-tab", (e) => showTab(e.payload)); // her quick menu: 
 const link = connect(`${(await invoke<{ ws_url: string }>("config")).ws_url}&panel=1`, (m: ServerMessage) => {
   if (m.type === "voice_info") showVoice(m);
   else if (m.type === "voice_progress") {
+    if (m.error && voice?.nube.some((c) => c.id === m.voz)) {
+      vcNote.className = "note err";
+      vcNote.textContent = m.error;
+      return;
+    }
     if (m.error) {
       downloading.delete(m.voz);
       voiceNote.className = "note err";
@@ -252,6 +289,19 @@ voiceList.addEventListener("click", (e) => {
   if (card) {
     const n = (k: keyof typeof sliders) => Number(sliders[k].value);
     link.send({ type: "voice_set", velocidad: n("velocidad"), robot: n("robot"), glitch: n("glitch"), voz: card.dataset.voice!, probar: true });
+  }
+});
+
+vcService.addEventListener("change", () => voice && showCloud(voice));
+$("vc-web").addEventListener("click", () => {
+  const c = vcPicked();
+  if (c) void invoke("open_web", { url: c.web }).catch((err) => console.warn("open_web", err));
+});
+$("vc-save").addEventListener("click", () => {
+  if (link.send({ type: "voice_cloud_save", servicio: vcService.value, clave: vcKey.value, voz: vcVoice.value, modelo: vcModel.value })) {
+    vcSaving = true;
+    vcNote.className = "note";
+    vcNote.textContent = "Probando…";
   }
 });
 

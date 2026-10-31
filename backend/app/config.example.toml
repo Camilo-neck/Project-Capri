@@ -45,6 +45,10 @@ redirect_uri = "http://127.0.0.1:5173/callback"
 # Steam (opcional, solo lectura): a qué juegas y tus horas recientes. Tu SteamID de 17 cifras; la clave gratis de
 # https://steamcommunity.com/dev/apikey va al Administrador de credenciales (asistente de inicio), nunca aquí.
 # Tu perfil y "Detalles del juego" deben ser públicos.
+# Su voz desde un servicio ([voz] voz = "fish", "elevenlabs" u "openai"); se configura en el panel (Voz).
+# Lo que dice va a ese servicio. La clave vive en el Administrador de credenciales, nunca aquí.
+[voz_nube]
+
 [steam]
 id = ""
 

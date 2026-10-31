@@ -136,6 +136,18 @@
           <small id="voice-note" class="note"></small>
         </section>
         <section>
+          <h2>Voces en la nube</h2>
+          <select id="vc-service" class="field-input" aria-label="Servicio de voz"></select>
+          <input id="vc-key" class="field-input" type="password" autocomplete="off" spellcheck="false" aria-label="Clave" />
+          <input id="vc-voice" class="field-input" spellcheck="false" aria-label="Voz" />
+          <input id="vc-model" class="field-input" spellcheck="false" aria-label="Modelo" />
+          <div class="field">
+            <button id="vc-web" class="mini">Conseguir clave</button>
+            <button id="vc-save" class="mini">Guardar y probar</button>
+          </div>
+          <small id="vc-note" class="note"></small>
+        </section>
+        <section>
           <h2>Toques</h2>
           <label class="slider"><span>Velocidad</span><input id="v-speed" type="range" min="0.7" max="1.5" step="0.05" /><output></output></label>
           <label class="slider"><span>Robótica</span><input id="v-robot" type="range" min="0" max="1" step="0.05" /><output></output></label>

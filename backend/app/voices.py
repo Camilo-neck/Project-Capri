@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from app import speech
+from app import cloudvoice, speech
 
 KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 PIPER_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
@@ -22,7 +22,7 @@ QWEN_GPU_MB = 6000  # total VRAM her clone needs (2.7 GB of its own, with room f
 class Voice:
     id: str
     nombre: str
-    motor: str  # qwen | kokoro | piper | edge
+    motor: str  # qwen | kokoro | piper | edge | nube
     es: str  # the Spanish voice (Kokoro: one of its voices or a tuned <name>.npy; Piper: the model's name)
     en: str
     nota: str
@@ -39,6 +39,7 @@ CATALOG = [
     Voice("jenny", "Jenny", "edge", "es-CO-SalomeNeural", "en-US-JennyNeural", "Microsoft Edge, con su toque de holograma. En la nube: lo que dice va a Microsoft.", 30),
     Voice("bella", "Bella", "kokoro", "af_bella", "af_bella", "Kokoro, americana: en español con acento."),
     Voice("emma", "Emma", "kokoro", "bf_emma", "bf_emma", "Kokoro, británica: en español con acento."),
+    *(Voice(i, s.nombre, "nube", "", "", f"Con tu cuenta de {s.nombre}. En la nube: lo que dice va a ese servicio.") for i, s in cloudvoice.SERVICES.items()),
 ]
 DEFAULT, BACKUP = "aria", "dora"
 
@@ -62,7 +63,7 @@ def url_for(name: str) -> str:
 
 def needs(v: Voice) -> list[tuple[str, int, bool]]:
     """(file under the TTS folder, MB, whether it can be downloaded from the panel) for a voice."""
-    if v.motor == "edge":
+    if v.motor in ("edge", "nube"):
         return []  # nothing to download: it's a service
     if v.motor == "qwen":
         return [(f, 0, False) for f in ("qwen/env/Scripts/python.exe", "qwen/Qwen3-TTS-12Hz-0.6B-Base/config.json",
@@ -122,7 +123,8 @@ def options(folder: str, gpu: tuple[int, int] | None) -> list[Option]:
                 reason = "Necesita una tarjeta gráfica NVIDIA."
             elif gpu[1] < QWEN_GPU_MB:
                 reason = f"Tu GPU tiene {round(gpu[1] / 1024)} GB; necesita {QWEN_GPU_MB // 1000} GB."
-        out.append(Option(v.id, v.nombre, v.motor, v.nota, v.motor == "qwen", v.motor == "edge", not missing,
+        lack = cloudvoice.ready(v.id) if v.motor == "nube" else ""
+        out.append(Option(v.id, v.nombre, v.motor, lack or v.nota, v.motor == "qwen", v.motor in ("edge", "nube"), not missing and not lack,
                           bool(missing) and all(ok for _, _, ok in missing), not reason, reason, sum(mb for _, mb, _ in missing)))
     return out
 
@@ -135,6 +137,8 @@ def make(voice_id: str, folder: str) -> Callable:
     if v.motor == "kokoro":
         return speech.kokoro(folder, {"es": v.es, "en": v.en})
     backup = get(BACKUP)
+    if v.motor == "nube":  # no internet, no credit: Dora, so she still talks
+        return speech.fallback(cloudvoice.synth(v.id), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
     if v.motor == "edge":  # no internet: Dora, so she still talks
         return speech.fallback(speech.edge({"es": v.es, "en": v.en}, v.tono), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))
     return speech.fallback(speech.qwen(folder, v.es), speech.kokoro(folder, {"es": backup.es, "en": backup.en}))

@@ -8,10 +8,10 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.orchestrator import Orchestrator, recover
-from app import firstrun, launch, pcsense, settings, steam, tools, voices
+from app import cloudvoice, firstrun, launch, pcsense, settings, steam, tools, voices
 from app.llm import providers
-from app.protocol import (ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
-                          Heard, Interrupt, MediaKey, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
+from app.protocol import (CloudVoice, ConfirmResponse, Hotkey, Look, ModelGet, ModelInfo, ModelKey, ModelProgress, ModelPull, ModelSet,
+                          Heard, Interrupt, MediaKey, PcEvent, Presence, Pressed, RoutineInfo, Routines, RoutinesGet, Say, SetupDone, SetupGet, SetupInfo, SetupSave, SetupSaved, ServerMessage, State, TextInput, VoiceCloudSave, VoiceDownload, VoiceGet, VoiceInfo, VoiceOption, VoiceProgress,
                           VoiceSet, Voice as VoiceState, client_message)
 from app.speech import Speaker
 from app.voice import Voice
@@ -152,7 +152,7 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
         async def voice_info() -> VoiceInfo:
             opts = voices.options(settings.load().tts_dir, await asyncio.to_thread(voices.gpu))
             return VoiceInfo(velocidad=speaker.speed, robot=speaker.robot, glitch=speaker.glitch, voz=speaker.voice,
-                             voces=[VoiceOption(**vars(o)) for o in opts])
+                             voces=[VoiceOption(**vars(o)) for o in opts], nube=[CloudVoice(**vars(c)) for c in cloudvoice.info()])
 
         async def download_voice(vid: str) -> None:
             loop = asyncio.get_running_loop()
@@ -241,6 +241,22 @@ def create_app(token: str, orchestrator: Orchestrator, reminders: bool = True, v
                         if v.probar:
                             speaker.stop()
                             speaker.say("¡Hola! Así sueno ahora, ¿te gusta?", force=True)
+                    case VoiceCloudSave(servicio=sid, clave=k, voz=who, modelo=m) if speaker:
+                        error = ""
+                        try:
+                            cloudvoice.save(sid, k, who, m)
+                            error = cloudvoice.ready(sid)
+                            if not error:
+                                await asyncio.to_thread(cloudvoice.probe, sid)
+                                if speaker.voice == sid:  # in use: the new key or voice, and past any failure
+                                    speaker.use(voices.make(sid, settings.load().tts_dir), sid)
+                        except ValueError:
+                            error = f"Servicio desconocido: {sid}"
+                        except cloudvoice.CloudVoiceError as e:
+                            error = str(e)
+                        await send(await voice_info())
+                        if error:
+                            await send(VoiceProgress(voz=sid, error=error))
                     case Hotkey(name="escuchar") if voice:
                         if speaker and speaker.playing:  # over her: she stops and listens
                             speaker.stop()

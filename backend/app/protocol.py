@@ -105,6 +105,20 @@ class VoiceOption(BaseModel):
     mb: int
 
 
+class CloudVoice(BaseModel):
+    """A voice service as the panel shows it: whether there's a key, never the key."""
+
+    id: str
+    nombre: str
+    clave: bool
+    voz: str
+    modelo: str
+    modelo_base: str
+    pide_voz: bool
+    ayuda: str
+    web: str
+
+
 class VoiceInfo(BaseModel):
     """Her voice and its touches, for the settings panel."""
 
@@ -114,6 +128,7 @@ class VoiceInfo(BaseModel):
     glitch: float
     voz: str = ""
     voces: list[VoiceOption] = []
+    nube: list[CloudVoice] = []
 
 
 class VoiceProgress(BaseModel):
@@ -346,6 +361,16 @@ class ModelSet(BaseModel):
     nombre: str
 
 
+class VoiceCloudSave(BaseModel):
+    """His key (empty keeps the one there is), voice and model for a voice service; the backend tries them."""
+
+    type: Literal["voice_cloud_save"] = "voice_cloud_save"
+    servicio: str = Field(max_length=20)
+    clave: str = Field(default="", max_length=500)
+    voz: str = Field(default="", max_length=300)
+    modelo: str = Field(default="", max_length=100)
+
+
 class ModelKey(BaseModel):
     """An API key for Claude or GPT ("" removes it). Kept in Windows' Credential Manager, never in config.toml."""
 
@@ -360,6 +385,6 @@ class ModelPull(BaseModel):
 
 
 ClientMessage = Annotated[TextInput | Look | ConfirmResponse | Pressed | Presence | Hotkey | ModelGet | ModelSet | ModelKey | ModelPull
-                          | Say | VoiceGet | VoiceSet | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey,
+                          | Say | VoiceGet | VoiceSet | VoiceCloudSave | Interrupt | RoutinesGet | VoiceDownload | SetupGet | SetupSave | SetupDone | MediaKey,
                           Field(discriminator="type")]
 client_message = TypeAdapter(ClientMessage)

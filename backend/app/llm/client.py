@@ -97,6 +97,11 @@ HINTS = (
     (re.compile(r"\b(rec[uú]erdame|av[ií]same|remind me)\b", re.I), "Si pide un aviso para un momento, es `recordatorio`, no `recordar`."),
     (re.compile(r"qu[eé] (estoy escuchando|est[aá] sonando|suena|canci[oó]n es)|what song|what'?s playing", re.I), "Lo que suena en el PC se mira con `que_suena`."),
     (re.compile(r"\b(abre|abrir|open)\b.*\b(b[uú]squeda|search)\b", re.I), "Abrir una búsqueda en un sitio es `buscar`."),
+    # Here and not in the prompt: its "one to three sentences" made her announce a list and stop, and rewording that line
+    # took away `recordar` (10/10 to 0/10). ponytail: only these words; another way of asking for a list still gets the short reply
+    (re.compile(r"\b(\d+|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+\s+)?"
+                r"(datos|cosas|ejemplos|razones|consejos|ideas|facts|things|examples|reasons|tips)\b|paso a paso|step by step", re.I),
+     "Excepción a «una a tres frases»: escribe ahora en `texto` todo lo que pide, completo, sin anunciarlo."),
 )
 
 
